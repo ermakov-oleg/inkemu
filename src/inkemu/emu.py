@@ -544,7 +544,8 @@ class Emu:
         finally:
             self._depth -= 1
         if not ok:
-            self._fail(f"Lua error in {where}: {res[0] if res else 'unknown error'}")
+            if self.running or self._overlay is None:  # an outer callback unwinding after a nested failure adds nothing
+                self._fail(f"Lua error in {where}: {res[0] if res else 'unknown error'}")
             return False, ()
         if self._quit and self._depth == 0 and not self._leaving:
             self.leave()
@@ -554,7 +555,7 @@ class Emu:
         """Call the app's global callback `name` if it is defined; returns its first result."""
         if not self.running:
             return None
-        fn = self.L.globals()[name]
+        fn = self.L._rawget(self.L.globals(), name)  # an app metatable on _G must not run here
         if lua55.lua_type(fn) != "function":
             return None
         ok, res = self._protected(fn, *args, where=name)
