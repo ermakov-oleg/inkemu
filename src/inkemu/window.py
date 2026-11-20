@@ -50,6 +50,7 @@ class WindowApp:
         self.screen.bind("<B1-Motion>", self.on_motion)
         self.screen.bind("<ButtonRelease-1>", self.on_release)
         self.root.bind("<Key>", self.on_key)
+        self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.root.focus_force()
         emu.on_pending = lambda _p: self.root.after_idle(self._open_dialog)
         self.refresh()
@@ -116,12 +117,12 @@ class WindowApp:
         self.refresh()
 
     def on_motion(self, event) -> None:
-        if self._down:
+        if self._down and self._input_open():
             self._guard(self.emu.pointer, "move", *self._xy(event))
 
     def _fire_hold(self, x: int, y: int) -> None:
         self._hold_job = None
-        if self._down:
+        if self._down and self._input_open():
             self._guard(self.emu.pointer, "hold", x, y)
             self.refresh()
 
@@ -132,7 +133,9 @@ class WindowApp:
         if self._hold_job:
             self.root.after_cancel(self._hold_job)
             self._hold_job = None
-        self._guard(self.emu.pointer, "up", *self._xy(event))
+        if self._input_open():
+            self._advance()  # real time since the last tick must reach the clock before `up` classifies
+            self._guard(self.emu.pointer, "up", *self._xy(event))
         self.refresh()
 
     # ---- keyboard ---------------------------------------------------------------------------
@@ -171,6 +174,10 @@ class WindowApp:
         if self._dialog_open or emu.pending is None:
             return
         self._dialog_open = True
+        self._down = False  # the dialog's grab swallows the release
+        if self._hold_job:
+            self.root.after_cancel(self._hold_job)
+            self._hold_job = None
         try:
             p = dict(emu.pending)
             if p["kind"] in ("text", "edit"):
@@ -190,12 +197,20 @@ class WindowApp:
 
     # ---- time and remote control --------------------------------------------------------------
 
-    def _tick(self) -> None:
+    def _advance(self) -> None:
         now = time.monotonic()
         elapsed = int((now - self._last_tick) * 1000)
         self._last_tick = now
         if elapsed > 0 and not self.emu.paused and not self._dialog_open:
             self._guard(self.emu.wait, min(elapsed, MAX_STEP_MS))
+
+    def close(self) -> None:
+        """Window closed: leave the app so on_leave runs and the state is saved."""
+        self._guard(self.emu.leave)
+        self.root.destroy()
+
+    def _tick(self) -> None:
+        self._advance()
         self.refresh()
         self.root.after(TICK_MS, self._tick)
 

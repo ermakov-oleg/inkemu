@@ -114,6 +114,7 @@ class Emu:
         self._depth = 0
         self._overlay: tuple[str, str] | None = None
         self._down: tuple[int, int, int] | None = None
+        self._hold_sent = False
 
         self.manifest, problem = self._read_manifest()
         app_id = self.manifest.get("app_id")
@@ -141,9 +142,12 @@ class Emu:
             raise ValueError(f"unknown pointer phase {phase!r}: use one of {', '.join(POINTER_PHASES)}")
         if phase == "down":
             self._down = (x, y, self.clock.ms)
+            self._hold_sent = False
         elif self._down is None:
             self._log_line(f"pointer {phase} without down ignored")
             return
+        if phase == "hold":
+            self._hold_sent = True
         dx, dy, t0 = self._down
         event = {"type": "pointer", "phase": phase, "x": x, "y": y, "down_x": dx, "down_y": dy,
                  "time_ms": self.clock.ms}
@@ -151,7 +155,9 @@ class Emu:
             self._send(event)
             return
         self._down = None
-        gesture = _classify(x - dx, y - dy, self.clock.ms - t0)
+        # a frozen window clock must not turn a delivered hold into a tap
+        held = max(self.clock.ms - t0, HOLD_MS if self._hold_sent else 0)
+        gesture = _classify(x - dx, y - dy, held)
         if gesture:
             event["gesture"] = gesture
         self._dispatch(event)

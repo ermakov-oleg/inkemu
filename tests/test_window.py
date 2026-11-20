@@ -1,4 +1,5 @@
 import queue
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -27,7 +28,10 @@ def make_window(emu_factory):
 
     yield make
     for a in apps:
-        a.root.destroy()
+        try:
+            a.root.destroy()
+        except tk.TclError:
+            pass
 
 
 def click(app, x, y):
@@ -137,3 +141,70 @@ def test_control_queue_runs_on_main_thread_and_freezes_clock(make_window):
     assert app.emu.has_text("Taps: 1")
     assert app.emu.paused and app.remote_frozen
     assert "paused (remote)" in app.status.cget("text") and "ZeroDivisionError" in app.status.cget("text")
+
+
+GESTURES = """
+res = 'none'
+function on_input(c, e)
+  if e.type == 'pointer' and e.phase == 'up' then res = tostring(e.gesture); c:invalidate() end
+  return true
+end
+function on_draw(c, g) g:clear(0); g:text(0, 0, 'res ' .. res) end
+"""
+
+
+def real_wait(app, seconds):
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        app.root.update()
+        time.sleep(0.01)
+
+
+@pytest.mark.parametrize("paused", [False, True])
+def test_real_hold_is_long_not_tap(make_window, make_app, paused):
+    app = make_window(make_app(GESTURES))
+    if paused:
+        key(app, "p")
+    ev = SimpleNamespace(x=100, y=100)
+    app.on_press(ev)
+    real_wait(app, 0.62)
+    app.on_release(ev)
+    assert app.emu.has_text("res long")
+
+
+def test_close_leaves_and_persists_state(make_window, make_app, emu_factory):
+    src = """
+function on_load(c) c.state.n = (c.state.n or 0) + 1 end
+function on_leave(c) c.state.left = true end
+function on_draw(c, g) g:clear(0); g:text(0, 0, 'n ' .. c.state.n .. ' left ' .. tostring(c.state.left)) end
+"""
+    app = make_window(make_app(src))
+    app.close()
+    assert not app.emu.running
+    assert emu_factory(app.emu.app_dir).has_text("n 2 left true")
+
+
+def test_no_pointer_reaches_emulator_while_pending(make_window, make_app, monkeypatch):
+    app = make_window(make_app("""
+function on_input(c, e)
+  if e.type == 'pointer' and e.phase == 'down' then
+    c.dialog:confirm({title='T', text='x'}, function() end)
+  end
+  return true
+end
+function on_draw(c, g) g:clear(0) end
+"""))
+    app.on_press(SimpleNamespace(x=5, y=5))
+    assert app.emu.pending and app._down
+    calls = []
+    monkeypatch.setattr(app.emu, "pointer", lambda *a: calls.append(a))
+    app._fire_hold(5, 5)
+    app.on_motion(SimpleNamespace(x=9, y=9))
+    app.on_release(SimpleNamespace(x=9, y=9))
+    assert calls == []
+    monkeypatch.setattr(window, "ask_yes_no", lambda *a: True)
+    app._down = True  # release lost to the dialog grab
+    app.root.update()
+    assert not app._down
+    app._fire_hold(5, 5)
+    assert calls == []
