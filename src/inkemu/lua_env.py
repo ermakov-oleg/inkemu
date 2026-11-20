@@ -25,22 +25,22 @@ return function(obj_name, fn_name, pyfn)
 end, function(t, obj_name) objs[t] = obj_name end
 """
 
-_helpers: dict[int, tuple] = {}
+class Runtime(lua55.LuaRuntime):
+    """LuaRuntime that owns the sandbox helper closures, so they die with it."""
 
 
-def new_runtime() -> lua55.LuaRuntime:
-    L = lua55.LuaRuntime(unpack_returned_tuples=True, register_eval=False, register_builtins=False)
-    _helpers[id(L)] = (L, *L.execute(_SANDBOX))
+def new_runtime() -> Runtime:
+    L = Runtime(unpack_returned_tuples=True, register_eval=False, register_builtins=False)
+    L._method, L._register = L.execute(_SANDBOX)
     L.globals().python = None
     return L
 
 
-def make_object(L: lua55.LuaRuntime, obj_name: str, methods: dict[str, Callable], fields: dict | None = None):
-    _, method, register = _helpers[id(L)]
+def make_object(L: Runtime, obj_name: str, methods: dict[str, Callable], fields: dict | None = None):
     t = L.table()
-    register(t, obj_name)
+    L._register(t, obj_name)
     for name, fn in methods.items():
-        t[name] = method(obj_name, name, fn)
+        t[name] = L._method(obj_name, name, fn)
     for k, v in (fields or {}).items():
         t[k] = L.table_from(v, recursive=True) if isinstance(v, (dict, list)) else v
     return t
