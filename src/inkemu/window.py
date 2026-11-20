@@ -79,7 +79,7 @@ class WindowApp:
 
     def refresh(self) -> None:
         try:
-            img = self.emu.shot().convert("L")
+            img = self.emu.shot(dialog=False).convert("L")  # the Tk dialog shows it
             buf = io.BytesIO()
             img.save(buf, "PNG")
             png = buf.getvalue()
