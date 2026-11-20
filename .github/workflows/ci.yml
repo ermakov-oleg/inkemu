@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # the runners' python.org builds bring Tk 8.6, which segfaults the window tests on macOS 26
+  UV_PYTHON_PREFERENCE: only-managed
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.4.0
+        with:
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+      - run: uv sync --locked
+      - name: pytest (Linux, under Xvfb so the Tk window tests run)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a uv run --locked pytest -rs
+      - name: pytest
+        if: runner.os != 'Linux'
+        run: uv run --locked pytest -rs
+
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.4.0
+        with:
+          python-version: "3.11"
+      - run: uv build
+      - run: uvx twine check --strict dist/*
+      - name: install the wheel into a clean venv and smoke-test it
+        run: |
+          cp -r examples/hello "$RUNNER_TEMP/hello"
+          uv venv "$RUNNER_TEMP/venv"
+          uv pip install --python "$RUNNER_TEMP/venv/bin/python" dist/*.whl
+          cd "$RUNNER_TEMP"
+          venv/bin/inkemu --help
+          venv/bin/python -c "import inkemu.mcp_server, inkemu.window"
+          venv/bin/inkemu run hello --fresh --out run --steps "tap-text 'Tap me'; texts" | tee out.txt
+          grep -q "Taps: 1" out.txt
