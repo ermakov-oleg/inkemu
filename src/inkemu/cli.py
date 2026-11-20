@@ -4,7 +4,8 @@ import shlex
 import sys
 from pathlib import Path
 
-from .daemon import DEFAULT_PORT, SPEC, DaemonUnreachable, UsageError, execute, parse_words, post_command, read_info, serve
+from .daemon import (DEFAULT_PORT, SPEC, DaemonUnreachable, UsageError, WindowUnavailable, execute, parse_words,
+                     post_command, read_info, serve)
 from .emu import NET_MODES, Emu
 
 
@@ -24,8 +25,24 @@ def _split_steps(steps: str) -> list[list[str]]:
     return [s for s in out if s]
 
 
+PRINTED_IN_RUN = ("shot", "texts", "log", "state")
+
+
+def format_result(cmd: str, result: dict) -> str:
+    """What the client prints for one command result."""
+    if cmd == "shot" and result.get("shot"):
+        return result["shot"]
+    if cmd == "texts":
+        return "\n".join(f"{t['x']},{t['y']} {t['text']}" for t in result["texts"])
+    if cmd == "log":
+        return "\n".join(result.get("log", []))
+    return json.dumps({k: result[k] for k in ("ok", "error", "texts", "errors", "warnings", "status", "log_tail")
+                       if k in result}, ensure_ascii=False, indent=2)
+
+
 def run_steps(emu: Emu, steps: str, out_dir: Path) -> list[Path]:
-    """Run `;`-separated steps through daemon.execute, then write texts.json. Every step is parsed before any runs."""
+    """Run `;`-separated steps through daemon.execute, printing shot paths and texts/log/state output in order,
+    then write texts.json. Every step is parsed before any runs."""
     out_dir = Path(out_dir)
     plan = [parse_words(s) for s in _split_steps(steps)]
     if not plan:
@@ -45,6 +62,8 @@ def run_steps(emu: Emu, steps: str, out_dir: Path) -> list[Path]:
                 raise RuntimeError(result["error"])
             if result["shot"]:
                 written.append(Path(result["shot"]))
+            if cmd in PRINTED_IN_RUN:
+                print(format_result(cmd, result), flush=True)
     finally:
         (out_dir / "texts.json").write_text(json.dumps(emu.texts(), ensure_ascii=False, indent=2), encoding="utf-8")
     return written
@@ -99,16 +118,7 @@ def _client(verb: str, words: list[str], port: int | None) -> int:
     except DaemonUnreachable as e:
         print(f"inkemu: {e}", file=sys.stderr)
         return 2
-    if cmd == "shot" and result.get("shot"):
-        print(result["shot"])
-    elif cmd == "texts":
-        for t in result["texts"]:
-            print(f"{t['x']},{t['y']} {t['text']}")
-    elif cmd == "log":
-        print("\n".join(result.get("log", [])))
-    else:
-        print(json.dumps({k: result[k] for k in ("ok", "error", "texts", "errors", "warnings", "status", "log_tail")
-                          if k in result}, ensure_ascii=False, indent=2))
+    print(format_result(cmd, result))
     if not result.get("ok"):
         print(f"inkemu: {result.get('error')}", file=sys.stderr)
         return 1
@@ -138,17 +148,18 @@ def main(argv: list[str] | None = None) -> int:
         except OSError as e:
             print(f"inkemu: {e}", file=sys.stderr)
             return 2
+        except WindowUnavailable as e:
+            print(f"inkemu: {e}", file=sys.stderr)
+            return 1
         return 1 if emu.errors else 0
     try:
-        written = run_steps(emu, args.steps, Path(args.out))
+        run_steps(emu, args.steps, Path(args.out))
     except UsageError as e:
         print(f"inkemu: {e}", file=sys.stderr)
         return 2
     except (LookupError, RuntimeError, ValueError) as e:
         print(f"inkemu: step failed: {e}", file=sys.stderr)
         return 1
-    for p in written:
-        print(p)
     for w in emu.warnings:
         print(f"WARN: {w}", file=sys.stderr)
     for err in emu.errors:

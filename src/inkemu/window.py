@@ -1,11 +1,14 @@
 import base64
 import io
+import signal
+import threading
 import time
 import tkinter as tk
 from datetime import datetime
 from pathlib import Path
 from tkinter import messagebox, simpledialog
 
+from .daemon import WindowUnavailable
 from .emu import HOLD_MS, Emu
 
 TICK_MS = 100
@@ -39,6 +42,7 @@ class WindowApp:
         self._hold_job = None
         self._dialog_open = False
         self._closed = False
+        self.interrupted = False
         self._last_tick = time.monotonic()
         self._frame_png = b""
         self._photo: tk.PhotoImage | None = None
@@ -100,6 +104,8 @@ class WindowApp:
             flags.append("locked")
         if emu.pending:
             flags.append(f"dialog: {emu.pending['kind']}")
+        if not emu.running and not emu.locked:
+            flags.append("stopped (R to restart)")
         parts = [f"{emu.clock.now():%Y-%m-%d %H:%M:%S}", f"net {emu.net_mode}", f"cmds {emu.frame_commands}", *flags]
         err = self.problem or (emu.errors[-1].splitlines()[0] if emu.errors else "")
         if err:
@@ -179,15 +185,19 @@ class WindowApp:
             self.root.after_cancel(self._hold_job)
             self._hold_job = None
         try:
-            p = dict(emu.pending)
+            p, asked = dict(emu.pending), emu._pending_h
             if p["kind"] in ("text", "edit"):
                 value = ask_string(self.root, p["title"], p["text"] if p["kind"] == "edit" else "", p["text"])
-                if value is None:
-                    self._guard(emu.answer, False)
-                else:
-                    self._guard(emu.type_text, value)
             else:
-                self._guard(emu.answer, ask_yes_no(self.root, p["title"], p["text"]))
+                value = ask_yes_no(self.root, p["title"], p["text"])
+            if emu._pending_h is not asked:  # answered remotely meanwhile; the click must not answer a newer dialog
+                emu._log_line(f"window: the {p['kind']} dialog was already answered, the click is dropped")
+            elif p["kind"] not in ("text", "edit"):
+                self._guard(emu.answer, value)
+            elif value is None:
+                self._guard(emu.answer, False)
+            else:
+                self._guard(emu.type_text, value)
         finally:
             self._dialog_open = False
             self._last_tick = time.monotonic()
@@ -211,6 +221,9 @@ class WindowApp:
         self.root.destroy()
 
     def _tick(self) -> None:
+        if self.interrupted:
+            self.close()
+            return
         self._advance()
         self.refresh()
         self.root.after(TICK_MS, self._tick)
@@ -239,5 +252,18 @@ def build_window(emu: Emu, control=None, root: tk.Tk | None = None) -> WindowApp
 
 
 def run_window(emu: Emu, control=None) -> None:
-    app = build_window(emu, control)
-    app.root.mainloop()
+    try:
+        app = build_window(emu, control)
+    except tk.TclError as e:
+        raise WindowUnavailable(f"cannot open the window: {e}") from None
+    # Ctrl-C would raise inside a Tk callback and only print a traceback; close from the next tick instead
+    main = threading.current_thread() is threading.main_thread()
+    old = signal.signal(signal.SIGINT, lambda *_: setattr(app, "interrupted", True)) if main else None
+    try:
+        app.root.mainloop()
+    except KeyboardInterrupt:
+        if not app._closed:
+            app.close()
+    finally:
+        if main:
+            signal.signal(signal.SIGINT, old)
