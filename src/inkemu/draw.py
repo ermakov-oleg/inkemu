@@ -114,7 +114,9 @@ class Canvas:
             count = entry["n"]
             raw = [entry[j] for j in range(1, count + 1)]
             op, rest = raw[0], raw[1:]
-            args = [rest[0]] + [_conv(a) for a in rest[1:]] if op == "image" and rest else [_conv(a) for a in rest]
+            args = [_conv(a) for a in rest]
+            if op == "image" and rest:
+                args[0] = self.image_source(rest[0])
             layout = None
             if op in ("text", "text_box"):
                 layout = self._layout(op, args)
@@ -189,8 +191,8 @@ class Canvas:
             mask = self._checker_cache[size] = Image.frombytes("1", size, data)
         return mask.crop(box)
 
-    def render(self) -> Image.Image:
-        img = Image.new("1", (self.width, self.height), 255)
+    def render(self, base: Image.Image | None = None) -> Image.Image:
+        img = base.convert("1") if base is not None else Image.new("1", (self.width, self.height), 255)
         d = ImageDraw.Draw(img)
         for op, args, layout in self._cmds:
             self._draw(img, d, op, args, layout)
@@ -256,7 +258,7 @@ class Canvas:
             if x1 > x0 and y1 > y0:
                 img.paste(0, (x0, y0), self._checker((x0, y0, x1, y1)))
         elif op == "image":
-            src = self.image_source(a[0])
+            src = a[0]
             if src is None:
                 return
             o = opts_at(3)
