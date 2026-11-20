@@ -19,7 +19,8 @@ if TYPE_CHECKING:
 DEFAULT_DELAY_MS = 300
 DEFAULT_TIMEOUT_MS = 30_000
 SENSITIVE_HEADER = re.compile(r"^(authorization|proxy-authorization|cookie|set-cookie|x-api-key)$|token|key|secret", re.I)
-_PLACEHOLDER = re.compile(r"\{\{([A-Za-z0-9_]+)\}\}")
+_NAME = r"[A-Za-z0-9_.-]+"
+_PLACEHOLDER = re.compile(r"\{\{(" + _NAME + r")\}\}")
 _SECRET_LIKE = re.compile(r"[A-Za-z0-9_-]{20,}")
 _URL = re.compile(r"https?://[^/\s?#]+", re.I)
 
@@ -66,6 +67,7 @@ class Net:
         self.dir = Path(fixtures_dir) / "net"
         self.secrets = {k: v for k, v in secrets.items() if isinstance(v, str) and v}
         self.log, self.warn = log, warn
+        self.blocked: str | None = None
 
     # ---- secrets ----------------------------------------------------------------------------
 
@@ -172,6 +174,8 @@ class Net:
             self.warn(f"net: {method} {shown} never gets an answer on the reader (only GET and POST work); "
                       "send it as POST with an override header")
             return None
+        if self.blocked:
+            return Response(0, {}, None, "secrets_invalid")
         if self.mode == "replay":
             resp = self._find(method, url, body)
             if resp is None:
@@ -228,25 +232,42 @@ class Net:
                           "but is not in secrets.json; it will be saved in the fixture as is")
 
 
-def _load_secrets(emu: "Emu") -> dict[str, str]:
+def _load_secrets(emu: "Emu") -> tuple[dict[str, str], list[str]]:
+    """(usable secrets, problems); a problem never contains a secret value."""
+    f = emu.secrets_file.name
     try:
         data = json.loads(emu.secrets_file.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return {}
+        return {}, []
     except (OSError, ValueError) as e:
-        emu._warn(f"net: cannot read {emu.secrets_file.name}: {type(e).__name__}; secrets are not applied")
-        return {}
+        return {}, [f"{f} cannot be read ({type(e).__name__}); no secrets are applied"]
     if not isinstance(data, dict):
-        emu._warn(f"net: {emu.secrets_file.name} must be a JSON object; secrets are not applied")
-        return {}
-    return {k: v for k, v in data.items() if re.fullmatch(r"[A-Za-z0-9_]+", k) and isinstance(v, str)}
+        return {}, [f"{f} must be a JSON object; no secrets are applied"]
+    secrets, problems = {}, []
+    for k, v in data.items():
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            v = str(v)
+        if not re.fullmatch(_NAME, k):
+            problems.append(f"{f}: key {k!r} is not a valid name (letters, digits, _ . -); its value is not redacted")
+        elif not isinstance(v, str) or not v:
+            problems.append(f"{f}: value of {k!r} must be a non-empty string or a number; it is not redacted")
+        else:
+            secrets[k] = v
+    return secrets, problems
 
 
 def install(emu: "Emu") -> None:
     if "net" not in (emu.manifest.get("permissions") or []):
         return
     L, ctx = emu.L, emu._ctx
-    net = Net(emu.net_mode, emu.fixtures_dir, _load_secrets(emu), emu._log_line, emu._warn)
+    secrets, problems = _load_secrets(emu)
+    for p in problems:
+        emu._warn("net: " + p)
+    net = Net(emu.net_mode, emu.fixtures_dir, secrets, emu._log_line, emu._warn)
+    if problems and emu.net_mode == "record":
+        net.blocked = "recording refused: fix secrets.json first, otherwise a secret could be saved in a fixture"
+        emu.errors.append("net: " + net.blocked)
+        emu._log_line("ERROR net: " + net.blocked)
     opts_of = L.execute(_OPTS)
 
     def lua_response(r: Response):

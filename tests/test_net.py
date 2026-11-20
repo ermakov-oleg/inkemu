@@ -227,3 +227,38 @@ def test_request_argument_errors(make_app, emu_factory):
                                "msg = tostring(a) .. tostring(e)\n c.net:request({}, function() end) end", manifest=NET))
     assert "bad extra argument" in emu.errors[0]
     assert emu.L.globals().msg == "nilinvalid_argument"
+
+
+def test_hyphenated_name_and_numeric_value_are_redacted(make_app, emu_factory, tmp_path, server):
+    secrets = tmp_path / "secrets.json"
+    secrets.write_text(json.dumps({"my-cal": "private-abc123", "pin": 987654}))
+    emu = emu_factory(app_with(make_app, "{url = '%s/ical/private-abc123/987654/basic.ics'}" % server.base),
+                      net="record", secrets_file=secrets)
+    emu.wait(300)
+    d = tmp_path / "fixtures" / "net"
+    for p in d.iterdir():
+        text = p.name + p.read_bytes().decode("latin-1")
+        assert "abc123" not in text and "987654" not in text
+    assert "{{my-cal}}/{{pin}}" in next(d.glob("*.json")).read_text()
+    assert emu.warnings == []
+
+
+@pytest.mark.allow_errors
+@pytest.mark.parametrize("content", ['{"bad name": "private-abc123"}', '{"cal": ["private-abc123"]}', "{not json private-abc123"])
+def test_unusable_secrets_refuse_record(make_app, emu_factory, tmp_path, server, content):
+    secrets = tmp_path / "secrets.json"
+    secrets.write_text(content)
+    emu = emu_factory(app_with(make_app, "{url = '%s/ical/private-abc123/b'}" % server.base, "msg = resp.err"),
+                      net="record", secrets_file=secrets)
+    emu.wait(300)
+    assert emu.has_text("msg secrets_invalid") and not server.hits
+    assert not (tmp_path / "fixtures").exists()
+    assert any("recording refused" in e for e in emu.errors)
+    assert emu.warnings and not any("abc123" in ln for ln in emu.log + emu.warnings + emu.errors)
+
+
+def test_unusable_secret_warns_in_replay(make_app, emu_factory, tmp_path):
+    secrets = tmp_path / "secrets.json"
+    secrets.write_text('{"bad name": "x", "ok": "y"}')
+    emu = emu_factory(app_with(make_app, "{url = 'http://x.test/a'}"), secrets_file=secrets)
+    assert any("'bad name'" in w for w in emu.warnings) and emu.errors == []
