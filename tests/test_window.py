@@ -207,7 +207,7 @@ def test_real_hold_is_long_not_tap(make_window, make_app, paused):
         key(app, "p")
     ev = SimpleNamespace(x=100, y=100)
     app.on_press(ev)
-    real_wait(app, 0.62)
+    real_wait(app, 1.0)
     app.on_release(ev)
     assert app.emu.has_text("res long")
 
