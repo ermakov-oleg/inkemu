@@ -10,9 +10,23 @@ CAP = 1024
 _RECORDED = ("clear", "rect", "round_rect", "line", "circle", "arc", "polygon", "polyline", "text",
              "text_box", "image", "pattern_rect", "fill_pattern")
 _RECORDER = """
-local rec, cap = ...
+local rec, cap, specs = ...
+local KINDS = { n = 'number', t = 'table', s = 'string' }
+local function check(name, spec, ...)
+  local args = table.pack(...)
+  for i = 1, #spec do
+    local k, v = spec:sub(i, i), args[i]
+    local ok = k == 'a' and v ~= nil or type(v) == KINDS[k] or (k == 's' and type(v) == 'number')
+    if not ok then
+      error("bad argument #" .. i .. " to '" .. name .. "' (" .. (KINDS[k] or 'value') .. " expected, got "
+        .. (v == nil and 'no value' or type(v)) .. ")", 3)
+    end
+  end
+end
 return function(name)
+  local spec = specs[name]
   return function(...)
+    check(name, spec, ...)
     rec.n = rec.n + 1
     if rec.n <= cap then rec.cmds[rec.n] = table.pack(name, ...) end
   end
@@ -59,6 +73,11 @@ def _points(pts) -> list[float]:
     return flat
 
 
+_SPECS = {"clear": "", "rect": "nnnn", "round_rect": "nnnn", "line": "nnnn", "circle": "nnn", "arc": "nnnnn",
+          "polygon": "t", "polyline": "t", "text": "nns", "text_box": "nnnns", "image": "ann",
+          "pattern_rect": "nnnn", "fill_pattern": "nnnn"}
+
+
 class Canvas:
     def __init__(self, L, fonts: Fonts, width: int = 480, height: int = 800):
         self.L, self.fonts, self.width, self.height = L, fonts, width, height
@@ -68,7 +87,7 @@ class Canvas:
         self._texts: list[dict] = []
         self._checker_cache: dict[tuple[int, int], Image.Image] = {}
         self._rec = L.table_from({"n": 0, "cmds": L.table()})
-        make_recorder = L.execute(_RECORDER, self._rec, CAP)
+        make_recorder = L.execute(_RECORDER, self._rec, CAP, L.table_from(_SPECS))
         methods = {name: make_recorder(name) for name in _RECORDED}
         methods.update(size=lambda: (self.width, self.height), measure=self._measure, measure_text=self._measure)
         self.g = make_object(L, "g", methods)
