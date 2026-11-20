@@ -235,7 +235,24 @@ class Daemon:
                 self.end_headers()
                 self.wfile.write(data)
 
+            def _forbidden(self) -> str | None:
+                # a web page can POST to 127.0.0.1 (no-cors text/plain, DNS rebinding); our clients send neither Origin nor a foreign Host
+                if self.headers.get("Host") not in (f"127.0.0.1:{daemon.port}", f"localhost:{daemon.port}"):
+                    return "bad Host header"
+                if "Origin" in self.headers:
+                    return "cross-origin requests are not allowed"
+                if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json":
+                    return "Content-Type must be application/json"
+                return None
+
+            def _other_method(self):
+                self._reply(405, {"ok": False, "error": "POST /cmd only"})
+
+            do_GET = do_PUT = do_DELETE = do_PATCH = do_HEAD = do_OPTIONS = _other_method
+
             def do_POST(self):
+                if (why := self._forbidden()) is not None:
+                    return self._reply(403, {"ok": False, "error": why})
                 if self.path != "/cmd":
                     return self._reply(404, {"ok": False, "error": "POST /cmd only"})
                 try:
