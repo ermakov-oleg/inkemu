@@ -68,7 +68,8 @@ def protected_call(L: Runtime, fn, *args) -> tuple[bool, tuple]:
     if r[0]:
         return True, r[1:]
     msg = r[1] if len(r) > 1 and isinstance(r[1], str) else str(r[1:])
-    return False, ("\n".join(ln for ln in msg.split("\n") if not _HOST_FRAME.search(ln)),)
+    head, sep, tb = msg.partition("\nstack traceback:")
+    return False, (head + sep + "\n".join(ln for ln in tb.split("\n") if not _HOST_FRAME.search(ln)),)
 
 
 def load_chunk(L: Runtime, src: str, chunkname: str):

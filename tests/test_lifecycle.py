@@ -26,7 +26,7 @@ def test_lua_error_is_captured(make_app, emu_factory):
     assert "index.lua:1: kaput" in emu.errors[0] and "stack traceback" in emu.errors[0]
     assert "index.lua:2: in function 'on_draw'" in emu.errors[0] and "<python>" not in emu.errors[0]
     assert emu.has_text("App error")
-    assert emu.shot().getbbox() is not None
+    assert emu.shot().tobytes() != emu.canvas.render().tobytes()
     emu.tap(10, 10)
     emu.key("back")
     emu.wait("1s")
@@ -100,12 +100,36 @@ def test_landscape_manifest_canvas(make_app, emu_factory):
 
 def test_set_tick_calls_on_tick(make_app, emu_factory):
     app = make_app(DRAW_MSG + "n = 0\nfunction on_load(c) c:set_tick(100) end\n"
-                   "function on_tick(c) n = n + 1; msg = n; if n == 10 then c:set_tick(0) end; c:invalidate() end\n")
+                   "function on_tick(c) n = n + 1; msg = n; c:invalidate() end\n")
     emu = emu_factory(app)
     emu.wait(1000)
-    assert emu.has_text("msg 10")
+    assert emu.texts()[0]["text"] == "msg 10"
+    emu.wait(500)
+    assert emu.texts()[0]["text"] == "msg 15"
+
+
+def test_set_tick_zero_stops(make_app, emu_factory):
+    app = make_app(DRAW_MSG + "n = 0\nfunction on_load(c) c:set_tick(100) end\n"
+                   "function on_tick(c) n = n + 1; msg = n; if n == 3 then c:set_tick(0) end; c:invalidate() end\n")
+    emu = emu_factory(app)
     emu.wait(1000)
-    assert emu.has_text("msg 10")
+    assert emu.texts()[0]["text"] == "msg 3"
+
+
+@pytest.mark.allow_errors
+@pytest.mark.parametrize("draw", ["g:text(1/0, 0, 'x')", "g:line(0, 0, 5, 5, {width = 'abc'})"])
+def test_bad_draw_values_fail_the_app_not_the_host(make_app, emu_factory, draw):
+    emu = emu_factory(make_app(f"function on_draw(c, g) {draw} end"))
+    emu.shot()
+    assert emu.errors and emu.status()["running"] is False and emu.has_text("App error")
+
+
+def test_reload_saves_state_of_running_app(make_app, emu_factory):
+    app = make_app(DRAW_MSG + "msg = tostring(ctx.state.n)\nfunction on_input(c) c.state.n = 42; return true end\n")
+    emu = emu_factory(app)
+    emu.tap(1, 1)
+    emu.reload()
+    assert emu.has_text("msg 42")
 
 
 def test_after_cancel(make_app, emu_factory):

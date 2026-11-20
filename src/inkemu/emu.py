@@ -139,7 +139,12 @@ class Emu:
         self._invalid = True
 
     def shot(self) -> Image.Image:
-        img = self.canvas.render()
+        try:
+            img = self.canvas.render()
+        except Exception as e:  # bad option values from the app (e.g. width='abc') surface only here
+            self._fail(f"g: cannot draw the frame: {type(e).__name__}: {e}")
+            self.canvas.begin_frame()
+            img = self.canvas.render()
         items = self._overlay_items()
         if items:
             d = ImageDraw.Draw(img)
@@ -355,7 +360,11 @@ class Emu:
     def _draw(self) -> None:
         self.canvas.begin_frame()
         self._call("on_draw", self._ctx, self.canvas.g)
-        self.frame_commands = self.canvas.end_frame()
+        try:
+            self.frame_commands = self.canvas.end_frame()
+        except Exception as e:
+            self._fail(f"g: bad values in on_draw: {type(e).__name__}: {e}")
+            self.canvas.begin_frame()
 
     def _overlay_items(self) -> list[dict]:
         if not self._overlay:
