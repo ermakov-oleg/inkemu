@@ -10,7 +10,7 @@ from typing import Any, Callable
 from lupa import lua55
 from PIL import Image, ImageDraw
 
-from . import ctx_basic, net as net_mod
+from . import ctx_basic, ctx_ui, net as net_mod
 from .clock import Scheduler, Timer, VirtualClock, parse_duration
 from .draw import Canvas
 from .fonts import Fonts
@@ -18,6 +18,7 @@ from .lua_env import load_chunk, make_object, new_runtime, protected_call
 
 NET_MODES = ("replay", "record", "live")
 PERMISSIONS = ("net", "reader", "ble")
+TOAST_MS = 2000
 KEYS = ("up", "down", "left", "right", "ok", "back")
 INPUT_MS = 350
 HOLD_MS = 600
@@ -74,6 +75,11 @@ class Emu:
         self.warnings: list[str] = []
         self.paused = False
         self.pending: dict | None = None
+        self.on_pending: Callable[[dict], None] | None = None
+        self.toasts: list[str] = []
+        self._pending_h: dict | None = None
+        self._toast: tuple[str, int] | None = None
+        self._images: dict[int, Any] = {}
         self.running = False
         self.battery = {"percent": 87, "charging": False, "voltage_mv": 4020, "temperature_c": 24}
         self.full_refresh_deferred = 0
@@ -89,7 +95,7 @@ class Emu:
         self.L = None
         self.canvas: Canvas | None = None
         self._ctx = None
-        self._install: list[Callable[["Emu"], None]] = [ctx_basic.install, net_mod.install]
+        self._install: list[Callable[["Emu"], None]] = [ctx_basic.install, net_mod.install, ctx_ui.install]
         self._timers: set[Timer] = set()
         self._tick: Timer | None = None
         self._invalid = self._quit = self._leaving = False
@@ -210,9 +216,27 @@ class Emu:
                 self.save_state()
         finally:
             self._leaving = self._quit = False
-            self.pending = None
             self._stop()
         self._log_line("app left")
+
+    def type_text(self, text: str) -> None:
+        """Answer a pending `input:text` with OK, or type into a pending `input:edit` and press enter."""
+        h = self._pending_h
+        if self.pending is None or not h or not h.get("type"):
+            raise RuntimeError(f"no text input is waiting; pending: {self.pending}")
+        h["type"](str(text))
+        self._settle()
+        self.wait(INPUT_MS)
+
+    def answer(self, ok: bool) -> None:
+        """Answer the pending dialog: confirm yes/no, leave yes/no, text OK/cancel."""
+        h = self._pending_h
+        if self.pending is None or not h:
+            raise RuntimeError("no dialog is waiting for an answer")
+        self._clear_pending()
+        h["answer"](bool(ok))
+        self._settle()
+        self.wait(INPUT_MS)
 
     def restart(self) -> None:
         self.leave()
@@ -239,9 +263,8 @@ class Emu:
             self._fail(f"g: cannot draw the frame: {type(e).__name__}: {e}")
             self.canvas.begin_frame()
             img = self.canvas.render()
-        items = self._overlay_items()
-        if items:
-            d = ImageDraw.Draw(img)
+        d = ImageDraw.Draw(img)
+        for items in self._plates():
             top, bottom = items[0]["y"] - 16, items[-1]["y"] + items[-1]["h"] + 16
             d.rectangle([16, top, self.canvas.width - 17, bottom], fill=255, outline=0, width=3)
             for it in items:
@@ -278,7 +301,8 @@ class Emu:
     def _boot(self, *, resume: bool = False) -> None:
         """Fresh Lua state for the app: manifest, ctx, entry chunk, on_load (+ on_resume), first frame."""
         self._stop()
-        self.pending, self._overlay, self._ctx = None, None, None
+        self._overlay, self._ctx, self._toast = None, None, None
+        self._images = {}
         self._quit = False
         self.manifest, problem = self._read_manifest()
         landscape = (self.manifest.get("display") or {}).get("orientation") == "landscape"
@@ -314,6 +338,7 @@ class Emu:
 
     def _stop(self) -> None:
         self.running = False
+        self._clear_pending()
         self._invalid = False
         for t in self._timers:
             t.cancel()
@@ -438,7 +463,7 @@ class Emu:
         handled = self._call("on_input", self._ctx, self.L.table_from(event))
         if (event["type"] == "key" and event["key"] == "back" and self.running and not handled
                 and self.pending is None):
-            self.pending = {"kind": "leave", "title": "Leave app?", "text": ""}
+            self._set_pending("leave", "Leave app?", "", answer=lambda ok: self.leave() if ok else None)
             self._log_line("back not handled by on_input: the host offers to leave")
         self._settle()
 
@@ -460,17 +485,50 @@ class Emu:
             self._fail(f"g: bad values in on_draw: {type(e).__name__}: {e}")
             self.canvas.begin_frame()
 
+    def _set_pending(self, kind: str, title: str, text: str, *, answer: Callable[[bool], Any],
+                     type_text: Callable[[str], Any] | None = None) -> dict:
+        if self.pending is not None:
+            self._warn(f"a {self.pending['kind']} dialog was still open; replaced by {kind}")
+        self.pending = {"kind": kind, "title": title, "text": text}
+        self._pending_h = {"answer": answer, "type": type_text}
+        self._log_line(f"pending {kind}: {title}")
+        if self.on_pending:
+            self.on_pending(dict(self.pending))
+        return self._pending_h
+
+    def _clear_pending(self) -> None:
+        self.pending = self._pending_h = None
+
+    def _show_toast(self, text: str) -> None:
+        self.toasts.append(text)
+        self._toast = (text, self.clock.ms + TOAST_MS)
+        self._log_line(f"toast: {text}")
+
+    def _plates(self) -> list[list[dict]]:
+        plates = []
+        if self._overlay:
+            title, msg = self._overlay
+            w = self.canvas.width
+            items, y = [], self.canvas.height // 2 - 60
+            for text, font in [(title, "large")] + [(line, "small") for line in self.canvas._wrap("small", msg, w - 64)[:4]]:
+                tw, lh = self.fonts.measure(font, text), self.fonts.line_height(font)
+                items.append({"text": text, "x": round((w - tw) / 2), "y": y, "w": tw, "h": lh, "font": font})
+                y += lh + (8 if font == "large" else 0)
+            plates.append(items)
+        if self._toast and self.clock.ms < self._toast[1]:
+            w, lh = self.canvas.width, self.fonts.line_height("medium")
+            lines = self.canvas._wrap("medium", self._toast[0], w - 96)[:3]
+            y = self.canvas.height - 48 - 16 - lh * len(lines)
+            items = []
+            for line in lines:
+                tw = self.fonts.measure("medium", line)
+                items.append({"text": line, "x": round((w - tw) / 2), "y": y, "w": tw, "h": lh, "font": "medium"})
+                y += lh
+            plates.append(items)
+        return plates
+
     def _overlay_items(self) -> list[dict]:
-        if not self._overlay:
-            return []
-        title, msg = self._overlay
-        w = self.canvas.width
-        items, y = [], self.canvas.height // 2 - 60
-        for text, font in [(title, "large")] + [(line, "small") for line in self.canvas._wrap("small", msg, w - 64)[:4]]:
-            tw, lh = self.fonts.measure(font, text), self.fonts.line_height(font)
-            items.append({"text": text, "x": round((w - tw) / 2), "y": y, "w": tw, "h": lh, "font": font})
-            y += lh + (8 if font == "large" else 0)
-        return items
+        return [it for plate in self._plates() for it in plate]
 
     # ---- log --------------------------------------------------------------------------------
 
