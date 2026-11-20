@@ -6,5 +6,11 @@
   "description": "Hello world for XTOS Licorice: clock, battery and a tap counter.",
   "entry": "index.lua",
   "api": "2.2",
-  "permissions": []
+  "permissions": [],
+  "lockscreen": {
+    "enabled": true,
+    "entry": "lockscreen.lua",
+    "interval_sec": 60,
+    "net": false
+  }
 }
