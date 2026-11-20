@@ -201,3 +201,39 @@ def test_runtime_is_collectable():
     gc.collect()
     assert ref() is None
     assert not [v for v in vars(lua_env).values() if isinstance(v, dict) and any(isinstance(k, int) for k in v)]
+
+
+MEASURE_STRINGS = ["обновлено 13:50", "Сегодня · 20 ноября", "0123456789", "Ёжик…", "· 42 ·"]
+
+
+def _ink_cols(img):
+    w, h = img.size
+    px = img.load()
+    return [x for x in range(w) if any(px[x, y] == 0 for y in range(h))]
+
+
+@pytest.mark.parametrize("font", ["small", "medium", "large"])
+@pytest.mark.parametrize("s", MEASURE_STRINGS)
+def test_measure_matches_drawn_advance(env, font, s):
+    # measure is an advance width, not an ink bbox, so compare the left edges of bars drawn before and after s.
+    _, fonts, canvas, _ = env
+    run(env, f"G:text(10, 10, '|{s}|', {{font=FONTS.{font}}}); G:text(10, 60, '|', {{font=FONTS.{font}}})")
+    img = canvas.render()
+    bar = _ink_cols(img.crop((0, 60, img.width, 100)))
+    cols = _ink_cols(img.crop((0, 10, img.width, 50)))
+    bar_w = bar[-1] - bar[0]
+    assert abs((cols[-1] - bar_w - cols[0]) - fonts.measure(font, "|" + s)) <= 1
+
+
+@pytest.mark.parametrize("font", ["small", "medium", "large"])
+@pytest.mark.parametrize("s", MEASURE_STRINGS)
+def test_right_aligned_text_stays_left_of_x(env, font, s):
+    _, fonts, canvas, _ = env
+    run(
+        env,
+        f"G:text(456, 10, '{s}', {{font=FONTS.{font}, align='right'}}); G:text(456 - G:measure('{s}', {{font=FONTS.{font}}}), 60, '{s}', {{font=FONTS.{font}}})",
+    )
+    img = canvas.render()
+    for top in (10, 60):
+        cols = _ink_cols(img.crop((0, top, img.width, top + 40)))
+        assert cols[-1] < 456 and cols[0] >= 456 - fonts.measure(font, s) - 1
