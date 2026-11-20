@@ -19,6 +19,9 @@ NET_MODES = ("replay", "record", "live")
 PERMISSIONS = ("net", "reader", "ble")
 KEYS = ("up", "down", "left", "right", "ok", "back")
 INPUT_MS = 350
+HOLD_MS = 600
+POINTER_PHASES = ("down", "move", "hold", "up")
+SWIPES = {"left": (-1, 0), "right": (1, 0), "up": (0, -1), "down": (0, 1)}
 ERROR_TITLE = "App error, closed"
 
 _REQUIRE = r"""
@@ -39,6 +42,17 @@ def _parse_start(start_time: str | datetime | None) -> datetime:
         return datetime.now().replace(microsecond=0)
     dt = start_time if isinstance(start_time, datetime) else datetime.fromisoformat(start_time)
     return dt.astimezone().replace(tzinfo=None) if dt.tzinfo else dt
+
+
+def _classify(dx: int, dy: int, held_ms: int) -> str | None:
+    """Gesture on pointer up; a 20..60 px move that is not a hold has no gesture."""
+    if max(abs(dx), abs(dy)) >= 60:
+        if abs(dx) >= abs(dy):
+            return "swipe_right" if dx > 0 else "swipe_left"
+        return "swipe_down" if dy > 0 else "swipe_up"
+    if held_ms >= HOLD_MS:
+        return "long"
+    return "tap" if max(abs(dx), abs(dy)) < 20 else None
 
 
 class Emu:
@@ -74,6 +88,7 @@ class Emu:
         self._invalid = self._quit = self._leaving = False
         self._depth = 0
         self._overlay: tuple[str, str] | None = None
+        self._down: tuple[int, int, int] | None = None
 
         self.manifest, problem = self._read_manifest()
         app_id = self.manifest.get("app_id")
@@ -93,10 +108,75 @@ class Emu:
 
     # ---- public API -------------------------------------------------------------------------
 
+    def pointer(self, phase: str, x: int, y: int) -> None:
+        """Low-level pointer event; the caller owns the timing. `up` classifies the gesture and advances 350 ms."""
+        if phase not in POINTER_PHASES:
+            raise ValueError(f"unknown pointer phase {phase!r}: use one of {', '.join(POINTER_PHASES)}")
+        if phase == "down":
+            self._down = (x, y, self.clock.ms)
+        elif self._down is None:
+            self._log_line(f"pointer {phase} without down ignored")
+            return
+        dx, dy, t0 = self._down
+        event = {"type": "pointer", "phase": phase, "x": x, "y": y, "down_x": dx, "down_y": dy,
+                 "time_ms": self.clock.ms}
+        if phase != "up":
+            self._send(event)
+            return
+        self._down = None
+        gesture = _classify(x - dx, y - dy, self.clock.ms - t0)
+        if gesture:
+            event["gesture"] = gesture
+        self._dispatch(event)
+
     def tap(self, x: int, y: int) -> None:
-        base = {"type": "pointer", "x": x, "y": y, "down_x": x, "down_y": y, "time_ms": self.clock.ms}
-        self._send({**base, "phase": "down"})
-        self._dispatch({**base, "phase": "up", "gesture": "tap"})
+        self.pointer("down", x, y)
+        self.pointer("up", x, y)
+
+    def double_tap(self, x: int, y: int) -> None:
+        self.tap(x, y)
+        self.wait(100)
+        self.pointer("down", x, y)
+        self._down = None
+        self._dispatch({"type": "pointer", "phase": "up", "gesture": "double_tap", "x": x, "y": y,
+                        "down_x": x, "down_y": y, "time_ms": self.clock.ms})
+
+    def hold(self, x: int, y: int, ms: int = 800) -> None:
+        self.pointer("down", x, y)
+        if ms >= HOLD_MS:
+            self.wait(HOLD_MS)
+            self.pointer("hold", x, y)
+            ms -= HOLD_MS
+        self.wait(ms)
+        self.pointer("up", x, y)
+
+    def drag(self, points: list[tuple[int, int]], *, duration_ms: int = 300) -> None:
+        if len(points) < 2:
+            raise ValueError("drag() needs at least two points")
+        self.pointer("down", *points[0])
+        step = max(duration_ms, 0) // (len(points) - 1)
+        for p in points[1:]:
+            self.wait(step)
+            self.pointer("move", *p)
+        self.pointer("up", *points[-1])
+
+    def swipe(self, direction: str, *, at: tuple[int, int] = (240, 400), distance: int = 200) -> None:
+        if direction not in SWIPES:
+            raise ValueError(f"unknown swipe direction {direction!r}: use one of {', '.join(SWIPES)}")
+        ux, uy = SWIPES[direction]
+        steps = 5
+        self.drag([(at[0] + ux * distance * i // steps, at[1] + uy * distance * i // steps)
+                   for i in range(steps + 1)])
+
+    def tap_text(self, text: str) -> None:
+        items = self.texts()
+        for match in (lambda t: t == text, lambda t: text in t):
+            hits = [it for it in items if match(it["text"])]
+            if hits:
+                it = hits[-1]
+                self.tap(it["x"] + it["w"] // 2, it["y"] + it["h"] // 2)
+                return
+        raise LookupError(f"no text {text!r} on screen; visible: {[it['text'] for it in items]}")
 
     def key(self, name: str) -> None:
         if name not in KEYS:
