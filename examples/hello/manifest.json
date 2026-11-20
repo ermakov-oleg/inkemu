@@ -1,0 +1,10 @@
+{
+  "app_id": "hellooleg",
+  "display_name": "Hello",
+  "version": "0.1.0",
+  "author": "oleg",
+  "description": "Hello world for XTOS Licorice: clock, battery and a tap counter.",
+  "entry": "index.lua",
+  "api": "2.2",
+  "permissions": []
+}
