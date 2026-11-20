@@ -1,5 +1,5 @@
 import re
-from typing import Callable
+from collections.abc import Callable
 
 from lupa import lua55
 
@@ -38,7 +38,8 @@ local function count_hook()
     exhausted = true
     sethook(count_hook, '', 1)  -- fire on every instruction now, so an app pcall cannot swallow the abort
   end
-  local where = info.source:sub(1, 1) == '@' and info.currentline > 0 and info.short_src .. ':' .. info.currentline .. ': ' or ''
+  local where = info.source:sub(1, 1) == '@' and info.currentline > 0
+    and info.short_src .. ':' .. info.currentline .. ': ' or ''
   error(where .. budget_msg, 0)
 end
 
@@ -117,8 +118,9 @@ def _no_attributes(obj, name, is_setting):
 
 
 def new_runtime() -> Runtime:
-    L = Runtime(unpack_returned_tuples=True, register_eval=False, register_builtins=False,
-                attribute_filter=_no_attributes)
+    L = Runtime(
+        unpack_returned_tuples=True, register_eval=False, register_builtins=False, attribute_filter=_no_attributes
+    )
     L._method, L._register, L._xpcall, L._load, L._rawget = L.execute(_SANDBOX, HOOK_STEP)
     return L
 

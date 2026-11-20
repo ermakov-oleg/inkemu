@@ -1,8 +1,8 @@
 import heapq
 import itertools
 import re
+from collections.abc import Callable
 from datetime import datetime, timedelta
-from typing import Callable
 
 _DURATION = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*(ms|s|m|h)?\s*$")
 _UNIT_MS = {None: 1, "ms": 1, "s": 1000, "m": 60_000, "h": 3_600_000}
@@ -77,8 +77,10 @@ class Scheduler:
                 t.cancel()
                 self._drop_due(instant)
                 if self.on_overflow:
-                    self.on_overflow(f"more than {MAX_FIRES_PER_INSTANT} timers fired at the same virtual instant "
-                                     "(a callback re-arms itself with delay 0?); timers due now were dropped")
+                    self.on_overflow(
+                        f"more than {MAX_FIRES_PER_INSTANT} timers fired at the same virtual instant "
+                        "(a callback re-arms itself with delay 0?); timers due now were dropped"
+                    )
                 continue
             t.fn()
             if t.period_ms > 0 and not t.cancelled:

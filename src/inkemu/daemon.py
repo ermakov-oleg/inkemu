@@ -1,13 +1,15 @@
 import json
 import os
 import queue
+import socketserver
 import threading
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from .clock import parse_duration
 from .emu import KEYS, SWIPES, Emu
@@ -46,6 +48,7 @@ def _choice(options: tuple[str, ...]) -> Callable[[Any], str]:
         if v not in options:
             raise UsageError(f"must be one of {', '.join(options)}, got {v!r}")
         return v
+
     return conv
 
 
@@ -132,7 +135,7 @@ def parse_words(words: list[str]) -> tuple[str, dict]:
     if not lo <= len(rest) <= len(fields):
         want = str(lo) if lo == len(fields) else f"{lo}-{len(fields)}"
         raise UsageError(f"{cmd!r} takes {want} argument(s), got {len(rest)} (usage: {usage})")
-    args = {name: w for (name, _, _), w in zip(fields, rest)}
+    args = {name: w for (name, _, _), w in zip(fields, rest, strict=False)}
     return cmd, normalize(cmd, args)
 
 
@@ -166,12 +169,21 @@ def execute(emu: Emu, cmd: str, args: dict | None = None) -> dict:
         texts = emu.texts()
     except Exception:
         texts = []
-    return {"ok": error is None, "error": error, "texts": texts, "log_tail": emu.log[-LOG_TAIL:],
-            "errors": list(emu.errors), "warnings": list(emu.warnings), "status": emu.status(), "shot": shot,
-            **extra}
+    return {
+        "ok": error is None,
+        "error": error,
+        "texts": texts,
+        "log_tail": emu.log[-LOG_TAIL:],
+        "errors": list(emu.errors),
+        "warnings": list(emu.warnings),
+        "status": emu.status(),
+        "shot": shot,
+        **extra,
+    }
 
 
 # ---- daemon.json ------------------------------------------------------------------------------
+
 
 def _alive(pid: int) -> bool:
     try:
@@ -218,9 +230,12 @@ class DaemonUnreachable(Exception):
 
 def post_command(port: int, cmd: str, args: dict | None = None) -> dict:
     """Send one command to the daemon on `port`; raises DaemonUnreachable unless an inkemu daemon answers."""
-    req = urllib.request.Request(f"http://127.0.0.1:{port}/cmd", method="POST",
-                                 headers={"Content-Type": "application/json"},
-                                 data=json.dumps({"cmd": cmd, "args": args or {}}).encode("utf-8"))
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{port}/cmd",
+        method="POST",
+        headers={"Content-Type": "application/json"},
+        data=json.dumps({"cmd": cmd, "args": args or {}}).encode("utf-8"),
+    )
     try:
         try:
             with urllib.request.urlopen(req, timeout=CLIENT_TIMEOUT_S) as resp:
@@ -241,9 +256,15 @@ def post_command(port: int, cmd: str, args: dict | None = None) -> dict:
 
 # ---- HTTP server ------------------------------------------------------------------------------
 
+
 class _Server(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = False
+
+    def server_bind(self) -> None:
+        # HTTPServer.server_bind calls socket.getfqdn(), a reverse DNS lookup that takes seconds on some macOS hosts
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = HOST, self.server_address[1]
 
 
 class Daemon:
@@ -268,7 +289,8 @@ class Daemon:
                 self.wfile.write(data)
 
             def _forbidden(self) -> str | None:
-                # a web page can POST to 127.0.0.1 (no-cors text/plain, DNS rebinding); our clients send neither Origin nor a foreign Host
+                # a web page can POST to 127.0.0.1 (no-cors text/plain, DNS rebinding);
+                # our clients send neither Origin nor a foreign Host
                 if self.headers.get("Host") not in (f"127.0.0.1:{daemon.port}", f"localhost:{daemon.port}"):
                     return "bad Host header"
                 if "Origin" in self.headers:
@@ -305,8 +327,9 @@ class Daemon:
         try:
             self._server = _Server((HOST, port), Handler)
         except OSError as e:
-            raise OSError(f"cannot listen on {HOST}:{port}: {e.strerror or e}"
-                          " (is another inkemu daemon running? try --port)") from e
+            raise OSError(
+                f"cannot listen on {HOST}:{port}: {e.strerror or e} (is another inkemu daemon running? try --port)"
+            ) from e
         self.port = self._server.server_address[1]
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True, name="inkemu-http")
         self._thread.start()

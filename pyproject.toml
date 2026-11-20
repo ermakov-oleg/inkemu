@@ -4,7 +4,26 @@ version = "0.1.0"
 description = "Desktop emulator of the Xteink X4 Pro InkApp (XTOS Licorice) Lua host"
 readme = "README.md"
 license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
+keywords = ["xteink", "e-ink", "emulator", "lua", "inkapp", "mcp"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Lua",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Embedded Systems",
+    "Topic :: Software Development :: Testing",
+    "Topic :: System :: Emulators",
+]
 dependencies = [
     "lupa>=2.8",
     "mcp>=2.3.0",
@@ -12,16 +31,38 @@ dependencies = [
     "segno>=1.6.6",
 ]
 
+[project.urls]
+Homepage = "https://github.com/ermakov-oleg/inkemu"
+Repository = "https://github.com/ermakov-oleg/inkemu"
+Issues = "https://github.com/ermakov-oleg/inkemu/issues"
+
 [project.scripts]
 inkemu = "inkemu.cli:main"
 inkemu-mcp = "inkemu.mcp_server:main"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "examples", "README.md", "LICENSE", "pyproject.toml", "uv.lock"]
+
 [dependency-groups]
-dev = ["pytest>=9.2.0"]
+dev = [
+    "pytest>=9.2.0",
+    "ruff>=0.17.6",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# tests embed Lua sources: one-line Lua chunks run past the limit and %-templating avoids escaping Lua's braces
+"tests/**" = ["E501", "UP031"]

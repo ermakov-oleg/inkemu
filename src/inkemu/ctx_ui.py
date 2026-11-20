@@ -1,4 +1,5 @@
 """UI-ish ctx members: dialogs, text input, toast, image decoding, QR codes, offscreen layers."""
+
 from io import BytesIO
 from typing import TYPE_CHECKING, Any
 
@@ -6,7 +7,7 @@ import segno
 from lupa import lua55
 from PIL import Image
 
-from .ctx_basic import _bytes_arg, _binary_object, check_arg
+from .ctx_basic import _binary_object, _bytes_arg, check_arg
 from .draw import Canvas
 from .lua_env import make_object
 
@@ -42,8 +43,12 @@ def install(emu: "Emu") -> None:
         def release(*_):
             emu._images.pop(iid, None)
 
-        obj = make_object(L, name, {"release": release, **(methods or {})},
-                          fields={"width": img.width, "height": img.height, "_id": iid})
+        obj = make_object(
+            L,
+            name,
+            {"release": release, **(methods or {})},
+            fields={"width": img.width, "height": img.height, "_id": iid},
+        )
         return obj, iid
 
     def resolve(obj) -> Image.Image | None:
@@ -73,8 +78,9 @@ def install(emu: "Emu") -> None:
             emu._clear_pending()
             call_back(fn, text, where="ctx.input:text callback")
 
-        emu._set_pending("text", _opt_str(opts, "title"), default,
-                         answer=lambda ok: done(default) if ok else None, type_text=done)
+        emu._set_pending(
+            "text", _opt_str(opts, "title"), default, answer=lambda ok: done(default) if ok else None, type_text=done
+        )
 
     def input_edit(opts=None, *_):
         check_arg("edit", 1, opts, "table")
@@ -112,8 +118,13 @@ def install(emu: "Emu") -> None:
                 emu._clear_pending()
 
         handle["obj"] = make_object(L, "edit", {"set_text": set_text, "close": close}, fields={"text": st["text"]})
-        handle["h"] = emu._set_pending("edit", _opt_str(opts, "title"), st["text"],
-                                       answer=lambda ok: finish("enter" if ok else "cancel"), type_text=type_text)
+        handle["h"] = emu._set_pending(
+            "edit",
+            _opt_str(opts, "title"),
+            st["text"],
+            answer=lambda ok: finish("enter" if ok else "cancel"),
+            type_text=type_text,
+        )
         return handle["obj"]
 
     def confirm(opts=None, fn=None, *_):
@@ -183,4 +194,3 @@ def install(emu: "Emu") -> None:
     ctx.image = _binary_object(L, "image", {"decode": decode})
     ctx.qr = _binary_object(L, "qr", {"encode": qr_encode})
     ctx.layers = make_object(L, "layers", {"create": layer_create})
-

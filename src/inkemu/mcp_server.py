@@ -1,4 +1,5 @@
 """stdio MCP server: starts/finds the inkemu daemon and forwards commands to it over HTTP."""
+
 import os
 import subprocess
 import sys
@@ -36,15 +37,18 @@ def _attach(live: dict, window: bool | None, net: str | None, fresh: bool) -> di
     if asked:
         want = ", ".join(f"{k}={v}" for k, v in asked.items())
         now = ", ".join(f"{k}={v}" for k, v in have.items())
-        return {**state, "ok": False, "already_running": True,
-                "error": f"a daemon for this app is already running ({now}) and cannot switch to {want}; "
-                         "call emu_stop first, then emu_start again"}
+        return {
+            **state,
+            "ok": False,
+            "already_running": True,
+            "error": f"a daemon for this app is already running ({now}) and cannot switch to {want}; "
+            "call emu_stop first, then emu_start again",
+        }
     return {**state, "already_running": True}
 
 
 @mcp.tool()
-def emu_start(app: str, window: bool | None = None, net: str | None = None, fresh: bool = False,
-              port: int = 0) -> dict:
+def emu_start(app: str, window: bool | None = None, net: str | None = None, fresh: bool = False, port: int = 0) -> dict:
     """Start the emulator daemon for an app directory: headless by default, or with a window; net replay (default),
     record or live. Reuses a running daemon for the same app unless window/net/fresh ask for something else.
     port 0 picks a free port."""
@@ -52,18 +56,36 @@ def emu_start(app: str, window: bool | None = None, net: str | None = None, fres
         return {"ok": False, "error": f"net must be one of {', '.join(NET_MODES)}, not {net!r}"}
     if live := read_info():
         if live["app"] != app_id_of(app):
-            return {"ok": False, "error": f"a daemon for app {live['app']!r} is already running (pid {live['pid']}); "
-                                          "call emu_stop first"}
+            return {
+                "ok": False,
+                "error": f"a daemon for app {live['app']!r} is already running (pid {live['pid']}); "
+                "call emu_stop first",
+            }
         return _attach(live, window, net, fresh)
-    cmd = [sys.executable, "-m", "inkemu", "window" if window else "serve", app, "--net", net or "replay",
-           "--port", str(port)]
+    cmd = [
+        sys.executable,
+        "-m",
+        "inkemu",
+        "window" if window else "serve",
+        app,
+        "--net",
+        net or "replay",
+        "--port",
+        str(port),
+    ]
     if fresh:
         cmd.append("--fresh")
     root = state_root()
     root.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryFile() as err:
-        proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=err,
-                                start_new_session=True, env=os.environ.copy())
+        proc = subprocess.Popen(
+            cmd,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=err,
+            start_new_session=True,
+            env=os.environ.copy(),
+        )
         deadline = time.monotonic() + START_TIMEOUT_S
         while time.monotonic() < deadline:
             info = read_info()

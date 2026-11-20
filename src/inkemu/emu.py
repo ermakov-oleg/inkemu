@@ -2,17 +2,19 @@ import json
 import random
 import re
 import shutil
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from lupa import lua55
 from PIL import Image, ImageDraw
 
-from . import ctx_basic, ctx_ui, lockscreen, net as net_mod
+from . import ctx_basic, ctx_ui, lockscreen
+from . import fonts as fonts_mod
+from . import net as net_mod
 from .clock import Scheduler, Timer, VirtualClock, parse_duration
 from .draw import Canvas
-from . import fonts as fonts_mod
 from .fonts import Fonts
 from .lua_env import load_chunk, make_object, new_runtime, protected_call
 from .paths import app_id_of, state_root
@@ -63,11 +65,20 @@ def _classify(dx: int, dy: int, held_ms: int) -> str | None:
 class Emu:
     """One emulated InkApp: Lua state, ctx, virtual time, screen and lifecycle."""
 
-    def __init__(self, app_dir: str | Path, *, state_dir: str | Path | None = None,
-                 fixtures_dir: str | Path | None = None, net: str = "replay",
-                 start_time: str | datetime | None = None, firmware_api: tuple[int, int] = (2, 26),
-                 fresh: bool = False, secrets_file: str | Path | None = None, seed_files: bool | None = None,
-                 random_seed: int | str | None = None):
+    def __init__(
+        self,
+        app_dir: str | Path,
+        *,
+        state_dir: str | Path | None = None,
+        fixtures_dir: str | Path | None = None,
+        net: str = "replay",
+        start_time: str | datetime | None = None,
+        firmware_api: tuple[int, int] = (2, 26),
+        fresh: bool = False,
+        secrets_file: str | Path | None = None,
+        seed_files: bool | None = None,
+        random_seed: int | str | None = None,
+    ):
         if net not in NET_MODES:
             raise ValueError(f"net must be one of {', '.join(NET_MODES)}, not {net!r}")
         self.app_dir = Path(app_dir).resolve()
@@ -106,13 +117,19 @@ class Emu:
         self.scheduler = Scheduler(self.clock, on_overflow=self._fail)
         self.fonts = Fonts()
         if self.fonts.path is None:
-            self._warn("no TrueType font found (" + ", ".join(fonts_mod.FONT_FILES) + "): text uses Pillow's built-in font, "
-                       "so Cyrillic and other non-Latin text shows as boxes")
+            self._warn(
+                "no TrueType font found (" + ", ".join(fonts_mod.FONT_FILES) + "): text uses Pillow's built-in font, "
+                "so Cyrillic and other non-Latin text shows as boxes"
+            )
         self.L = None
         self.canvas: Canvas | None = None
         self._ctx = None
-        self._install: list[Callable[["Emu"], None]] = [ctx_basic.install, net_mod.install, ctx_ui.install,
-                                                  lockscreen.install]
+        self._install: list[Callable[[Emu], None]] = [
+            ctx_basic.install,
+            net_mod.install,
+            ctx_ui.install,
+            lockscreen.install,
+        ]
         self._timers: set[Timer] = set()
         self._tick: Timer | None = None
         self._invalid = self._quit = self._leaving = False
@@ -150,8 +167,15 @@ class Emu:
         if phase == "hold":
             self._hold_sent = True
         dx, dy, t0 = self._down
-        event = {"type": "pointer", "phase": phase, "x": x, "y": y, "down_x": dx, "down_y": dy,
-                 "time_ms": self.clock.ms}
+        event = {
+            "type": "pointer",
+            "phase": phase,
+            "x": x,
+            "y": y,
+            "down_x": dx,
+            "down_y": dy,
+            "time_ms": self.clock.ms,
+        }
         if phase != "up":
             self._send(event)
             return
@@ -178,8 +202,18 @@ class Emu:
         self.wait(100)
         self.pointer("down", x, y)
         self._down = None
-        self._dispatch({"type": "pointer", "phase": "up", "gesture": "double_tap", "x": x, "y": y,
-                        "down_x": x, "down_y": y, "time_ms": self.clock.ms})
+        self._dispatch(
+            {
+                "type": "pointer",
+                "phase": "up",
+                "gesture": "double_tap",
+                "x": x,
+                "y": y,
+                "down_x": x,
+                "down_y": y,
+                "time_ms": self.clock.ms,
+            }
+        )
 
     def hold(self, x: int, y: int, ms: int = 800) -> None:
         self.pointer("down", x, y)
@@ -205,8 +239,7 @@ class Emu:
             raise ValueError(f"unknown swipe direction {direction!r}: use one of {', '.join(SWIPES)}")
         ux, uy = SWIPES[direction]
         steps = 5
-        self.drag([(at[0] + ux * distance * i // steps, at[1] + uy * distance * i // steps)
-                   for i in range(steps + 1)])
+        self.drag([(at[0] + ux * distance * i // steps, at[1] + uy * distance * i // steps) for i in range(steps + 1)])
 
     def tap_text(self, text: str) -> None:
         items = self.texts()
@@ -428,8 +461,12 @@ class Emu:
     def _lock_enter(self, reason: str) -> None:
         block = self._lock_block() or {}
         now = self.clock.ms
-        self._lock_ctx = {"reason": reason, "net": bool(block.get("net")), "done": False,
-                          "elapsed": (now - self._lock_cycle_ms) // 1000 if reason == "timer" else 0}
+        self._lock_ctx = {
+            "reason": reason,
+            "net": bool(block.get("net")),
+            "done": False,
+            "elapsed": (now - self._lock_cycle_ms) // 1000 if reason == "timer" else 0,
+        }
         self._lock_cycle_ms = now
         self._boot(lock=True)
         self._lock_schedule()
@@ -612,15 +649,16 @@ class Emu:
             if event["phase"] == "up":
                 kind = self.pending["kind"]
                 how = "type text or answer it" if kind in ("text", "edit") else "answer it"
-                self._log_line(f"input went to the open {kind} dialog, not the app: "
-                               f"{event['type']} {event.get('gesture') or event.get('key') or ''} ({how})")
+                self._log_line(
+                    f"input went to the open {kind} dialog, not the app: "
+                    f"{event['type']} {event.get('gesture') or event.get('key') or ''} ({how})"
+                )
             return
         if not self.running:
             self._log_line(f"input ignored, the app is not running: {event['type']} {event['phase']}")
             return
         handled = self._call("on_input", self._ctx, self.L.table_from(event))
-        if (event["type"] == "key" and event["key"] == "back" and self.running and not handled
-                and self.pending is None):
+        if event["type"] == "key" and event["key"] == "back" and self.running and not handled and self.pending is None:
             self._set_pending("leave", "Leave app?", "", answer=lambda ok: self.leave() if ok else None)
             self._log_line("back not handled by on_input: the host offers to leave")
         self._settle()
@@ -647,8 +685,15 @@ class Emu:
             self._fail(f"g: bad values in on_draw: {type(e).__name__}: {e}")
             self.canvas.begin_frame()
 
-    def _set_pending(self, kind: str, title: str, text: str, *, answer: Callable[[bool], Any],
-                     type_text: Callable[[str], Any] | None = None) -> dict:
+    def _set_pending(
+        self,
+        kind: str,
+        title: str,
+        text: str,
+        *,
+        answer: Callable[[bool], Any],
+        type_text: Callable[[str], Any] | None = None,
+    ) -> dict:
         if self.pending is not None:
             self._warn(f"a {self.pending['kind']} dialog was still open; replaced by {kind}")
         self.pending = {"kind": kind, "title": title, "text": text}
@@ -671,13 +716,16 @@ class Emu:
         return {"text": text, "x": round(cx - tw / 2), "y": y, "w": tw, "h": lh, "font": font}
 
     def _plates(self, *, dialog: bool = True) -> list[dict]:
-        """Overlay plates over the app frame: {"items": text items, "boxes": outlined rects, "buttons": [(rect, label, ok)]}."""
+        """Overlay plates over the app frame:
+        {"items": text items, "boxes": outlined rects, "buttons": [(rect, label, ok)]}."""
         plates = []
         w = self.canvas.width
         if self._overlay:
             title, msg = self._overlay
             items, y = [], self.canvas.height // 2 - 60
-            for text, font in [(title, "large")] + [(line, "small") for line in self.canvas._wrap("small", msg, w - 64)[:4]]:
+            for text, font in [(title, "large")] + [
+                (line, "small") for line in self.canvas._wrap("small", msg, w - 64)[:4]
+            ]:
                 items.append(self._item(text, font, w / 2, y))
                 y += items[-1]["h"] + (8 if font == "large" else 0)
             plates.append({"items": items, "boxes": [], "buttons": []})
@@ -713,7 +761,8 @@ class Emu:
                 items.append(self._item(line, "small", w / 2, y))
                 y += items[-1]["h"]
             y += 16
-        for (label, ok), cx in zip(zip(DIALOG_BUTTONS[p["kind"]], (True, False)), (w / 3, 2 * w / 3)):
+        labels = zip(DIALOG_BUTTONS[p["kind"]], (True, False), strict=True)
+        for (label, ok), cx in zip(labels, (w / 3, 2 * w / 3), strict=True):
             it = self._item(label, "medium", cx, y)
             rect = (round(cx - 70), y - 8, round(cx + 70), y + it["h"] + 8)
             items.append(it)

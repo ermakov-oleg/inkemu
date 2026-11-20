@@ -1,4 +1,5 @@
 """MCP tool functions called in-process against an in-process daemon (the stdio round trip is in test_mcp)."""
+
 import threading
 import time
 from pathlib import Path
@@ -32,8 +33,9 @@ def test_emu_start_attaches_when_nothing_differs(live_daemon):
     assert mcp_server.emu_start(str(HELLO), net="replay", window=False)["ok"]
 
 
-@pytest.mark.parametrize("kw, word", [({"net": "record"}, "net=record"), ({"window": True}, "window=True"),
-                                      ({"fresh": True}, "fresh=True")])
+@pytest.mark.parametrize(
+    "kw, word", [({"net": "record"}, "net=record"), ({"window": True}, "window=True"), ({"fresh": True}, "fresh=True")]
+)
 def test_emu_start_refuses_a_different_mode(live_daemon, kw, word):
     r = mcp_server.emu_start(str(HELLO), **kw)
     assert not r["ok"] and word in r["error"] and "emu_stop" in r["error"]
@@ -45,6 +47,7 @@ def test_emu_start_rejects_unknown_net(live_daemon):
 
 def test_emu_screenshot_leaves_no_files(live_daemon, tmp_path, monkeypatch):
     import tempfile
+
     tmp = tmp_path / "tmp"
     tmp.mkdir()
     monkeypatch.setattr(tempfile, "tempdir", str(tmp))

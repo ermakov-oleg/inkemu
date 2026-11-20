@@ -1,7 +1,5 @@
 import json
 
-import pytest
-
 BLOCK = {"enabled": True, "entry": "lockscreen.lua", "interval_sec": 60, "net": True}
 APP = """
 loaded = false
@@ -77,15 +75,19 @@ def test_unlock_restarts_app(make_app, emu_factory, tmp_path):
 
 
 def test_lockscreen_api_absent_without_block(make_app, emu_factory):
-    app = make_app("function on_load(c) c.state.has = c.lockscreen ~= nil end\n"
-                   "function on_draw(c, g) g:text(0, 0, 'has ' .. tostring(c.state.has)) end")
+    app = make_app(
+        "function on_load(c) c.state.has = c.lockscreen ~= nil end\n"
+        "function on_draw(c, g) g:text(0, 0, 'has ' .. tostring(c.state.has)) end"
+    )
     assert emu_factory(app).has_text("has false")
 
 
 def test_lockscreen_api_default_persists(make_app, emu_factory, tmp_path):
-    app = make_app("function on_load(c) c.state.before = c.lockscreen:is_default(); c.lockscreen:set_default() end\n"
-                   "function on_draw(c, g) g:text(0, 0, 'b ' .. tostring(c.state.before) .. ' a ' .. tostring(c.lockscreen:is_default())) end",
-                   manifest={"lockscreen": BLOCK})
+    app = make_app(
+        "function on_load(c) c.state.before = c.lockscreen:is_default(); c.lockscreen:set_default() end\n"
+        "function on_draw(c, g) g:text(0, 0, 'b ' .. tostring(c.state.before) .. ' a ' .. tostring(c.lockscreen:is_default())) end",
+        manifest={"lockscreen": BLOCK},
+    )
     emu = emu_factory(app)
     assert emu.has_text("b false a true")
     assert json.loads((tmp_path / "state" / "lock.json").read_text())["is_default"] is True
@@ -105,8 +107,15 @@ def test_input_ignored_while_locked(make_app, emu_factory, tmp_path):
 def test_wake_waits_for_net(make_app, emu_factory, tmp_path):
     d = tmp_path / "fixtures" / "net"
     d.mkdir(parents=True)
-    (d / "a.json").write_text(json.dumps({"request": {"method": "GET", "url": "http://x.test/a"}, "match": "exact",
-                                          "response": {"status": 200, "headers": {}, "body": "ok", "delay_ms": 5000}}))
+    (d / "a.json").write_text(
+        json.dumps(
+            {
+                "request": {"method": "GET", "url": "http://x.test/a"},
+                "match": "exact",
+                "response": {"status": 200, "headers": {}, "body": "ok", "delay_ms": 5000},
+            }
+        )
+    )
     req = "c.net:request({url = 'http://x.test/a'}, function(c, r) seen.reason = 'got ' .. r.body end)"
     emu = emu_factory(make(make_app, req, manifest={"permissions": ["net"]}))
     emu.lock()
@@ -121,8 +130,15 @@ def test_wake_waits_for_net(make_app, emu_factory, tmp_path):
 def slow_net(tmp_path):
     d = tmp_path / "fixtures" / "net"
     d.mkdir(parents=True)
-    (d / "z.json").write_text(json.dumps({"request": {"method": "GET", "url": "http://x.test/z"}, "match": "exact",
-                                          "response": {"status": 200, "headers": {}, "body": "ok", "delay_ms": 60000}}))
+    (d / "z.json").write_text(
+        json.dumps(
+            {
+                "request": {"method": "GET", "url": "http://x.test/z"},
+                "match": "exact",
+                "response": {"status": 200, "headers": {}, "body": "ok", "delay_ms": 60000},
+            }
+        )
+    )
 
 
 REQ = "c.net:request({url = 'http://x.test/z'}, function() end)"
@@ -130,8 +146,9 @@ REQ = "c.net:request({url = 'http://x.test/z'}, function() end)"
 
 def test_wake_done_draws_before_net(make_app, emu_factory, tmp_path):
     slow_net(tmp_path)
-    emu = emu_factory(make(make_app, REQ + "\n  c:after(2000, function() c.lock:done() end)",
-                           manifest={"permissions": ["net"]}))
+    emu = emu_factory(
+        make(make_app, REQ + "\n  c:after(2000, function() c.lock:done() end)", manifest={"permissions": ["net"]})
+    )
     emu.lock()
     emu.wait("61s")
     assert not emu.has_text("reason timer")

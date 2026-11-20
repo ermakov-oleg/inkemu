@@ -6,9 +6,10 @@ import re
 import socket
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 from urllib.parse import quote, quote_plus, urlsplit
 
 from .ctx_basic import check_arg, raw
@@ -19,7 +20,9 @@ if TYPE_CHECKING:
 
 DEFAULT_DELAY_MS = 300
 DEFAULT_TIMEOUT_MS = 30_000
-SENSITIVE_HEADER = re.compile(r"^(authorization|proxy-authorization|cookie|set-cookie|x-api-key)$|token|key|secret", re.I)
+SENSITIVE_HEADER = re.compile(
+    r"^(authorization|proxy-authorization|cookie|set-cookie|x-api-key)$|token|key|secret", re.I
+)
 _NAME = r"[A-Za-z0-9_.-]+"
 _PLACEHOLDER = re.compile(r"\{\{(" + _NAME + r")\}\}")
 _SECRET_LIKE = re.compile(r"[A-Za-z0-9_-]{20,}")
@@ -41,7 +44,9 @@ return function(o)
   out.timeout_ms = type(o.timeout_ms) == 'number' and o.timeout_ms or nil
   if type(o.headers) == 'table' then
     for k, v in pairs(o.headers) do
-      if type(k) == 'string' and (type(v) == 'string' or type(v) == 'number') then out.headers[esc(k)] = esc(tostring(v)) end
+      if type(k) == 'string' and (type(v) == 'string' or type(v) == 'number') then
+        out.headers[esc(k)] = esc(tostring(v))
+      end
     end
   end
   return out
@@ -63,8 +68,14 @@ def _sha(b: bytes) -> str:
 
 
 class Net:
-    def __init__(self, mode: str, fixtures_dir: Path, secrets: dict[str, str],
-                 log: Callable[[str], None], warn: Callable[[str], None]):
+    def __init__(
+        self,
+        mode: str,
+        fixtures_dir: Path,
+        secrets: dict[str, str],
+        log: Callable[[str], None],
+        warn: Callable[[str], None],
+    ):
         if mode not in ("replay", "record", "live"):
             raise ValueError(f"net mode must be replay, record or live, not {mode!r}")
         self.mode = mode
@@ -81,23 +92,26 @@ class Net:
         pairs: dict[str, str] = {}
         for name, value in self.secrets.items():
             for v in (value, quote(value, safe=""), quote(value, safe="@/:"), quote_plus(value, safe="")):
-                pairs.setdefault(v, "{{%s}}" % name)
+                pairs.setdefault(v, "{{" + name + "}}")
         out = []
         for v, placeholder in sorted(pairs.items(), key=lambda kv: -len(kv[0])):
             parts = re.split(r"(%[0-9A-F]{2})", v)
-            pat = "".join("%" + "".join(f"[{c}{c.lower()}]" if c.isalpha() else c for c in part[1:])
-                          if i % 2 else re.escape(part) for i, part in enumerate(parts))
+            pat = "".join(
+                "%" + "".join(f"[{c}{c.lower()}]" if c.isalpha() else c for c in part[1:]) if i % 2 else re.escape(part)
+                for i, part in enumerate(parts)
+            )
             out.append((re.compile(pat), re.compile(pat.encode()), placeholder))
         return out
 
     def redact(self, text: str) -> str:
         for pat, _, placeholder in self._variants():
-            text = pat.sub(lambda _m: placeholder, text)
+            text = pat.sub(lambda _m, p=placeholder: p, text)
         return _USERINFO_PASSWORD.sub(r"\1:{{userinfo}}@", text)
 
     def _redact_bytes(self, data: bytes) -> bytes:
         for _, pat, placeholder in self._variants():
-            data = pat.sub(lambda _m: placeholder.encode(), data)
+            encoded = placeholder.encode()
+            data = pat.sub(lambda _m, p=encoded: p, data)
         return _USERINFO_PASSWORD_B.sub(rb"\1:{{userinfo}}@", data)
 
     def expand(self, text: str) -> str:
@@ -175,10 +189,16 @@ class Net:
         safe_resp = {k.lower(): self.redact(v) for k, v in resp.headers.items() if not SENSITIVE_HEADER.search(k)}
         self.dir.mkdir(parents=True, exist_ok=True)
         (self.dir / f"{stem}.body").write_bytes(self._redact_bytes(resp.body or b""))
-        doc = {"request": {"method": method, "url": self.redact(url), "body_sha256": sha, "headers": safe_req},
-               "match": "exact",
-               "response": {"status": resp.status, "headers": safe_resp, "body_file": f"{stem}.body",
-                            "delay_ms": resp.delay_ms}}
+        doc = {
+            "request": {"method": method, "url": self.redact(url), "body_sha256": sha, "headers": safe_req},
+            "match": "exact",
+            "response": {
+                "status": resp.status,
+                "headers": safe_resp,
+                "body_file": f"{stem}.body",
+                "delay_ms": resp.delay_ms,
+            },
+        }
         (self.dir / f"{stem}.json").write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         self.log(f"net: recorded {self.dir.name}/{stem}.json")
 
@@ -188,16 +208,20 @@ class Net:
         method = method.upper()
         shown = self.redact(url)
         if method not in ("GET", "POST"):
-            self.warn(f"net: {method} {shown} never gets an answer on the reader (only GET and POST work); "
-                      "send it as POST with an override header")
+            self.warn(
+                f"net: {method} {shown} never gets an answer on the reader (only GET and POST work); "
+                "send it as POST with an override header"
+            )
             return None
         if self.blocked:
             return Response(0, {}, None, "secrets_invalid")
         if self.mode == "replay":
             resp = self._find(method, url, body)
             if resp is None:
-                self.warn(f"net: no fixture for {method} {shown}; run with --net record to save one, "
-                          "or write it by hand in " + str(self.dir))
+                self.warn(
+                    f"net: no fixture for {method} {shown}; run with --net record to save one, "
+                    "or write it by hand in " + str(self.dir)
+                )
                 return Response(0, {}, None, "no_fixture", DEFAULT_DELAY_MS)
             self.log(f"net: {method} {shown} -> {resp.status} (fixture)")
             return resp
@@ -222,15 +246,20 @@ class Net:
             except urllib.error.HTTPError as e:
                 with e:
                     return self._response(e.code, e.headers, e.read())
-        except (TimeoutError, socket.timeout):
+        except TimeoutError:
             return Response(0, {}, None, "timeout")
         except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as e:
             reason = getattr(e, "reason", e)
             return Response(0, {}, None, "timeout" if isinstance(reason, socket.timeout) else "no_network")
 
     def expand_bytes(self, data: bytes) -> bytes:
-        return _PLACEHOLDER.sub(lambda m: self.secrets[m[1]].encode() if m[1] in self.secrets else m[0].encode(),
-                                data.decode("latin-1")).encode("latin-1") if b"{{" in data else data
+        return (
+            _PLACEHOLDER.sub(
+                lambda m: self.secrets[m[1]].encode() if m[1] in self.secrets else m[0].encode(), data.decode("latin-1")
+            ).encode("latin-1")
+            if b"{{" in data
+            else data
+        )
 
     @staticmethod
     def _response(status: int, msg, body: bytes) -> Response:
@@ -246,8 +275,10 @@ class Net:
         candidates += [("query value", v.partition("=")[2]) for v in parts.query.split("&")]
         for what, text in candidates:
             if _SECRET_LIKE.fullmatch(text):
-                self.warn(f"net: a {what} of {parts.scheme}://{parts.netloc} looks like a secret "
-                          "but is not in secrets.json; it will be saved in the fixture as is")
+                self.warn(
+                    f"net: a {what} of {parts.scheme}://{parts.netloc} looks like a secret "
+                    "but is not in secrets.json; it will be saved in the fixture as is"
+                )
 
 
 def _number(v) -> bool:
@@ -257,7 +288,7 @@ def _number(v) -> bool:
 def _fixture_problem(d) -> str | None:
     """Why a hand-written fixture cannot be used, or None."""
     if not isinstance(d, dict) or not isinstance(d.get("request"), dict) or not isinstance(d.get("response"), dict):
-        return "needs \"request\" and \"response\" objects"
+        return 'needs "request" and "response" objects'
     req, resp = d["request"], d["response"]
     if not isinstance(req.get("method"), str) or not isinstance(req.get("url"), str):
         return "request.method and request.url must be strings"

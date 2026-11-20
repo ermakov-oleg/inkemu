@@ -4,8 +4,18 @@ import shlex
 import sys
 from pathlib import Path
 
-from .daemon import (DEFAULT_PORT, SPEC, DaemonUnreachable, UsageError, WindowUnavailable, execute, parse_words,
-                     post_command, read_info, serve)
+from .daemon import (
+    DEFAULT_PORT,
+    SPEC,
+    DaemonUnreachable,
+    UsageError,
+    WindowUnavailable,
+    execute,
+    parse_words,
+    post_command,
+    read_info,
+    serve,
+)
 from .emu import NET_MODES, Emu
 
 
@@ -36,8 +46,11 @@ def format_result(cmd: str, result: dict) -> str:
         return "\n".join(f"{t['x']},{t['y']} {t['text']}" for t in result["texts"])
     if cmd == "log":
         return "\n".join(result.get("log", []))
-    return json.dumps({k: result[k] for k in ("ok", "error", "texts", "errors", "warnings", "status", "log_tail")
-                       if k in result}, ensure_ascii=False, indent=2)
+    return json.dumps(
+        {k: result[k] for k in ("ok", "error", "texts", "errors", "warnings", "status", "log_tail") if k in result},
+        ensure_ascii=False,
+        indent=2,
+    )
 
 
 def run_steps(emu: Emu, steps: str, out_dir: Path) -> list[Path]:
@@ -109,8 +122,10 @@ def _client(verb: str, words: list[str], port: int | None) -> int:
     if port is None:
         info = read_info()
         if not info:
-            print("inkemu: no daemon running here; start one with `inkemu serve APP` or `inkemu window APP`",
-                  file=sys.stderr)
+            print(
+                "inkemu: no daemon running here; start one with `inkemu serve APP` or `inkemu window APP`",
+                file=sys.stderr,
+            )
             return 2
         port = int(info["port"])
     try:
@@ -133,12 +148,20 @@ def main(argv: list[str] | None = None) -> int:
     if args.command in SPEC:
         return _client(args.command, args.words, args.port)
     if args.command in ("window", "serve") and (live := read_info()):
-        print(f"inkemu: a daemon is already running (pid {live['pid']}, port {live['port']}, app {live['app']})",
-              file=sys.stderr)
+        print(
+            f"inkemu: a daemon is already running (pid {live['pid']}, port {live['port']}, app {live['app']})",
+            file=sys.stderr,
+        )
         return 2
     try:
-        emu = Emu(args.app, state_dir=args.state, fixtures_dir=args.fixtures, net=args.net, fresh=args.fresh,
-                  start_time=args.time)
+        emu = Emu(
+            args.app,
+            state_dir=args.state,
+            fixtures_dir=args.fixtures,
+            net=args.net,
+            fresh=args.fresh,
+            start_time=args.time,
+        )
     except ValueError as e:
         print(f"inkemu: {e}", file=sys.stderr)
         return 2

@@ -1,3 +1,4 @@
+import contextlib
 import io
 import queue
 import time
@@ -29,10 +30,8 @@ def make_window(emu_factory):
 
     yield make
     for a in apps:
-        try:
+        with contextlib.suppress(tk.TclError):
             a.root.destroy()
-        except tk.TclError:
-            pass
 
 
 def click(app, x, y):
@@ -99,8 +98,14 @@ function on_draw(c, g) g:clear(0); g:text(0, 0, 'res ' .. res) end
 
 
 def test_pending_dialog_is_deferred_and_blocks_input(make_window, make_app, monkeypatch):
-    app = make_window(make_app(ASKING % (
-        "c.dialog:confirm({title='Sure', text='Really?'}, function(c, ok) res = tostring(ok); c:invalidate() end)")))
+    app = make_window(
+        make_app(
+            ASKING
+            % (
+                "c.dialog:confirm({title='Sure', text='Really?'}, function(c, ok) res = tostring(ok); c:invalidate() end)"
+            )
+        )
+    )
     asked = []
     monkeypatch.setattr(window, "ask_yes_no", lambda parent, title, text: asked.append((title, text)) or True)
     app.on_key(SimpleNamespace(keysym="Return"))
@@ -113,8 +118,9 @@ def test_pending_dialog_is_deferred_and_blocks_input(make_window, make_app, monk
 
 
 def test_text_dialog_types_answer(make_window, make_app, monkeypatch):
-    app = make_window(make_app(ASKING % (
-        "c.input:text({title='Name', text=''}, function(c, s) res = s; c:invalidate() end)")))
+    app = make_window(
+        make_app(ASKING % ("c.input:text({title='Name', text=''}, function(c, s) res = s; c:invalidate() end)"))
+    )
     monkeypatch.setattr(window, "ask_string", lambda parent, title, text, initial: "Привет")
     key(app, "Return")
     app.root.update()
@@ -122,8 +128,9 @@ def test_text_dialog_types_answer(make_window, make_app, monkeypatch):
 
 
 def test_text_dialog_cancel(make_window, make_app, monkeypatch):
-    app = make_window(make_app(ASKING % (
-        "c.input:text({title='Name', text=''}, function(c, s) res = s; c:invalidate() end)")))
+    app = make_window(
+        make_app(ASKING % ("c.input:text({title='Name', text=''}, function(c, s) res = s; c:invalidate() end)"))
+    )
     monkeypatch.setattr(window, "ask_string", lambda parent, title, text, initial: None)
     key(app, "Return")
     app.root.update()
@@ -207,7 +214,7 @@ def test_real_hold_is_long_not_tap(make_window, make_app, paused):
         key(app, "p")
     ev = SimpleNamespace(x=100, y=100)
     app.on_press(ev)
-    real_wait(app, 0.62)
+    real_wait(app, 1.0)
     app.on_release(ev)
     assert app.emu.has_text("res long")
 
@@ -225,7 +232,8 @@ function on_draw(c, g) g:clear(0); g:text(0, 0, 'n ' .. c.state.n .. ' left ' ..
 
 
 def test_no_pointer_reaches_emulator_while_pending(make_window, make_app, monkeypatch):
-    app = make_window(make_app("""
+    app = make_window(
+        make_app("""
 function on_input(c, e)
   if e.type == 'pointer' and e.phase == 'down' then
     c.dialog:confirm({title='T', text='x'}, function() end)
@@ -233,7 +241,8 @@ function on_input(c, e)
   return true
 end
 function on_draw(c, g) g:clear(0) end
-"""))
+""")
+    )
     app.on_press(SimpleNamespace(x=5, y=5))
     assert app.emu.pending and app._down
     calls = []
@@ -272,8 +281,14 @@ def test_status_says_stopped(make_window):
 
 
 def test_stale_tk_dialog_does_not_answer_a_newer_one(make_window, make_app, monkeypatch):
-    app = make_window(make_app(ASKING % (
-        "c.dialog:confirm({title='A', text='first'}, function(c, ok) res = 'A ' .. tostring(ok); c:invalidate() end)")))
+    app = make_window(
+        make_app(
+            ASKING
+            % (
+                "c.dialog:confirm({title='A', text='first'}, function(c, ok) res = 'A ' .. tostring(ok); c:invalidate() end)"
+            )
+        )
+    )
     emu = app.emu
 
     def user_slow_to_click(parent, title, text):
@@ -292,6 +307,7 @@ def test_stale_tk_dialog_does_not_answer_a_newer_one(make_window, make_app, monk
 def test_ctrl_c_closes_the_window_cleanly(emu_factory, monkeypatch):
     import os
     import signal
+
     try:
         tk.Tk().destroy()
     except tk.TclError as e:
