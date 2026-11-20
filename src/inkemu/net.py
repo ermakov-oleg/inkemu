@@ -1,0 +1,296 @@
+import fnmatch
+import hashlib
+import json
+import re
+import socket
+import urllib.error
+import urllib.request
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import TYPE_CHECKING, Callable
+from urllib.parse import quote, urlsplit
+
+from .ctx_basic import check_arg, raw
+from .lua_env import make_object
+
+if TYPE_CHECKING:
+    from .emu import Emu
+
+DEFAULT_DELAY_MS = 300
+DEFAULT_TIMEOUT_MS = 30_000
+SENSITIVE_HEADER = re.compile(r"^(authorization|proxy-authorization|cookie|set-cookie|x-api-key)$|token|key|secret", re.I)
+_PLACEHOLDER = re.compile(r"\{\{([A-Za-z0-9_]+)\}\}")
+_SECRET_LIKE = re.compile(r"[A-Za-z0-9_-]{20,}")
+_URL = re.compile(r"https?://[^/\s?#]+", re.I)
+
+# Escapes bytes >= 0x80 and `\` so lupa never has to decode a non-UTF-8 string from the app.
+_OPTS = r"""
+local gsub, type, fmt = string.gsub, type, string.format
+local function esc(s) return (gsub(s, '[\\\128-\255]', function(c) return fmt('\\x%02x', c:byte()) end)) end
+return function(o)
+  local out = { headers = {} }
+  for _, k in ipairs({ 'url', 'method', 'body' }) do
+    local v = o[k]
+    if type(v) == 'string' then out[k] = esc(v) elseif v ~= nil then out[k .. '_type'] = type(v) end
+  end
+  out.timeout_ms = type(o.timeout_ms) == 'number' and o.timeout_ms or nil
+  if type(o.headers) == 'table' then
+    for k, v in pairs(o.headers) do
+      if type(k) == 'string' and (type(v) == 'string' or type(v) == 'number') then out.headers[esc(k)] = esc(tostring(v)) end
+    end
+  end
+  return out
+end
+"""
+
+
+@dataclass
+class Response:
+    status: int
+    headers: dict[str, str] = field(default_factory=dict)
+    body: bytes | None = None
+    err: str | None = None
+    delay_ms: int = DEFAULT_DELAY_MS
+
+
+def _sha(b: bytes) -> str:
+    return hashlib.sha256(b).hexdigest()
+
+
+class Net:
+    def __init__(self, mode: str, fixtures_dir: Path, secrets: dict[str, str],
+                 log: Callable[[str], None], warn: Callable[[str], None]):
+        if mode not in ("replay", "record", "live"):
+            raise ValueError(f"net mode must be replay, record or live, not {mode!r}")
+        self.mode = mode
+        self.dir = Path(fixtures_dir) / "net"
+        self.secrets = {k: v for k, v in secrets.items() if isinstance(v, str) and v}
+        self.log, self.warn = log, warn
+
+    # ---- secrets ----------------------------------------------------------------------------
+
+    def _variants(self) -> list[tuple[str, str]]:
+        """(text to find, placeholder) pairs, longest first so a secret containing another wins."""
+        pairs = {}
+        for name, value in self.secrets.items():
+            for v in (value, quote(value, safe=""), quote(value, safe="@/:")):
+                pairs.setdefault(v, "{{%s}}" % name)
+        return sorted(pairs.items(), key=lambda kv: -len(kv[0]))
+
+    def redact(self, text: str) -> str:
+        for value, placeholder in self._variants():
+            text = text.replace(value, placeholder)
+        return text
+
+    def _redact_bytes(self, data: bytes) -> bytes:
+        for value, placeholder in self._variants():
+            data = data.replace(value.encode(), placeholder.encode())
+        return data
+
+    def expand(self, text: str) -> str:
+        """`{{name}}` placeholders (from seeded files) -> real secret values for a live request."""
+        return _PLACEHOLDER.sub(lambda m: self.secrets.get(m[1], m[0]), text)
+
+    # ---- keys and fixture files -------------------------------------------------------------
+
+    def fixture_key(self, method: str, url: str, body: bytes | None) -> str:
+        method = method.upper()
+        key = f"{method} {self.redact(url)}"
+        if method == "POST" and body:
+            key += " " + _sha(self._redact_bytes(body))
+        return key
+
+    def _stem(self, method: str, url: str, body: bytes | None) -> str:
+        host = re.sub(r"[^A-Za-z0-9.-]", "_", urlsplit(self.redact(url)).netloc.rpartition("@")[2]) or "nohost"
+        return f"{method.upper()}_{host}_{_sha(self.fixture_key(method, url, body).encode())[:8]}"
+
+    def _load(self, path: Path) -> dict | None:
+        try:
+            d = json.loads(path.read_text(encoding="utf-8"))
+            req, resp = d["request"], d["response"]
+            if isinstance(req["method"], str) and isinstance(req["url"], str) and isinstance(resp, dict):
+                return d
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+        self.warn(f"net: fixture {path.name} is not valid, ignored")
+        return None
+
+    def _find(self, method: str, url: str, body: bytes | None) -> Response | None:
+        if not self.dir.is_dir():
+            return None
+        shown = self.redact(url)
+        sha = _sha(self._redact_bytes(body)) if method == "POST" and body else None
+        found = []
+        for path in sorted(self.dir.glob("*.json")):
+            d = self._load(path)
+            if not d:
+                continue
+            req, how = d["request"], d.get("match", "exact")
+            if str(req["method"]).upper() != method:
+                continue
+            u = req["url"]
+            if how == "prefix":
+                ok = shown.startswith(u)
+            elif how == "glob":
+                ok = fnmatch.fnmatchcase(shown, u)
+            else:
+                ok = shown == u and req.get("body_sha256") == sha
+            if ok:
+                found.append((how != "exact", path, d))
+        if not found:
+            return None
+        _, path, d = min(found, key=lambda f: f[0])
+        r = d["response"]
+        body_file = r.get("body_file")
+        if body_file:
+            data = (path.parent / Path(body_file).name).read_bytes() if (path.parent / Path(body_file).name).is_file() else b""
+        else:
+            data = str(r.get("body", "")).encode("utf-8")
+        headers = {str(k).lower(): str(v) for k, v in (r.get("headers") or {}).items()}
+        return Response(int(r.get("status", 200)), headers, data, None, int(r.get("delay_ms", DEFAULT_DELAY_MS)))
+
+    def _save(self, method: str, url: str, headers: dict, body: bytes | None, resp: Response) -> None:
+        stem = self._stem(method, url, body)
+        sha = _sha(self._redact_bytes(body)) if method == "POST" and body else None
+        safe_req = {k: self.redact(v) for k, v in headers.items() if not SENSITIVE_HEADER.search(k)}
+        safe_resp = {k.lower(): self.redact(v) for k, v in resp.headers.items() if not SENSITIVE_HEADER.search(k)}
+        self.dir.mkdir(parents=True, exist_ok=True)
+        (self.dir / f"{stem}.body").write_bytes(self._redact_bytes(resp.body or b""))
+        doc = {"request": {"method": method, "url": self.redact(url), "body_sha256": sha, "headers": safe_req},
+               "match": "exact",
+               "response": {"status": resp.status, "headers": safe_resp, "body_file": f"{stem}.body",
+                            "delay_ms": resp.delay_ms}}
+        (self.dir / f"{stem}.json").write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        self.log(f"net: recorded {self.dir.name}/{stem}.json")
+
+    # ---- requests ---------------------------------------------------------------------------
+
+    def request(self, method: str, url: str, headers: dict, body: bytes | None, timeout_ms: int) -> Response | None:
+        method = method.upper()
+        shown = self.redact(url)
+        if method not in ("GET", "POST"):
+            self.warn(f"net: {method} {shown} never gets an answer on the reader (only GET and POST work); "
+                      "send it as POST with an override header")
+            return None
+        if self.mode == "replay":
+            resp = self._find(method, url, body)
+            if resp is None:
+                self.warn(f"net: no fixture for {method} {shown}; run with --net record to save one, "
+                          "or write it by hand in " + str(self.dir))
+                return Response(0, {}, None, "no_fixture", DEFAULT_DELAY_MS)
+            self.log(f"net: {method} {shown} -> {resp.status} (fixture)")
+            return resp
+        if self.mode == "record":
+            self._warn_unknown_secrets(url)
+        resp = self._fetch(method, url, headers, body, timeout_ms)
+        self.log(f"net: {method} {shown} -> {resp.status or resp.err} ({self.mode})")
+        if self.mode == "record" and resp.err is None:
+            self._save(method, url, headers, body, resp)
+        return resp
+
+    def _fetch(self, method: str, url: str, headers: dict, body: bytes | None, timeout_ms: int) -> Response:
+        real_url = self.expand(url)
+        real_headers = {k: self.expand(v) for k, v in headers.items()}
+        data = self.expand_bytes(body) if body is not None else None
+        req = urllib.request.Request(real_url, data=data, method=method, headers=real_headers)
+        timeout = (timeout_ms if timeout_ms and timeout_ms > 0 else DEFAULT_TIMEOUT_MS) / 1000
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return self._response(r.status, r.headers, r.read())
+        except urllib.error.HTTPError as e:
+            with e:
+                return self._response(e.code, e.headers, e.read())
+        except (TimeoutError, socket.timeout):
+            return Response(0, {}, None, "timeout")
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            reason = getattr(e, "reason", e)
+            return Response(0, {}, None, "timeout" if isinstance(reason, socket.timeout) else "no_network")
+
+    def expand_bytes(self, data: bytes) -> bytes:
+        return _PLACEHOLDER.sub(lambda m: self.secrets[m[1]].encode() if m[1] in self.secrets else m[0].encode(),
+                                data.decode("latin-1")).encode("latin-1") if b"{{" in data else data
+
+    @staticmethod
+    def _response(status: int, msg, body: bytes) -> Response:
+        headers: dict[str, str] = {}
+        for k, v in msg.items():
+            k = k.lower()
+            headers[k] = f"{headers[k]}, {v}" if k in headers else v
+        return Response(status, headers, body, None, DEFAULT_DELAY_MS)
+
+    def _warn_unknown_secrets(self, url: str) -> None:
+        parts = urlsplit(self.redact(url))
+        candidates = [("path segment", s) for s in parts.path.split("/")]
+        candidates += [("query value", v.partition("=")[2]) for v in parts.query.split("&")]
+        for what, text in candidates:
+            if _SECRET_LIKE.fullmatch(text):
+                self.warn(f"net: a {what} of {parts.scheme}://{parts.netloc} looks like a secret "
+                          "but is not in secrets.json; it will be saved in the fixture as is")
+
+
+def _load_secrets(emu: "Emu") -> dict[str, str]:
+    try:
+        data = json.loads(emu.secrets_file.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError) as e:
+        emu._warn(f"net: cannot read {emu.secrets_file.name}: {type(e).__name__}; secrets are not applied")
+        return {}
+    if not isinstance(data, dict):
+        emu._warn(f"net: {emu.secrets_file.name} must be a JSON object; secrets are not applied")
+        return {}
+    return {k: v for k, v in data.items() if re.fullmatch(r"[A-Za-z0-9_]+", k) and isinstance(v, str)}
+
+
+def install(emu: "Emu") -> None:
+    if "net" not in (emu.manifest.get("permissions") or []):
+        return
+    L, ctx = emu.L, emu._ctx
+    net = Net(emu.net_mode, emu.fixtures_dir, _load_secrets(emu), emu._log_line, emu._warn)
+    opts_of = L.execute(_OPTS)
+
+    def lua_response(r: Response):
+        t = {"status": r.status, "code": r.status, "headers": dict(r.headers)}
+        if r.err is not None:
+            t["err"] = t["error"] = r.err
+        if r.body is not None:
+            t["body"], t["bytes"] = r.body, len(r.body)
+        return L.table_from(t, recursive=True)
+
+    def request(opts=None, fn=None, *_):
+        check_arg("request", 1, opts, "table")
+        check_arg("request", 2, fn, "function")
+        o = opts_of(opts)
+        url = raw(o["url"])
+        if url is None:
+            raise TypeError("bad extra argument (string expected)")
+        method = raw(o["method"]) if o["method"] is not None else b"GET"
+        timeout = o["timeout_ms"]
+        try:
+            url_s, method_s = url.decode("utf-8"), (method or b"").decode("ascii")
+        except UnicodeDecodeError:
+            return None, "invalid_argument"
+        if not _URL.match(url_s) or not method_s:
+            return None, "invalid_argument"
+        hdrs = {}
+        for k, v in o["headers"].items():
+            try:
+                hdrs[raw(k).decode("utf-8")] = raw(v).decode("utf-8")
+            except UnicodeDecodeError:
+                emu._warn("net: a header that is not valid UTF-8 was dropped")
+        body = raw(o["body"]) if o["body"] is not None else None
+        resp = net.request(method_s, url_s, hdrs, body, round(timeout) if timeout else 0)
+        if resp is None:
+            return make_object(L, "job", {"cancel": lambda *a: None})
+        timer = emu._add_timer(resp.delay_ms, lambda: emu._protected(
+            fn, ctx, lua_response(resp), where="ctx.net:request callback"))
+        return make_object(L, "job", {"cancel": lambda *a: emu._cancel_timer(timer)})
+
+    def keep_wifi(ms=None, *_):
+        check_arg("keep_wifi", 1, ms, "number")
+        emu._log_line(f"net: keep_wifi {ms:g} ms")
+
+    def websocket(*_):
+        raise RuntimeError("ctx.net:websocket is not emulated")
+
+    ctx.net = make_object(L, "net", {"request": request, "keep_wifi": keep_wifi, "websocket": websocket})
