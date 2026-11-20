@@ -177,3 +177,16 @@ def test_frame_with_bad_command_does_not_crash(env):
     canvas.begin_frame()
     L.execute("G:text(1, 1, 'ok'); pcall(function() G:rect(1, 2) end); G:rect(0, 0, 5, 5, {fill=true})")
     assert canvas.end_frame() == 2 and len(canvas.texts()) == 1
+
+
+def test_runtime_is_collectable():
+    import gc, weakref
+    from inkemu import lua_env
+    L = new_runtime()
+    canvas = Canvas(L, Fonts())
+    make_object(L, "x", {"f": lambda: 1})
+    ref = weakref.ref(L)
+    del L, canvas
+    gc.collect()
+    assert ref() is None
+    assert not [v for v in vars(lua_env).values() if isinstance(v, dict) and any(isinstance(k, int) for k in v)]
