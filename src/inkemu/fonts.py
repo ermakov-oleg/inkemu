@@ -10,6 +10,7 @@ LINE_HEIGHTS = {"small": 20, "medium": 24, "large": 30}
 class Fonts:
     def __init__(self):
         path = next((p for p in FONT_FILES if os.path.exists(p)), None)
+        self.path = path
         self._fonts = {}
         for name, lh in LINE_HEIGHTS.items():
             if path:
