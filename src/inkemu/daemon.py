@@ -3,16 +3,20 @@ import os
 import queue
 import threading
 import time
+import urllib.error
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
 
 from .clock import parse_duration
 from .emu import KEYS, SWIPES, Emu
+from .paths import state_root
 
 DEFAULT_PORT = 7480
 HOST = "127.0.0.1"
 REPLY_TIMEOUT_S = 600
+CLIENT_TIMEOUT_S = REPLY_TIMEOUT_S + 20
 LOG_TAIL = 20
 
 
@@ -165,10 +169,6 @@ def execute(emu: Emu, cmd: str, args: dict | None = None) -> dict:
 
 # ---- daemon.json ------------------------------------------------------------------------------
 
-def state_root() -> Path:
-    return Path(os.environ.get("INKEMU_STATE_ROOT", ".emu")).absolute()
-
-
 def _alive(pid: int) -> bool:
     try:
         os.kill(pid, 0)
@@ -192,10 +192,11 @@ def read_info(root: Path | None = None) -> dict | None:
     return info if _alive(pid) and port else None
 
 
-def write_info(root: Path, port: int, app: str) -> None:
+def write_info(root: Path, port: int, app: str, window: bool = False) -> None:
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
-    (root / "daemon.json").write_text(json.dumps({"port": port, "pid": os.getpid(), "app": app}), encoding="utf-8")
+    info = {"port": port, "pid": os.getpid(), "app": app, "window": window}
+    (root / "daemon.json").write_text(json.dumps(info), encoding="utf-8")
 
 
 def remove_info(root: Path) -> None:
@@ -205,6 +206,33 @@ def remove_info(root: Path) -> None:
             info.unlink()
     except (OSError, ValueError, AttributeError):
         pass
+
+
+class DaemonUnreachable(Exception):
+    pass
+
+
+def post_command(port: int, cmd: str, args: dict | None = None) -> dict:
+    """Send one command to the daemon on `port`; raises DaemonUnreachable unless an inkemu daemon answers."""
+    req = urllib.request.Request(f"http://127.0.0.1:{port}/cmd", method="POST",
+                                 headers={"Content-Type": "application/json"},
+                                 data=json.dumps({"cmd": cmd, "args": args or {}}).encode("utf-8"))
+    try:
+        try:
+            with urllib.request.urlopen(req, timeout=CLIENT_TIMEOUT_S) as resp:
+                body = resp.read()
+        except urllib.error.HTTPError as e:
+            with e:
+                body = e.read()
+    except (urllib.error.URLError, OSError) as e:
+        raise DaemonUnreachable(f"cannot reach the daemon on port {port}: {e}") from None
+    try:
+        result = json.loads(body)
+    except ValueError:
+        result = None
+    if not isinstance(result, dict) or "ok" not in result:
+        raise DaemonUnreachable(f"the server on port {port} did not answer like an inkemu daemon")
+    return result
 
 
 # ---- HTTP server ------------------------------------------------------------------------------
@@ -308,7 +336,7 @@ def serve(emu: Emu, port: int = DEFAULT_PORT, window: bool = False) -> None:
     """Run the daemon (and the Tk window if `window`) until `stop`, Ctrl-C or the window is closed."""
     root = state_root()
     d = Daemon(emu, port)
-    write_info(root, d.port, emu.app_id)
+    write_info(root, d.port, emu.app_id, window)
     try:
         if window:
             from .window import run_window

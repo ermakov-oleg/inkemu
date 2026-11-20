@@ -1,60 +1,62 @@
 """stdio MCP server: starts/finds the inkemu daemon and forwards commands to it over HTTP."""
-import json
 import os
 import subprocess
 import sys
 import tempfile
 import time
-import urllib.error
-import urllib.request
 from pathlib import Path
 
 from mcp.server.mcpserver import Image, MCPServer
 
-from .daemon import read_info, state_root
+from .daemon import DaemonUnreachable, post_command, read_info
+from .emu import NET_MODES
+from .paths import app_id_of, state_root
 
 START_TIMEOUT_S = 20
 mcp = MCPServer("inkemu")
-
-
-def _app_id(app: str) -> str:
-    # same fallback as Emu: untrusted manifest app_id, else letters of the directory name
-    import re
-    p = Path(app).absolute()
-    try:
-        app_id = json.loads((p / "manifest.json").read_text(encoding="utf-8")).get("app_id")
-    except (OSError, ValueError, AttributeError):
-        app_id = None
-    if isinstance(app_id, str) and re.fullmatch(r"[A-Za-z]+", app_id):
-        return app_id
-    return re.sub(r"[^A-Za-z]", "", p.name) or "app"
 
 
 def _post(cmd: str, args: dict | None = None) -> dict:
     info = read_info()
     if not info:
         return {"ok": False, "error": "no emulator running; call emu_start first"}
-    req = urllib.request.Request(f"http://127.0.0.1:{int(info['port'])}/cmd", method="POST",
-                                 headers={"Content-Type": "application/json"},
-                                 data=json.dumps({"cmd": cmd, "args": args or {}}).encode("utf-8"))
     try:
-        with urllib.request.urlopen(req, timeout=620) as resp:
-            return json.load(resp)
-    except urllib.error.HTTPError as e:
-        return json.load(e)
-    except (urllib.error.URLError, OSError, ValueError) as e:
-        return {"ok": False, "error": f"cannot reach the daemon: {e}"}
+        return post_command(int(info["port"]), cmd, args)
+    except DaemonUnreachable as e:
+        return {"ok": False, "error": str(e)}
+
+
+def _attach(live: dict, window: bool | None, net: str | None, fresh: bool) -> dict:
+    """State of the running daemon for the same app, or ok=false if it cannot give what was asked for."""
+    state = _post("state")
+    have = {"net": (state.get("status") or {}).get("net"), "window": bool(live.get("window"))}
+    asked = {k: v for k, v in (("net", net), ("window", window)) if v is not None and v != have[k]}
+    if fresh:
+        asked["fresh"] = True
+    if asked:
+        want = ", ".join(f"{k}={v}" for k, v in asked.items())
+        now = ", ".join(f"{k}={v}" for k, v in have.items())
+        return {**state, "ok": False, "already_running": True,
+                "error": f"a daemon for this app is already running ({now}) and cannot switch to {want}; "
+                         "call emu_stop first, then emu_start again"}
+    return {**state, "already_running": True}
 
 
 @mcp.tool()
-def emu_start(app: str, window: bool = False, net: str = "replay", fresh: bool = False, port: int = 0) -> dict:
-    """Start the emulator daemon for an app directory (headless, or with a window). port 0 picks a free port."""
+def emu_start(app: str, window: bool | None = None, net: str | None = None, fresh: bool = False,
+              port: int = 0) -> dict:
+    """Start the emulator daemon for an app directory: headless by default, or with a window; net replay (default),
+    record or live. Reuses a running daemon for the same app unless window/net/fresh ask for something else.
+    port 0 picks a free port."""
+    if net is not None and net not in NET_MODES:
+        return {"ok": False, "error": f"net must be one of {', '.join(NET_MODES)}, not {net!r}"}
     if live := read_info():
-        if live["app"] != _app_id(app):
+        if live["app"] != app_id_of(app):
             return {"ok": False, "error": f"a daemon for app {live['app']!r} is already running (pid {live['pid']}); "
                                           "call emu_stop first"}
-        return {**_post("state"), "already_running": True}
-    cmd = [sys.executable, "-m", "inkemu", "window" if window else "serve", app, "--net", net, "--port", str(port)]
+        return _attach(live, window, net, fresh)
+    cmd = [sys.executable, "-m", "inkemu", "window" if window else "serve", app, "--net", net or "replay",
+           "--port", str(port)]
     if fresh:
         cmd.append("--fresh")
     root = state_root()
@@ -158,10 +160,15 @@ def emu_restart() -> dict:
 @mcp.tool()
 def emu_screenshot() -> Image:
     """Screenshot of the current screen as a PNG image."""
-    result = _post("shot")
-    if not result.get("ok") or not result.get("shot"):
-        raise RuntimeError(result.get("error") or "no screenshot")
-    return Image(data=Path(result["shot"]).read_bytes(), format="png")
+    fd, tmp = tempfile.mkstemp(prefix="inkemu-shot-", suffix=".png")
+    os.close(fd)
+    try:
+        result = _post("shot", {"path": tmp})
+        if not result.get("ok") or not result.get("shot"):
+            raise RuntimeError(result.get("error") or "no screenshot")
+        return Image(data=Path(tmp).read_bytes(), format="png")
+    finally:
+        Path(tmp).unlink(missing_ok=True)
 
 
 @mcp.tool()

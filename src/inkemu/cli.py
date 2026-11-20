@@ -2,11 +2,9 @@ import argparse
 import json
 import shlex
 import sys
-import urllib.error
-import urllib.request
 from pathlib import Path
 
-from .daemon import DEFAULT_PORT, SPEC, UsageError, execute, parse_words, read_info, serve
+from .daemon import DEFAULT_PORT, SPEC, DaemonUnreachable, UsageError, execute, parse_words, post_command, read_info, serve
 from .emu import NET_MODES, Emu
 
 
@@ -96,16 +94,10 @@ def _client(verb: str, words: list[str], port: int | None) -> int:
                   file=sys.stderr)
             return 2
         port = int(info["port"])
-    req = urllib.request.Request(f"http://127.0.0.1:{port}/cmd", method="POST",
-                                 headers={"Content-Type": "application/json"},
-                                 data=json.dumps({"cmd": cmd, "args": cmd_args}).encode("utf-8"))
     try:
-        with urllib.request.urlopen(req, timeout=620) as resp:
-            result = json.load(resp)
-    except urllib.error.HTTPError as e:
-        result = json.load(e)
-    except (urllib.error.URLError, OSError, ValueError) as e:
-        print(f"inkemu: cannot reach the daemon on port {port}: {e}", file=sys.stderr)
+        result = post_command(port, cmd, cmd_args)
+    except DaemonUnreachable as e:
+        print(f"inkemu: {e}", file=sys.stderr)
         return 2
     if cmd == "shot" and result.get("shot"):
         print(result["shot"])
