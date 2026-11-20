@@ -4,7 +4,6 @@ import binascii
 import hashlib
 import json
 import math
-import random
 import re
 import shutil
 import uuid
@@ -31,6 +30,21 @@ CAPABILITIES = {"dialog": True, "frontlight": True, "image_decode": True, "image
                 "pattern": True, "reader": True, "ui": False, "ttf": False}
 # Lua-side shim: strings with bytes >= 0x80 would fail the utf-8 decode on the way into Python,
 # so they travel as \xHH escapes and `raw()` restores them.
+_ENTRIES = r"""
+local next, type, utf8len, fmt, gsub = next, type, utf8.len, string.format, string.gsub
+local function esc(s) return (gsub(s, '[\\\128-\255]', function(c) return fmt('\\x%02x', c:byte()) end)) end
+return function(t)
+  local out, n = {}, 0
+  for key, val in next, t do
+    local k, v, bad = key, val, false
+    if type(k) == 'string' and not utf8len(k) then k, bad = esc(k), true end
+    if type(v) == 'string' and not utf8len(v) then v, bad = esc(v), true end
+    n = n + 1
+    out[n] = { k, v, bad }
+  end
+  return out
+end
+"""
 _BINARY_SHIM = r"""
 local gsub, type, fmt, select, unpack = string.gsub, type, string.format, select, table.unpack
 local function esc(s) return (gsub(s, '[\\\128-\255]', function(c) return fmt('\\x%02x', c:byte()) end)) end
@@ -84,18 +98,27 @@ def lua_to_py(v: Any, warn: Callable[[str], None], path: str = "state", null: An
         warn(f"{path}: nested deeper than {_MAX_DEPTH} levels, skipped")
         return _SKIP
     out: dict = {}
-    try:
-        for k, x in v.items():
-            val = lua_to_py(x, warn, f"{path}.{k}", null, L, _seen + (v,))
-            if val is not _SKIP:
-                out[k] = val
-    except UnicodeDecodeError:
-        warn(f"{path}: contains a string that is not valid UTF-8, skipped")
-        return _SKIP
+    for k, x, bad in _entries(L, v):
+        if bad:
+            warn(f"{path}.{k}: a string that is not valid UTF-8 cannot be saved, skipped")
+            continue
+        val = lua_to_py(x, warn, f"{path}.{k}", null, L, _seen + (v,))
+        if val is not _SKIP:
+            out[k] = val
     n = len(out)
     if n and all(isinstance(k, int) and not isinstance(k, bool) for k in out) and set(out) == set(range(1, n + 1)):
         return [out[i] for i in range(1, n + 1)]
     return {(k if isinstance(k, str) else json.dumps(k) if isinstance(k, bool) else str(k)): x for k, x in out.items()}
+
+
+def _entries(L, t) -> list[tuple]:
+    """(key, value, bad) pairs; a key or string value that is not valid UTF-8 comes back \\xHH-escaped with bad=True,
+    because lupa would raise on the whole table otherwise."""
+    if L is None:
+        return [(k, x, False) for k, x in t.items()]
+    if not hasattr(L, "_entries"):
+        L._entries = L.execute(_ENTRIES)
+    return [(e[1], e[2], bool(e[3])) for _, e in sorted(L._entries(t).items())]
 
 
 def py_to_lua(L, v: Any, null: Any = None, _depth: int = 0) -> Any:
@@ -139,7 +162,7 @@ def save_state(emu: "Emu") -> None:
     if data is None:
         data = {}
     if not isinstance(data, (dict, list)):
-        emu._warn(f"ctx.state is a {lua_typename(data)}, not a table: not saved")
+        emu._warn(f"ctx.state is a {lua_typename(emu._ctx.state)}, not a table: not saved")
         return
     emu.state_dir.mkdir(parents=True, exist_ok=True)
     tmp = emu.state_dir / "state.json.tmp"
@@ -413,7 +436,6 @@ def _install_package(emu: "Emu") -> None:
 def _install_utils(emu: "Emu") -> None:
     L = emu.L
     null = L.execute("return setmetatable({}, {__tostring = function() return 'null' end, __metatable = false})")
-    rng = random.Random(f"inkemu:{emu.app_id}")
 
     def decode(s=None, *_):
         text = _bytes_arg("decode", 1, s)
@@ -424,6 +446,11 @@ def _install_utils(emu: "Emu") -> None:
 
     def encode(v=None, *_):
         data = lua_to_py(v, emu._warn, "json", null, L)
+        if isinstance(data, str):
+            try:
+                data = raw(data).decode("utf-8")
+            except UnicodeDecodeError:
+                return None, "invalid_argument"
         if data is _SKIP:
             return None, "invalid_argument"
         return json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
@@ -462,7 +489,7 @@ def _install_utils(emu: "Emu") -> None:
         "encode": codec("encode", lambda b: quote(b, safe="-_.~")),
         "decode": codec("decode", unquote_to_bytes)})
     ctx.zlib = _binary_object(L, "zlib", {"decompress": codec("decompress", decompress, (zlib.error,))})
-    ctx.random = make_object(L, "random", {"uuid": lambda *a: str(uuid.UUID(int=rng.getrandbits(128), version=4))})
+    ctx.random = make_object(L, "random", {"uuid": lambda *a: str(uuid.UUID(int=emu.rng.getrandbits(128), version=4))})
 
 
 def _no_constant(name: str):

@@ -1,5 +1,6 @@
 import json
 import os
+import random
 import re
 import shutil
 from datetime import datetime
@@ -61,7 +62,8 @@ class Emu:
     def __init__(self, app_dir: str | Path, *, state_dir: str | Path | None = None,
                  fixtures_dir: str | Path | None = None, net: str = "replay",
                  start_time: str | datetime | None = None, firmware_api: tuple[int, int] = (2, 26),
-                 fresh: bool = False, secrets_file: str | Path | None = None, seed_files: bool | None = None):
+                 fresh: bool = False, secrets_file: str | Path | None = None, seed_files: bool | None = None,
+                 random_seed: int | str | None = None):
         if net not in NET_MODES:
             raise ValueError(f"net must be one of {', '.join(NET_MODES)}, not {net!r}")
         self.app_dir = Path(app_dir).resolve()
@@ -76,6 +78,8 @@ class Emu:
         self.battery = {"percent": 87, "charging": False, "voltage_mv": 4020, "temperature_c": 24}
         self.full_refresh_deferred = 0
         self.locale = "en"
+        # uuids must not repeat across restarts; a seed makes them reproducible on purpose
+        self.rng = random.SystemRandom() if random_seed is None else random.Random(random_seed)
         self.frontlight = 0
         self.refresh_counts = {"request": 0, "full": 0}
         self.frame_commands = 0
