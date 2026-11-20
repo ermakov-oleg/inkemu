@@ -99,6 +99,8 @@ def install(emu: "Emu") -> None:
                 sync(st["text"] + ch)
                 if on_change is not None:
                     call_back(on_change, st["text"], where="ctx.input:edit on_change")
+                if emu._pending_h is not handle["h"]:  # closed by on_change, or the app failed
+                    return
             finish("enter")
 
         def set_text(s=None, *_):

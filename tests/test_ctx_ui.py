@@ -243,3 +243,24 @@ def test_released_layer_draw_is_an_error(make_app, emu_factory):
 def test_dot_call_is_an_error(make_app, emu_factory):
     emu = emu_factory(make_app("function on_load(c) c.dialog.toast('x') end\n"))
     assert emu.errors and "colon" in emu.errors[0]
+
+
+def test_edit_close_inside_on_change_stops_feeding(make_app, emu_factory):
+    emu = emu_factory(make_app(
+        "changes, ended = {}, 'no'\n"
+        "function on_load(c)\n"
+        "  ed = c.input:edit({text='', on_change=function(c, s) changes[#changes + 1] = s; c:invalidate()\n"
+        "      if #s == 2 then ed:close() end end,\n"
+        "    on_end=function(c, s, why) ended = why; c:invalidate() end})\n"
+        "end\n"
+        "function on_draw(c, g) g:clear(0); g:text(0, 0, table.concat(changes, ',') .. ' ' .. ended) end\n"))
+    emu.type_text("abcd")
+    assert emu.pending is None and emu.has_text("a,ab no")
+
+
+def test_no_ttf_font_warns_once(make_app, emu_factory, monkeypatch):
+    from inkemu import fonts
+    monkeypatch.setattr(fonts, "FONT_FILES", [])
+    emu = emu_factory(make_app("function on_draw(c, g) g:text(0, 0, 'Привет') end\n"))
+    emu.reload()
+    assert len([w for w in emu.warnings if "no TrueType font" in w and "boxes" in w]) == 1

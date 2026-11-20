@@ -12,6 +12,7 @@ from PIL import Image, ImageDraw
 from . import ctx_basic, ctx_ui, lockscreen, net as net_mod
 from .clock import Scheduler, Timer, VirtualClock, parse_duration
 from .draw import Canvas
+from . import fonts as fonts_mod
 from .fonts import Fonts
 from .lua_env import load_chunk, make_object, new_runtime, protected_call
 from .paths import app_id_of, state_root
@@ -104,6 +105,9 @@ class Emu:
         self.clock = VirtualClock(_parse_start(start_time))
         self.scheduler = Scheduler(self.clock, on_overflow=self._fail)
         self.fonts = Fonts()
+        if self.fonts.path is None:
+            self._warn("no TrueType font found (" + ", ".join(fonts_mod.FONT_FILES) + "): text uses Pillow's built-in font, "
+                       "so Cyrillic and other non-Latin text shows as boxes")
         self.L = None
         self.canvas: Canvas | None = None
         self._ctx = None
