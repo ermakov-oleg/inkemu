@@ -78,7 +78,7 @@ def test_confirm_yes_no(make_app, emu_factory):
 
 def test_on_pending_hook(make_app, emu_factory):
     seen = []
-    app = make_app("function on_load(c) end\nfunction on_input(c, e) if e.phase == 'up' then c.dialog:confirm({title='T', text='x'}, function() end) end return true end\n")
+    app = make_app("function on_load(c) end\nfunction on_input(c, e) if e.phase == 'up' and e.key == 'ok' then c.dialog:confirm({title='T', text='x'}, function() end) end return e.key ~= 'back' end\n")
     emu = emu_factory(app)
     emu.on_pending = seen.append
     emu.key("ok")
