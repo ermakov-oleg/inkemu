@@ -10,7 +10,7 @@ from typing import Any, Callable
 from lupa import lua55
 from PIL import Image, ImageDraw
 
-from . import ctx_basic
+from . import ctx_basic, net as net_mod
 from .clock import Scheduler, Timer, VirtualClock, parse_duration
 from .draw import Canvas
 from .fonts import Fonts
@@ -89,7 +89,7 @@ class Emu:
         self.L = None
         self.canvas: Canvas | None = None
         self._ctx = None
-        self._install: list[Callable[["Emu"], None]] = [ctx_basic.install]
+        self._install: list[Callable[["Emu"], None]] = [ctx_basic.install, net_mod.install]
         self._timers: set[Timer] = set()
         self._tick: Timer | None = None
         self._invalid = self._quit = self._leaving = False

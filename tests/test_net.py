@@ -1,0 +1,229 @@
+import hashlib
+import json
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+import pytest
+
+DRAW = "msg = 'none'\nfunction on_draw(c, g) g:clear(0); g:text(0, 0, 'msg ' .. tostring(msg)) end\n"
+NET = {"permissions": ["net"]}
+
+
+def app_with(make_app, request_lua: str, cb_body: str = "msg = resp.status .. ':' .. tostring(resp.body)", **kw):
+    lua = (DRAW + "function on_load(c)\n  job = c.net:request(" + request_lua + ", function(c, resp)\n"
+           + cb_body + "\n    c:invalidate()\n  end)\nend\n")
+    return make_app(lua, manifest=NET, **kw)
+
+
+def write_fixture(tmp_path, name, req, resp_extra, body="ok", match="exact"):
+    d = tmp_path / "fixtures" / "net"
+    d.mkdir(parents=True, exist_ok=True)
+    doc = {"request": req, "match": match, "response": {"headers": {}, "body": body, **resp_extra}}
+    (d / f"{name}.json").write_text(json.dumps(doc), encoding="utf-8")
+
+
+@pytest.fixture
+def server():
+    hits = []
+
+    class H(BaseHTTPRequestHandler):
+        def do_GET(self):
+            hits.append((self.path, dict(self.headers)))
+            body = "привет".encode() if self.path.endswith(".ics") else b"\x00\xff\xfeok"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Set-Cookie", "sid=abc")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    srv = HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    srv.hits, srv.base = hits, f"http://127.0.0.1:{srv.server_port}"
+    yield srv
+    srv.shutdown()
+    srv.server_close()
+
+
+def test_replay_hit(make_app, emu_factory, tmp_path):
+    write_fixture(tmp_path, "hand", {"method": "GET", "url": "http://x.test/a"}, {"status": 200})
+    emu = emu_factory(app_with(make_app, "{url = 'http://x.test/a'}"))
+    emu.wait(299)
+    assert emu.has_text("msg none")
+    emu.wait(1)
+    assert emu.has_text("msg 200:ok")
+
+
+def test_response_fields_and_delay(make_app, emu_factory, tmp_path):
+    write_fixture(tmp_path, "h", {"method": "GET", "url": "http://x.test/a"},
+                  {"status": 201, "delay_ms": 1000, "headers": {"X-Foo": "bar"}}, body="abc")
+    emu = emu_factory(app_with(make_app, "{url = 'http://x.test/a', method = 'GET'}",
+                               "msg = resp.code .. resp.headers['x-foo'] .. resp.bytes"))
+    emu.wait(999)
+    assert emu.has_text("msg none")
+    emu.wait(1)
+    assert emu.has_text("msg 201bar3")
+
+
+def test_replay_without_fixture(make_app, emu_factory):
+    emu = emu_factory(app_with(make_app, "{url = 'http://x.test/b'}", "msg = resp.err .. resp.error .. resp.status"))
+    emu.wait(300)
+    assert emu.has_text("msg no_fixtureno_fixture0")
+    line = next(ln for ln in emu.log if "no fixture" in ln)
+    assert "GET http://x.test/b" in line and "--net record" in line
+
+
+def test_record_then_replay(make_app, emu_factory, tmp_path, server):
+    url = server.base + "/data"
+    emu = emu_factory(app_with(make_app, "{url = '%s'}" % url, "msg = resp.status .. ':' .. #resp.body .. resp.headers['content-type']"),
+                      net="record")
+    emu.wait(300)
+    assert emu.has_text("msg 200:5text/plain")
+    files = sorted(p.name for p in (tmp_path / "fixtures" / "net").iterdir())
+    assert len(files) == 2 and files[0].startswith("GET_127.0.0.1_") and files[1].endswith(".json")
+    assert (tmp_path / "fixtures" / "net" / files[0]).read_bytes() == b"\x00\xff\xfeok"
+    assert "set-cookie" not in (tmp_path / "fixtures" / "net" / files[1]).read_text()
+    server.shutdown()
+    emu2 = emu_factory(app_with(make_app, "{url = '%s'}" % url, "msg = resp.status .. ':' .. #resp.body"), state_dir=tmp_path / "s2")
+    emu2.wait(300)
+    assert emu2.has_text("msg 200:5")
+
+
+def test_binary_body_reaches_lua(make_app, emu_factory, tmp_path, server):
+    emu = emu_factory(app_with(make_app, "{url = '%s/x'}" % server.base,
+                               "msg = resp.body:byte(1) .. ',' .. resp.body:byte(2) .. ',' .. resp.body:byte(3)"), net="live")
+    emu.wait(300)
+    assert emu.has_text("msg 0,255,254")
+
+
+def test_record_redacts_secret_in_path(make_app, emu_factory, tmp_path, server):
+    secrets = tmp_path / "secrets.json"
+    secrets.write_text(json.dumps({"cal": "private-abc123"}))
+    emu = emu_factory(app_with(make_app, "{url = '%s/ical/private-abc123/basic.ics'}" % server.base),
+                      net="record", secrets_file=secrets)
+    emu.wait(300)
+    d = tmp_path / "fixtures" / "net"
+    assert d.is_dir()
+    for p in d.iterdir():
+        assert "abc123" not in p.name and "abc123" not in p.read_bytes().decode("latin-1")
+    assert "{{cal}}" in next(d.glob("*.json")).read_text()
+    assert not any("abc123" in ln for ln in emu.log + emu.warnings)
+
+
+def test_record_drops_auth_headers(make_app, emu_factory, tmp_path, server):
+    emu = emu_factory(app_with(make_app, "{url = '%s/h', headers = {Authorization = 'Bearer s3cr3t', ['X-Api-Key'] = 'k1', "
+                                          "['User-Agent'] = 'inkemu', ['X-My-Token'] = 't'}}" % server.base, "msg = resp.status"), net="record")
+    emu.wait(300)
+    text = next((tmp_path / "fixtures" / "net").glob("*.json")).read_text()
+    assert "s3cr3t" not in text and "uthorization" not in text and "pi-Key" not in text and "Token" not in text
+    assert "inkemu" in text
+    assert server.hits[0][1]["Authorization"] == "Bearer s3cr3t"
+
+
+def test_placeholder_url_matches(make_app, emu_factory, tmp_path, server):
+    secrets = tmp_path / "secrets.json"
+    secrets.write_text(json.dumps({"cal": "private-abc123"}))
+    emu = emu_factory(app_with(make_app, "{url = '%s/ical/private-abc123/basic.ics'}" % server.base),
+                      net="record", secrets_file=secrets)
+    emu.wait(300)
+    server.shutdown()
+    # literal placeholder, no secrets known: matched as is
+    emu2 = emu_factory(app_with(make_app, "{url = '%s/ical/{{cal}}/basic.ics'}" % server.base, "msg = resp.status"),
+                       state_dir=tmp_path / "s2", secrets_file=tmp_path / "none.json")
+    emu2.wait(300)
+    assert emu2.has_text("msg 200")
+
+
+def test_placeholder_expands_for_real_request(make_app, emu_factory, tmp_path, server):
+    secrets = tmp_path / "secrets.json"
+    secrets.write_text(json.dumps({"cal": "private-abc123"}))
+    emu = emu_factory(app_with(make_app, "{url = '%s/ical/{{cal}}/basic.ics'}" % server.base),
+                      net="live", secrets_file=secrets)
+    emu.wait(300)
+    assert server.hits[0][0] == "/ical/private-abc123/basic.ics"
+    assert not any("abc123" in ln for ln in emu.log)
+
+
+def test_unknown_secret_warns(make_app, emu_factory, server):
+    emu = emu_factory(app_with(make_app, "{url = '%s/ical/abcdefghij0123456789xyz/basic.ics'}" % server.base), net="record")
+    assert any("looks like a secret" in w and "abcdefghij0123456789xyz" not in w for w in emu.warnings)
+
+
+def test_patch_never_answers(make_app, emu_factory):
+    emu = emu_factory(app_with(make_app, "{url = 'http://x.test/p', method = 'PATCH'}"))
+    emu.wait("60s")
+    assert emu.has_text("msg none")
+    assert any("PATCH" in w for w in emu.warnings)
+
+
+def test_glob_match_fixture(make_app, emu_factory, tmp_path):
+    write_fixture(tmp_path, "err", {"method": "GET", "url": "http://x.test/err*"}, {"status": 500}, match="glob")
+    emu = emu_factory(app_with(make_app, "{url = 'http://x.test/errors/1'}"))
+    emu.wait(300)
+    assert emu.has_text("msg 500:")
+
+
+def test_prefix_match_fixture_and_exact_wins(make_app, emu_factory, tmp_path):
+    write_fixture(tmp_path, "a", {"method": "GET", "url": "http://x.test/"}, {"status": 404}, match="prefix")
+    write_fixture(tmp_path, "b", {"method": "GET", "url": "http://x.test/a"}, {"status": 200})
+    emu = emu_factory(app_with(make_app, "{url = 'http://x.test/a'}"))
+    emu.wait(300)
+    assert emu.has_text("msg 200:")
+
+
+def test_post_matches_by_body_hash(make_app, emu_factory, tmp_path):
+    sha = hashlib.sha256(b"q=1").hexdigest()
+    write_fixture(tmp_path, "p", {"method": "POST", "url": "http://x.test/p", "body_sha256": sha}, {"status": 200}, body="yes")
+    emu = emu_factory(app_with(make_app, "{url = 'http://x.test/p', method = 'POST', body = 'q=1'}"))
+    emu.wait(300)
+    assert emu.has_text("msg 200:yes")
+    emu2 = emu_factory(app_with(make_app, "{url = 'http://x.test/p', method = 'POST', body = 'q=2'}"), state_dir=tmp_path / "s2")
+    emu2.wait(300)
+    assert emu2.has_text("msg 0:nil")
+
+
+def test_cancel_before_delivery(make_app, emu_factory, tmp_path):
+    write_fixture(tmp_path, "h", {"method": "GET", "url": "http://x.test/a"}, {"status": 200})
+    emu = emu_factory(app_with(make_app, "{url = 'http://x.test/a'}"))
+    emu.wait(100)
+    emu.L.execute("job:cancel()")
+    emu.wait(1000)
+    assert emu.has_text("msg none")
+
+
+def test_net_nil_without_permission(make_app, emu_factory):
+    emu = emu_factory(make_app(DRAW + "function on_load(c) msg = tostring(c.net) end"))
+    assert emu.has_text("msg nil")
+
+
+@pytest.mark.allow_errors
+def test_keep_wifi_and_websocket(make_app, emu_factory):
+    emu = emu_factory(make_app(DRAW + "function on_load(c) c.net:keep_wifi(300000) msg = 'ok'\n"
+                               "local ok, e = pcall(function() c.net:websocket({}) end) msg = msg .. tostring(e)\n"
+                               "c.net:keep_wifi(true) end", manifest=NET))
+    assert any("bad argument" in e for e in emu.errors)
+    assert "not emulated" in emu.L.globals().msg
+
+
+def test_live_mode_hits_server(make_app, emu_factory, tmp_path, server):
+    emu = emu_factory(app_with(make_app, "{url = '%s/live'}" % server.base, "msg = resp.status"), net="live")
+    emu.wait(300)
+    assert emu.has_text("msg 200") and server.hits
+    assert not (tmp_path / "fixtures").exists()
+
+
+def test_network_error_gives_err(make_app, emu_factory):
+    emu = emu_factory(app_with(make_app, "{url = 'http://127.0.0.1:1/x', timeout_ms = 2000}",
+                               "msg = resp.status .. tostring(resp.err) .. tostring(resp.body)"), net="live")
+    emu.wait(300)
+    assert emu.has_text("msg 0no_networknil")
+
+
+@pytest.mark.allow_errors
+def test_request_argument_errors(make_app, emu_factory):
+    emu = emu_factory(make_app(DRAW + "function on_load(c)\n local a, e = c.net:request({url = 'nonsense'}, function() end)\n"
+                               "msg = tostring(a) .. tostring(e)\n c.net:request({}, function() end) end", manifest=NET))
+    assert "bad extra argument" in emu.errors[0]
+    assert emu.L.globals().msg == "nilinvalid_argument"
