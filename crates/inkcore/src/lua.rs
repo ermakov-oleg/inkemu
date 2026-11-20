@@ -140,14 +140,12 @@ fn hook(b: &Rc<Budget>, lua: &Lua, dbg: &Debug) -> mlua::Result<VmState> {
     if src.source.as_deref() == Some(HOST_SRC) {
         return Ok(VmState::Continue);
     }
-    if !b.exhausted.get() {
-        b.exhausted.set(true);
-        // fire on every instruction now, so an app pcall cannot swallow the abort
-        let b2 = b.clone();
-        lua.set_global_hook(HookTriggers::new().every_nth_instruction(1), move |l, d| {
-            hook(&b2, l, d)
-        })?;
-    }
+    b.exhausted.set(true);
+    // fire on every instruction of the thread it fired on, so an app pcall cannot swallow the abort
+    let b2 = b.clone();
+    lua.set_global_hook(HookTriggers::new().every_nth_instruction(1), move |l, d| {
+        hook(&b2, l, d)
+    })?;
     let line = dbg.current_line().unwrap_or(0);
     let at = match src.short_src.as_deref() {
         Some(short) if src.source.as_deref().is_some_and(|s| s.starts_with('@')) && line > 0 => {
@@ -192,24 +190,27 @@ pub fn call_guarded(
 
 /// The text of a Lua error as an app developer reads it: message and traceback, host frames left out.
 pub fn error_text(e: &Error) -> String {
-    let raw = match e {
-        Error::RuntimeError(m) | Error::MemoryError(m) => m.clone(),
+    match e {
+        // the traceback of mlua's message handler starts with the handler's own frame
+        Error::RuntimeError(m) | Error::MemoryError(m) => clean_traceback(m, true),
         Error::SyntaxError { message, .. } => message.clone(),
-        Error::CallbackError { traceback, cause } => format!("{}\n{traceback}", error_text(cause)),
+        Error::CallbackError { traceback, cause } => {
+            clean_traceback(&format!("{}\n{traceback}", error_text(cause)), false)
+        }
         other => other.to_string(),
-    };
-    let Some((head, tb)) = raw.split_once("\nstack traceback:") else {
-        return raw;
-    };
-    let mut lines: Vec<&str> = tb
-        .split('\n')
-        .filter(|l| !l.trim_start().starts_with(HOST_FRAME))
-        .collect();
-    // the first frame is the message handler itself
-    if lines.get(1).is_some_and(|l| l.trim() == "[C]: in ?") {
-        lines.remove(1);
     }
-    format!("{head}\nstack traceback:{}", lines.join("\n"))
+}
+
+fn clean_traceback(raw: &str, drop_first: bool) -> String {
+    let Some((head, tb)) = raw.split_once("\nstack traceback:") else {
+        return raw.to_string();
+    };
+    let frames = tb.split('\n').skip(1 + usize::from(drop_first));
+    let kept: String = frames
+        .filter(|l| !l.trim_start().starts_with(HOST_FRAME))
+        .map(|l| format!("\n{l}"))
+        .collect();
+    format!("{head}\nstack traceback:{kept}")
 }
 
 #[cfg(test)]
@@ -241,6 +242,11 @@ mod tests {
             format!("coroutine.wrap(function() {LOOP} end)()"),
             format!("local co = coroutine.create(function() {LOOP} end) while true do coroutine.resume(co) end"),
             format!("pcall(coroutine.wrap(function() {LOOP} end)) {LOOP}"),
+            format!("coroutine.wrap(function() while true do pcall(function() {LOOP} end) end end)()"),
+            format!(
+                "local function mk() return coroutine.wrap(function() while true do pcall(function() {LOOP} end) end end) end \
+                 local a, b = mk(), mk() pcall(a) b()"
+            ),
             format!(
                 "setmetatable({{}}, {{__index = function() {LOOP} end}}).x = nil; \
                  local _ = setmetatable({{}}, {{__index = function() {LOOP} end}}).x"
@@ -260,6 +266,15 @@ mod tests {
         let err = run(LOOP).unwrap_err();
         assert!(
             err.starts_with("index.lua:1: callback exceeded the instruction budget"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn traceback_starts_at_the_failing_frame() {
+        let err = run("local t = nil; return t.x").unwrap_err();
+        assert!(
+            err.ends_with("(local 't')\nstack traceback:\n\tindex.lua:1: in function 'on_load'"),
             "{err}"
         );
     }

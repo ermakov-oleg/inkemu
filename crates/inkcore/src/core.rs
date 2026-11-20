@@ -58,11 +58,11 @@ pub struct Status {
 /// What a timer does when it fires.
 pub(crate) type TimerFn = Rc<dyn Fn(&Host)>;
 
-struct Canvas {
-    w: u32,
-    h: u32,
-    texts: Vec<TextItem>,
-    commands: usize,
+pub(crate) struct Canvas {
+    pub(crate) w: u32,
+    pub(crate) h: u32,
+    pub(crate) texts: Vec<TextItem>,
+    pub(crate) commands: usize,
 }
 
 impl Canvas {
@@ -87,39 +87,39 @@ impl Canvas {
 
 /// Core state shared with the Rust functions the app calls through Lua.
 pub(crate) struct State {
-    cfg: Config,
-    log: Log,
-    sched: Scheduler<TimerFn>,
+    pub(crate) cfg: Config,
+    pub(crate) log: Log,
+    pub(crate) sched: Scheduler<TimerFn>,
     /// The app's timers, cancelled when it stops.
-    timers: BTreeSet<TimerId>,
-    app_id: String,
-    ctx: Option<Table>,
-    g: Option<Table>,
-    running: bool,
-    paused: bool,
-    invalid: bool,
-    quit: bool,
-    leaving: bool,
-    depth: u32,
-    overlay: Option<(String, String)>,
-    pending: Option<Pending>,
-    pending_id: u64,
-    canvas: Canvas,
-    frame_commands: usize,
-    locked: bool,
-    lock_wakes: u32,
-    refresh_counts: (u32, u32),
-    persisted: Persisted,
-    persist_changed: bool,
+    pub(crate) timers: BTreeSet<TimerId>,
+    pub(crate) app_id: String,
+    pub(crate) ctx: Option<Table>,
+    pub(crate) g: Option<Table>,
+    pub(crate) running: bool,
+    pub(crate) paused: bool,
+    pub(crate) invalid: bool,
+    pub(crate) quit: bool,
+    pub(crate) leaving: bool,
+    pub(crate) depth: u32,
+    pub(crate) overlay: Option<(String, String)>,
+    pub(crate) pending: Option<Pending>,
+    pub(crate) pending_id: u64,
+    pub(crate) canvas: Canvas,
+    pub(crate) frame_commands: usize,
+    pub(crate) locked: bool,
+    pub(crate) lock_wakes: u32,
+    pub(crate) refresh_counts: (u32, u32),
+    pub(crate) persisted: Persisted,
+    pub(crate) persist_changed: bool,
 }
 
 impl State {
-    fn log_line(&mut self, msg: &str) {
+    pub(crate) fn log_line(&mut self, msg: &str) {
         let now = self.sched.clock.now();
         self.log.line(now, msg);
     }
 
-    fn stop(&mut self) {
+    pub(crate) fn stop(&mut self) {
         self.running = false;
         self.pending = None;
         self.invalid = false;
@@ -128,7 +128,7 @@ impl State {
         }
     }
 
-    fn fail(&mut self, message: &str, title: &str) {
+    pub(crate) fn fail(&mut self, message: &str, title: &str) {
         self.log.errors.push(message.to_string());
         self.log_line(&format!("ERROR {message}"));
         let first = message.split('\n').next().unwrap_or_default();
