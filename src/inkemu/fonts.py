@@ -2,8 +2,11 @@ import os
 
 from PIL import ImageFont
 
-FONT_FILES = ["/System/Library/Fonts/Helvetica.ttc", "/System/Library/Fonts/Supplemental/Arial.ttf",
-              "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"]
+FONT_FILES = [
+    "/System/Library/Fonts/Helvetica.ttc",
+    "/System/Library/Fonts/Supplemental/Arial.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+]
 LINE_HEIGHTS = {"small": 20, "medium": 24, "large": 30}
 
 

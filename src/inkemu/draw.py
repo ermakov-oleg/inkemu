@@ -1,5 +1,6 @@
 import unicodedata
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from PIL import Image, ImageDraw
 
@@ -7,8 +8,21 @@ from .fonts import Fonts
 from .lua_env import make_object
 
 CAP = 1024
-_RECORDED = ("clear", "rect", "round_rect", "line", "circle", "arc", "polygon", "polyline", "text",
-             "text_box", "image", "pattern_rect", "fill_pattern")
+_RECORDED = (
+    "clear",
+    "rect",
+    "round_rect",
+    "line",
+    "circle",
+    "arc",
+    "polygon",
+    "polyline",
+    "text",
+    "text_box",
+    "image",
+    "pattern_rect",
+    "fill_pattern",
+)
 _RECORDER = """
 local rec, cap, specs = ...
 local KINDS = { n = 'number', t = 'table', s = 'string' }
@@ -73,9 +87,21 @@ def _points(pts) -> list[float]:
     return flat
 
 
-_SPECS = {"clear": "", "rect": "nnnn", "round_rect": "nnnn", "line": "nnnn", "circle": "nnn", "arc": "nnnnn",
-          "polygon": "t", "polyline": "t", "text": "nns", "text_box": "nnnns", "image": "ann",
-          "pattern_rect": "nnnn", "fill_pattern": "nnnn"}
+_SPECS = {
+    "clear": "",
+    "rect": "nnnn",
+    "round_rect": "nnnn",
+    "line": "nnnn",
+    "circle": "nnn",
+    "arc": "nnnnn",
+    "polygon": "t",
+    "polyline": "t",
+    "text": "nns",
+    "text_box": "nnnns",
+    "image": "ann",
+    "pattern_rect": "nnnn",
+    "fill_pattern": "nnnn",
+}
 
 
 class Canvas:
@@ -149,9 +175,11 @@ class Canvas:
             line_boxes = [(bx, by, s)]
             item = {"text": s, "x": bx, "y": by, "w": bw, "h": bh, "font": font}
         else:
-            lines = self._wrap(font, s, w)[:max(1, int(h // lh))]
+            lines = self._wrap(font, s, w)[: max(1, int(h // lh))]
             bh = len(lines) * lh
-            by = round(y + (h - bh) / 2) if valign == "middle" else round(y + h - bh) if valign == "bottom" else round(y)
+            by = (
+                round(y + (h - bh) / 2) if valign == "middle" else round(y + h - bh) if valign == "bottom" else round(y)
+            )
             line_boxes = []
             for i, line in enumerate(lines):
                 lw = self.fonts.measure(font, line)

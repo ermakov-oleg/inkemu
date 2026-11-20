@@ -9,8 +9,22 @@ HELLO = Path(__file__).resolve().parent.parent / "examples" / "hello"
 
 
 def run(tmp_path, app, steps, *extra):
-    return main(["run", str(app), "--steps", steps, "--out", str(tmp_path / "out"), "--fresh",
-                 "--state", str(tmp_path / "state"), "--fixtures", str(tmp_path / "fx"), *extra])
+    return main(
+        [
+            "run",
+            str(app),
+            "--steps",
+            steps,
+            "--out",
+            str(tmp_path / "out"),
+            "--fresh",
+            "--state",
+            str(tmp_path / "state"),
+            "--fixtures",
+            str(tmp_path / "fx"),
+            *extra,
+        ]
+    )
 
 
 def test_run_steps_hello(tmp_path):
@@ -118,14 +132,16 @@ def test_run_prints_texts_log_state_and_shots_in_order(tmp_path, capsys):
 def test_window_without_display_is_clean_exit_1(tmp_path, monkeypatch, capsys):
     tk = pytest.importorskip("tkinter")
     from inkemu import daemon, window
+
     monkeypatch.setenv("INKEMU_STATE_ROOT", str(tmp_path / "root"))
 
     def no_display(*a, **kw):
         raise tk.TclError("no display name and no $DISPLAY environment variable")
 
     monkeypatch.setattr(window, "build_window", no_display)
-    code = main(["window", str(HELLO), "--port", "0", "--state", str(tmp_path / "state"),
-                 "--fixtures", str(tmp_path / "fx")])
+    code = main(
+        ["window", str(HELLO), "--port", "0", "--state", str(tmp_path / "state"), "--fixtures", str(tmp_path / "fx")]
+    )
     err = capsys.readouterr().err
     assert code == 1 and "cannot open the window: no display name" in err and "Traceback" not in err
     assert daemon.read_info(tmp_path / "root") is None

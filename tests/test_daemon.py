@@ -76,8 +76,12 @@ def test_parse_words():
 
 
 def post(port, cmd, args=None):
-    req = urllib.request.Request(f"http://127.0.0.1:{port}/cmd", method="POST",
-                                 headers={"Content-Type": "application/json"}, data=json.dumps({"cmd": cmd, "args": args or {}}).encode())
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{port}/cmd",
+        method="POST",
+        headers={"Content-Type": "application/json"},
+        data=json.dumps({"cmd": cmd, "args": args or {}}).encode(),
+    )
     with urllib.request.urlopen(req, timeout=10) as resp:
         return resp.status, json.load(resp)
 
@@ -101,9 +105,15 @@ def test_http_roundtrip(emu_factory):
         status, body = post(d.port, "stop")
         assert body["ok"] and d.stopped
         with pytest.raises(urllib.error.HTTPError) as e:
-            urllib.request.urlopen(urllib.request.Request(f"http://127.0.0.1:{d.port}/cmd", method="POST",
-                                                          headers={"Content-Type": "application/json"},
-                                                          data=b"not json"), timeout=5)
+            urllib.request.urlopen(
+                urllib.request.Request(
+                    f"http://127.0.0.1:{d.port}/cmd",
+                    method="POST",
+                    headers={"Content-Type": "application/json"},
+                    data=b"not json",
+                ),
+                timeout=5,
+            )
         assert e.value.code == 400
     finally:
         stop.set()
@@ -160,6 +170,7 @@ def test_serve_headless_stops_and_cleans_up(emu_factory, tmp_path, monkeypatch):
 
 def raw(port, method="POST", path="/cmd", headers=None, body=b'{"cmd": "tap-text", "args": {"text": "Tap me"}}'):
     import http.client
+
     c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
     try:
         c.putrequest(method, path, skip_host=True)
@@ -174,13 +185,16 @@ def raw(port, method="POST", path="/cmd", headers=None, body=b'{"cmd": "tap-text
         c.close()
 
 
-@pytest.mark.parametrize("headers", [
-    {"Content-Type": "text/plain"},
-    {"Content-Type": None},
-    {"Host": "evil.example:7480"},
-    {"Host": "127.0.0.1"},
-    {"Origin": "http://evil.example"},
-])
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"Content-Type": "text/plain"},
+        {"Content-Type": None},
+        {"Host": "evil.example:7480"},
+        {"Host": "127.0.0.1"},
+        {"Origin": "http://evil.example"},
+    ],
+)
 def test_browser_style_requests_are_rejected(emu_factory, headers):
     emu = emu_factory(HELLO)
     d = Daemon(emu, port=0)
@@ -235,12 +249,14 @@ def test_post_command_non_json_error_is_clean(foreign_server, capsys):
     with pytest.raises(daemon.DaemonUnreachable, match="did not answer like an inkemu daemon"):
         daemon.post_command(foreign_server, "state")
     from inkemu.cli import main
+
     assert main(["state", "--port", str(foreign_server)]) == 2
     assert "did not answer like an inkemu daemon" in capsys.readouterr().err
 
 
 def test_post_command_nobody_listening():
     import socket
+
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]

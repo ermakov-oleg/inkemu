@@ -5,7 +5,6 @@ import threading
 import time
 import tkinter as tk
 from datetime import datetime
-from pathlib import Path
 from tkinter import messagebox, simpledialog
 
 from .daemon import WindowUnavailable
@@ -15,8 +14,15 @@ TICK_MS = 100
 CONTROL_POLL_MS = 50
 MAX_STEP_MS = 5000  # a suspended laptop must not fast-forward the app by hours
 
-KEYMAP = {"up": "up", "down": "down", "left": "left", "right": "right", "return": "ok", "kp_enter": "ok",
-          "escape": "back"}
+KEYMAP = {
+    "up": "up",
+    "down": "down",
+    "left": "left",
+    "right": "right",
+    "return": "ok",
+    "kp_enter": "ok",
+    "escape": "back",
+}
 
 
 def ask_string(parent, title: str, text: str, initial: str) -> str | None:
@@ -78,8 +84,10 @@ class WindowApp:
         return self.emu.pending is None and not self._dialog_open
 
     def _xy(self, event) -> tuple[int, int]:
-        return (min(max(int(event.x), 0), self.emu.canvas.width - 1),
-                min(max(int(event.y), 0), self.emu.canvas.height - 1))
+        return (
+            min(max(int(event.x), 0), self.emu.canvas.width - 1),
+            min(max(int(event.y), 0), self.emu.canvas.height - 1),
+        )
 
     def refresh(self) -> None:
         try:

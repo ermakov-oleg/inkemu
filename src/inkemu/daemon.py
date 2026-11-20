@@ -6,9 +6,10 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from .clock import parse_duration
 from .emu import KEYS, SWIPES, Emu
@@ -47,6 +48,7 @@ def _choice(options: tuple[str, ...]) -> Callable[[Any], str]:
         if v not in options:
             raise UsageError(f"must be one of {', '.join(options)}, got {v!r}")
         return v
+
     return conv
 
 
@@ -167,12 +169,21 @@ def execute(emu: Emu, cmd: str, args: dict | None = None) -> dict:
         texts = emu.texts()
     except Exception:
         texts = []
-    return {"ok": error is None, "error": error, "texts": texts, "log_tail": emu.log[-LOG_TAIL:],
-            "errors": list(emu.errors), "warnings": list(emu.warnings), "status": emu.status(), "shot": shot,
-            **extra}
+    return {
+        "ok": error is None,
+        "error": error,
+        "texts": texts,
+        "log_tail": emu.log[-LOG_TAIL:],
+        "errors": list(emu.errors),
+        "warnings": list(emu.warnings),
+        "status": emu.status(),
+        "shot": shot,
+        **extra,
+    }
 
 
 # ---- daemon.json ------------------------------------------------------------------------------
+
 
 def _alive(pid: int) -> bool:
     try:
@@ -219,9 +230,12 @@ class DaemonUnreachable(Exception):
 
 def post_command(port: int, cmd: str, args: dict | None = None) -> dict:
     """Send one command to the daemon on `port`; raises DaemonUnreachable unless an inkemu daemon answers."""
-    req = urllib.request.Request(f"http://127.0.0.1:{port}/cmd", method="POST",
-                                 headers={"Content-Type": "application/json"},
-                                 data=json.dumps({"cmd": cmd, "args": args or {}}).encode("utf-8"))
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{port}/cmd",
+        method="POST",
+        headers={"Content-Type": "application/json"},
+        data=json.dumps({"cmd": cmd, "args": args or {}}).encode("utf-8"),
+    )
     try:
         try:
             with urllib.request.urlopen(req, timeout=CLIENT_TIMEOUT_S) as resp:
@@ -241,6 +255,7 @@ def post_command(port: int, cmd: str, args: dict | None = None) -> dict:
 
 
 # ---- HTTP server ------------------------------------------------------------------------------
+
 
 class _Server(ThreadingHTTPServer):
     daemon_threads = True
@@ -311,8 +326,9 @@ class Daemon:
         try:
             self._server = _Server((HOST, port), Handler)
         except OSError as e:
-            raise OSError(f"cannot listen on {HOST}:{port}: {e.strerror or e}"
-                          " (is another inkemu daemon running? try --port)") from e
+            raise OSError(
+                f"cannot listen on {HOST}:{port}: {e.strerror or e} (is another inkemu daemon running? try --port)"
+            ) from e
         self.port = self._server.server_address[1]
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True, name="inkemu-http")
         self._thread.start()

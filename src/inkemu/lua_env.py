@@ -1,5 +1,5 @@
 import re
-from typing import Callable
+from collections.abc import Callable
 
 from lupa import lua55
 
@@ -117,8 +117,9 @@ def _no_attributes(obj, name, is_setting):
 
 
 def new_runtime() -> Runtime:
-    L = Runtime(unpack_returned_tuples=True, register_eval=False, register_builtins=False,
-                attribute_filter=_no_attributes)
+    L = Runtime(
+        unpack_returned_tuples=True, register_eval=False, register_builtins=False, attribute_filter=_no_attributes
+    )
     L._method, L._register, L._xpcall, L._load, L._rawget = L.execute(_SANDBOX, HOOK_STEP)
     return L
 

@@ -54,12 +54,13 @@ inkemu run apps/weather --net record --steps "wait 5s"    # once: real requests 
 ```python
 from inkemu import Emu
 
+
 def test_weather(tmp_path):
     emu = Emu("apps/weather", state_dir=tmp_path / "state", start_time="2026-11-20T09:00:00")  # net="replay"
     emu.wait("5s")
     assert emu.has_text("Berlin")
     emu.tap_text("Refresh")
-    assert emu.errors == []      # Lua tracebacks are collected, never raised
+    assert emu.errors == []  # Lua tracebacks are collected, never raised
 ```
 
 Other members: `emu.tap(x, y)`, `emu.double_tap()`, `emu.hold()`, `emu.swipe(direction)`, `emu.key(name)`,

@@ -12,7 +12,9 @@ function on_draw(ctx, g) g:clear() g:text(10, 10, 'Taps: ' .. #ctx.state.ev) end
 
 
 def events(emu):
-    out = emu.L.eval("function() local t = {} for i, v in ipairs(ctx.state.ev) do t[i] = v end return table.concat(t, '|') end")()
+    out = emu.L.eval(
+        "function() local t = {} for i, v in ipairs(ctx.state.ev) do t[i] = v end return table.concat(t, '|') end"
+    )()
     return out.split("|") if out else []
 
 

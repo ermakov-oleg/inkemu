@@ -20,8 +20,10 @@ def test_dot_call_on_ctx_level_method_is_error(make_app, emu_factory):
 
 @pytest.mark.allow_errors
 def test_lua_error_is_captured(make_app, emu_factory):
-    app = make_app("local function boom() error('kaput') end\n"
-                   "function on_draw(c, g) g:clear(0); g:text(0, 0, 'before'); boom() end\n")
+    app = make_app(
+        "local function boom() error('kaput') end\n"
+        "function on_draw(c, g) g:clear(0); g:text(0, 0, 'before'); boom() end\n"
+    )
     emu = emu_factory(app)
     assert "index.lua:1: kaput" in emu.errors[0] and "stack traceback" in emu.errors[0]
     assert "index.lua:2: in function 'on_draw'" in emu.errors[0] and "<python>" not in emu.errors[0]
@@ -35,8 +37,10 @@ def test_lua_error_is_captured(make_app, emu_factory):
 
 @pytest.mark.allow_errors
 def test_timer_error_stops_app_and_cancels_timers(make_app, emu_factory):
-    app = make_app(DRAW_MSG + "function on_load(c)\n  c:after(100, function() error('late') end)\n"
-                   "  c:after(500, function() msg = 'second' end)\nend\n")
+    app = make_app(
+        DRAW_MSG + "function on_load(c)\n  c:after(100, function() error('late') end)\n"
+        "  c:after(500, function() msg = 'second' end)\nend\n"
+    )
     emu = emu_factory(app)
     emu.wait(1000)
     assert len(emu.errors) == 1 and "index.lua:4: late" in emu.errors[0]
@@ -83,10 +87,13 @@ def test_manifest_api_equal_to_firmware_runs(make_app, emu_factory):
 
 
 @pytest.mark.allow_errors
-@pytest.mark.parametrize("manifest, needle", [
-    ({"app_id": "hello2"}, "app_id"),
-    ({"permissions": ["net", "wifi"]}, "wifi"),
-])
+@pytest.mark.parametrize(
+    "manifest, needle",
+    [
+        ({"app_id": "hello2"}, "app_id"),
+        ({"permissions": ["net", "wifi"]}, "wifi"),
+    ],
+)
 def test_manifest_strictness(make_app, emu_factory, manifest, needle):
     emu = emu_factory(make_app("", manifest=manifest))
     assert needle in emu.errors[0] and emu.status()["running"] is False
@@ -123,8 +130,10 @@ def test_landscape_manifest_canvas(make_app, emu_factory):
 
 
 def test_set_tick_calls_on_tick(make_app, emu_factory):
-    app = make_app(DRAW_MSG + "n = 0\nfunction on_load(c) c:set_tick(100) end\n"
-                   "function on_tick(c) n = n + 1; msg = n; c:invalidate() end\n")
+    app = make_app(
+        DRAW_MSG + "n = 0\nfunction on_load(c) c:set_tick(100) end\n"
+        "function on_tick(c) n = n + 1; msg = n; c:invalidate() end\n"
+    )
     emu = emu_factory(app)
     emu.wait(1000)
     assert emu.texts()[0]["text"] == "msg 10"
@@ -133,8 +142,10 @@ def test_set_tick_calls_on_tick(make_app, emu_factory):
 
 
 def test_set_tick_zero_stops(make_app, emu_factory):
-    app = make_app(DRAW_MSG + "n = 0\nfunction on_load(c) c:set_tick(100) end\n"
-                   "function on_tick(c) n = n + 1; msg = n; if n == 3 then c:set_tick(0) end; c:invalidate() end\n")
+    app = make_app(
+        DRAW_MSG + "n = 0\nfunction on_load(c) c:set_tick(100) end\n"
+        "function on_tick(c) n = n + 1; msg = n; if n == 3 then c:set_tick(0) end; c:invalidate() end\n"
+    )
     emu = emu_factory(app)
     emu.wait(1000)
     assert emu.texts()[0]["text"] == "msg 3"
@@ -157,15 +168,20 @@ def test_reload_saves_state_of_running_app(make_app, emu_factory):
 
 
 def test_after_cancel(make_app, emu_factory):
-    app = make_app(DRAW_MSG + "function on_load(c)\n  local h = c:after(500, function() msg = 'fired'; c:invalidate() end)\n"
-                   "  c:after(100, function() h:cancel() end)\nend\n")
+    app = make_app(
+        DRAW_MSG + "function on_load(c)\n  local h = c:after(500, function() msg = 'fired'; c:invalidate() end)\n"
+        "  c:after(100, function() h:cancel() end)\nend\n"
+    )
     emu = emu_factory(app)
     emu.wait(1000)
     assert emu.has_text("msg none")
 
 
 def test_after_fires_with_ctx_in_virtual_time(make_app, emu_factory):
-    app = make_app(DRAW_MSG + "function on_load(c)\n  c:after(500, function(cc) msg = tostring(cc == ctx); c:invalidate() end)\nend\n")
+    app = make_app(
+        DRAW_MSG
+        + "function on_load(c)\n  c:after(500, function(cc) msg = tostring(cc == ctx); c:invalidate() end)\nend\n"
+    )
     emu = emu_factory(app)
     emu.wait(499)
     assert emu.has_text("msg none")
@@ -187,9 +203,11 @@ def test_back_handled_does_not_offer_leave(make_app, emu_factory):
 
 
 def test_events_reach_on_input(make_app, emu_factory):
-    app = make_app(DRAW_MSG + "seen = {}\nfunction on_input(c, ev)\n"
-                   "  seen[#seen + 1] = ev.type .. ':' .. ev.phase .. ':' .. tostring(ev.gesture or ev.key)\n"
-                   "  msg = table.concat(seen, ','); c:invalidate(); return true\nend\n")
+    app = make_app(
+        DRAW_MSG + "seen = {}\nfunction on_input(c, ev)\n"
+        "  seen[#seen + 1] = ev.type .. ':' .. ev.phase .. ':' .. tostring(ev.gesture or ev.key)\n"
+        "  msg = table.concat(seen, ','); c:invalidate(); return true\nend\n"
+    )
     emu = emu_factory(app)
     emu.tap(10, 20)
     emu.key("up")
@@ -203,8 +221,10 @@ def test_input_advances_time(make_app, emu_factory):
 
 
 def test_require_loads_app_module(make_app, emu_factory):
-    app = make_app(DRAW_MSG + "local x = require('lib.x')\nmsg = x.v .. ':' .. tostring(require('lib.x') == x)\n",
-                   files={"lib/x.lua": "return {v=7}"})
+    app = make_app(
+        DRAW_MSG + "local x = require('lib.x')\nmsg = x.v .. ':' .. tostring(require('lib.x') == x)\n",
+        files={"lib/x.lua": "return {v=7}"},
+    )
     assert emu_factory(app).has_text("msg 7:true")
 
 
@@ -223,15 +243,19 @@ def test_require_only_from_app_folder(make_app, emu_factory, tmp_path, name):
 
 
 def test_sandbox_has_no_io_os(make_app, emu_factory):
-    app = make_app("assert(io == nil and os == nil and dofile == nil and loadfile == nil and not debug)\n"
-                   "assert(print == nil and collectgarbage == nil and python == nil)")
+    app = make_app(
+        "assert(io == nil and os == nil and dofile == nil and loadfile == nil and not debug)\n"
+        "assert(print == nil and collectgarbage == nil and python == nil)"
+    )
     assert emu_factory(app).status()["running"] is True
 
 
 def test_state_saved_and_restored(make_app, emu_factory, tmp_path):
-    app = make_app(DRAW_MSG + "function on_load(c)\n  msg = tostring(c.state.n)\n"
-                   "  c.state.n = (c.state.n or 0) + 1; c.state.list = {1, 2.5, 'три'}; c.state.flag = true\n"
-                   "  c:save_state()\nend\n")
+    app = make_app(
+        DRAW_MSG + "function on_load(c)\n  msg = tostring(c.state.n)\n"
+        "  c.state.n = (c.state.n or 0) + 1; c.state.list = {1, 2.5, 'три'}; c.state.flag = true\n"
+        "  c:save_state()\nend\n"
+    )
     emu = emu_factory(app)
     saved = json.loads((tmp_path / "state" / "state.json").read_text(encoding="utf-8"))
     assert saved == {"n": 1, "list": [1, 2.5, "три"], "flag": True}
@@ -254,8 +278,10 @@ def test_fresh_starts_empty(make_app, emu_factory, tmp_path):
 
 
 def test_quit_leaves_after_callback(make_app, emu_factory, tmp_path):
-    app = make_app("function on_input(c, ev) c:quit(); c.state.after_quit = 1; return true end\n"
-                   "function on_leave(c) c.state.left = 1 end")
+    app = make_app(
+        "function on_input(c, ev) c:quit(); c.state.after_quit = 1; return true end\n"
+        "function on_leave(c) c.state.left = 1 end"
+    )
     emu = emu_factory(app)
     emu.tap(5, 5)
     assert emu.status()["running"] is False
@@ -263,13 +289,15 @@ def test_quit_leaves_after_callback(make_app, emu_factory, tmp_path):
 
 
 def test_log_and_ctx_values(make_app, emu_factory):
-    app = make_app("local t = ctx.clock:now()\n"
-                   "ctx:log('now', t.year, t.month, t.day, t.hour, t.minute, t.second, t.wday, t.valid)\n"
-                   "local b = ctx.device:battery()\n"
-                   "ctx:log('api', ctx.api.major, ctx.api.minor, b.percent, b.charging)\n"
-                   "local f = ctx.fonts.large\n"
-                   "ctx:log('font', f.name, f.line_height, f:measure('abc') > 0, ctx.fonts:size(23).name)\n"
-                   "ctx:log('millis', ctx.clock:millis(), type(ctx.device.model))\n")
+    app = make_app(
+        "local t = ctx.clock:now()\n"
+        "ctx:log('now', t.year, t.month, t.day, t.hour, t.minute, t.second, t.wday, t.valid)\n"
+        "local b = ctx.device:battery()\n"
+        "ctx:log('api', ctx.api.major, ctx.api.minor, b.percent, b.charging)\n"
+        "local f = ctx.fonts.large\n"
+        "ctx:log('font', f.name, f.line_height, f:measure('abc') > 0, ctx.fonts:size(23).name)\n"
+        "ctx:log('millis', ctx.clock:millis(), type(ctx.device.model))\n"
+    )
     emu = emu_factory(app)
     text = "\n".join(emu.log)
     assert "now 2026 11 20 9 0 0 6 true" in text
