@@ -136,6 +136,11 @@ def test_sandbox():
     for expr in ("io", "os", "dofile", "loadfile", "debug", "collectgarbage", "package.loadlib", "package.cpath", "python"):
         assert L.eval(expr) is None, expr
     assert L.eval("load('return 1 + 1')()") == 2
+    for expr in ("package.loaded.io", "package.loaded.os", "package.loaded.debug", "print", "__objs", "__method"):
+        assert L.eval(expr) is None, expr
+    for code in ("require('os')", "require('io')", "require('debug')", "require('nonexistent')"):
+        with pytest.raises(LuaError):
+            L.execute(code)
     with pytest.raises(LuaError):
         L.execute("load(function() return nil end)")
     assert L.eval("select('#', load(string.dump(function() end)))") == 2  # nil, message: binary chunks refused
@@ -149,3 +154,26 @@ def test_make_object_colon_check():
     with pytest.raises(LuaError) as e:
         L.execute("obj.millis()")
     assert "bad argument #2 to 'millis' (call ctx.clock:millis with a colon)" in str(e.value)
+
+
+def test_colon_check_cannot_be_spoofed():
+    L = new_runtime()
+    L.globals().obj = make_object(L, "clock", {"millis": lambda: 1})
+    with pytest.raises(LuaError, match="colon"):
+        L.execute("__objs = {}; setmetatable(__objs, {__index = function() return 'clock' end}); obj.millis()")
+
+
+def test_bad_g_args_raise_lua_error_with_location(env):
+    with pytest.raises(LuaError, match=r"bad argument #3 to 'rect' \(number expected, got no value\)"):
+        run(env, "G:rect(1, 2)")
+    with pytest.raises(LuaError, match="text"):
+        run(env, "G:text(1, 2)")
+    with pytest.raises(LuaError, match="'text'.*number expected, got string"):
+        run(env, "G:text('a', 2, 'x')")
+
+
+def test_frame_with_bad_command_does_not_crash(env):
+    L, _, canvas, _ = env
+    canvas.begin_frame()
+    L.execute("G:text(1, 1, 'ok'); pcall(function() G:rect(1, 2) end); G:rect(0, 0, 5, 5, {fill=true})")
+    assert canvas.end_frame() == 2 and len(canvas.texts()) == 1
