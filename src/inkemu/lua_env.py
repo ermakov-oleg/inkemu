@@ -8,9 +8,11 @@ local objs = setmetatable({}, { __mode = 'k' })
 local raw_load, traceback, xpcall, pcall = load, debug.traceback, xpcall, pcall
 local error, type, tostring, pack, unpack = error, type, tostring, table.pack, table.unpack
 
-for _, name in ipairs({ 'io', 'os', 'debug' }) do package.loaded[name] = nil end
-io, os, debug, dofile, loadfile, collectgarbage, print = nil, nil, nil, nil, nil, nil, nil
-package.loadlib, package.cpath, package.path = nil, nil, ''
+-- lupa also registers its `python` module in package.loaded, where require finds it
+for _, name in ipairs({ 'io', 'os', 'debug', 'python' }) do package.loaded[name] = nil end
+io, os, debug, python, dofile, loadfile, collectgarbage, print = nil, nil, nil, nil, nil, nil, nil, nil
+package.loadlib, package.cpath, package.path, package.searchpath = nil, nil, '', nil
+for k in pairs(package.preload) do package.preload[k] = nil end
 package.searchers = {}  -- the app loader is installed by the host
 function load(chunk, name, mode, ...)
   if type(chunk) ~= 'string' then error("bad argument #1 to 'load' (only string chunks are allowed)", 2) end
@@ -53,10 +55,15 @@ class Runtime(lua55.LuaRuntime):
     """LuaRuntime that owns the sandbox helper closures, so they die with it."""
 
 
+def _no_attributes(obj, name, is_setting):
+    # app Lua must never walk a Python object (obj.__class__ ... -> os); host Lua never needs attributes
+    raise AttributeError(f"access to Python attribute {name!r} is not allowed")
+
+
 def new_runtime() -> Runtime:
-    L = Runtime(unpack_returned_tuples=True, register_eval=False, register_builtins=False)
+    L = Runtime(unpack_returned_tuples=True, register_eval=False, register_builtins=False,
+                attribute_filter=_no_attributes)
     L._method, L._register, L._xpcall, L._load = L.execute(_SANDBOX)
-    L.globals().python = None
     return L
 
 
