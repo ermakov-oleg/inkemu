@@ -6,6 +6,7 @@ import urllib.request
 from pathlib import Path
 
 import pytest
+from conftest import IMPL
 
 from inkemu import daemon
 from inkemu.daemon import Daemon, UsageError, execute, parse_words, read_info, write_info
@@ -13,6 +14,7 @@ from inkemu.daemon import Daemon, UsageError, execute, parse_words, read_info, w
 HELLO = Path(__file__).resolve().parent.parent / "examples" / "hello"
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_execute_tap_text_hello(emu_factory):
     emu = emu_factory(HELLO)
     r = execute(emu, "tap-text", {"text": "Tap me"})
@@ -27,6 +29,7 @@ def test_execute_unknown_command(emu_factory):
     assert r["ok"] is False and "tap-text" in r["error"]
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_execute_bad_args_and_missing_text(emu_factory):
     emu = emu_factory(HELLO)
     r = execute(emu, "tap", {"x": "a", "y": 1})
@@ -59,6 +62,7 @@ def test_execute_resume_clears_pause(emu_factory):
 
 
 @pytest.mark.allow_errors
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_execute_wait_returns_for_zero_delay_loop(emu_factory, make_app):
     app = make_app("function on_load(c) local f; f = function() c:after(0, f) end; f() end")
     r = execute(emu_factory(app), "wait", {"duration": "1m"})
@@ -86,6 +90,7 @@ def post(port, cmd, args=None):
         return resp.status, json.load(resp)
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_http_roundtrip(emu_factory):
     emu = emu_factory(HELLO)
     d = Daemon(emu, port=0)
@@ -195,6 +200,7 @@ def raw(port, method="POST", path="/cmd", headers=None, body=b'{"cmd": "tap-text
         {"Origin": "http://evil.example"},
     ],
 )
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 4")
 def test_browser_style_requests_are_rejected(emu_factory, headers):
     emu = emu_factory(HELLO)
     d = Daemon(emu, port=0)

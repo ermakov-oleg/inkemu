@@ -1,9 +1,11 @@
 import pytest
+from conftest import IMPL
 from lupa import LuaError
 
 from inkemu.lua_env import new_runtime
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 3")
 def test_no_python_bridge_in_package_or_globals():
     L = new_runtime()
     for expr in ("python", "package.loaded.python", "package.searchpath", "package.preload.python"):
@@ -17,6 +19,7 @@ def test_no_python_bridge_in_package_or_globals():
     assert leftovers.split() == ["_G", "coroutine", "math", "package", "string", "table", "utf8"]
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 3")
 def test_leaked_python_object_has_no_attributes():
     L = new_runtime()
     L.globals().leak = lambda: 1
@@ -40,6 +43,7 @@ def test_leaked_python_object_has_no_attributes():
         ),
     ],
 )
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 4")
 def test_app_cannot_reach_python_or_os(make_app, emu_factory, code, expected):
     emu = emu_factory(make_app(f"function on_load(c) {code} end\n"))
     assert len(emu.errors) == 1 and emu.errors[0].startswith("Lua error in on_load"), emu.errors

@@ -60,6 +60,17 @@ include = [
     { path = "uv.lock", format = "sdist" },
 ]
 
+[tool.uv]
+# rebuild the _core extension on `uv run`/`uv sync` when the Rust side changes
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "Cargo.toml" },
+    { file = "Cargo.lock" },
+    { file = "crates/**/*.rs" },
+    { file = "crates/**/Cargo.toml" },
+    { file = "patches/**/*" },
+]
+
 [dependency-groups]
 dev = [
     "pytest>=9.2.0",

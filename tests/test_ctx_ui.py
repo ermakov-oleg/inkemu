@@ -1,6 +1,7 @@
 from io import BytesIO
 
 import pytest
+from conftest import IMPL
 from PIL import Image
 
 DRAW = "function on_draw(c, g) g:clear(0) %s end\n"
@@ -16,6 +17,7 @@ def black(img: Image.Image, x: int, y: int) -> bool:
     return img.getpixel((x, y)) == 0
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_input_text_ok(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -29,6 +31,7 @@ def test_input_text_ok(make_app, emu_factory):
     assert emu.has_text("got Bob")
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_input_text_cancel_does_not_call_back(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -40,6 +43,7 @@ def test_input_text_cancel_does_not_call_back(make_app, emu_factory):
     assert emu.pending is None and emu.has_text("none")
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_input_edit_feeds_chars(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -57,6 +61,7 @@ def test_input_edit_feeds_chars(make_app, emu_factory):
     assert emu.has_text("a,ab,abc abc:enter")
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_input_edit_object(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -73,6 +78,7 @@ def test_input_edit_object(make_app, emu_factory):
     assert emu.pending is None
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_confirm_yes_no(make_app, emu_factory):
     app = make_app(
         "res = 'none'\nfunction on_load(c) c.dialog:confirm({title='T', text='Sure?'}, function(c, ok) res = tostring(ok); c:invalidate() end) end\n"
@@ -87,6 +93,7 @@ def test_confirm_yes_no(make_app, emu_factory):
     assert emu.has_text("res true")
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_on_pending_hook(make_app, emu_factory):
     seen = []
     app = make_app(
@@ -101,6 +108,7 @@ def test_on_pending_hook(make_app, emu_factory):
     assert seen[-1]["kind"] == "leave"
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_answer_or_type_text_without_pending(make_app, emu_factory):
     emu = emu_factory(make_app("function on_load(c) end\n"))
     with pytest.raises(RuntimeError):
@@ -109,6 +117,7 @@ def test_answer_or_type_text_without_pending(make_app, emu_factory):
         emu.type_text("x")
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_leave_answer_yes_calls_on_leave(make_app, emu_factory):
     emu = emu_factory(make_app("function on_load(c) end\nfunction on_leave(c) c.storage:write('left', 'yes') end\n"))
     emu.key("back")
@@ -118,6 +127,7 @@ def test_leave_answer_yes_calls_on_leave(make_app, emu_factory):
     assert (emu.state_dir / "files" / "left").read_text() == "yes"
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_leave_answer_no_keeps_running(make_app, emu_factory):
     emu = emu_factory(make_app("function on_load(c) end\n"))
     emu.key("back")
@@ -125,6 +135,7 @@ def test_leave_answer_no_keeps_running(make_app, emu_factory):
     assert emu.pending is None and emu.status()["running"] is True
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_toast_visible_then_gone(make_app, emu_factory):
     emu = emu_factory(make_app("function on_load(c) c.dialog:toast('Saved') end\n" + DRAW % ""))
     assert emu.has_text("Saved")
@@ -137,6 +148,7 @@ def test_toast_visible_then_gone(make_app, emu_factory):
     assert not any(black(emu.shot(), 20, y) for y in range(700, 790))
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_toast_lifetime_is_virtual_2s(make_app, emu_factory):
     emu = emu_factory(make_app("function on_load(c) c.dialog:toast('Hi') end\n" + DRAW % ""))
     emu.wait(1900)
@@ -145,6 +157,7 @@ def test_toast_lifetime_is_virtual_2s(make_app, emu_factory):
     assert not emu.has_text("Hi")
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_image_decode_jpeg_and_draw(make_app, emu_factory, tmp_path):
     app = make_app(
         "function on_load(c)\n  img = c.image:decode(c.package:read('b.jpg'))\n  w, h = img.width, img.height\nend\n"
@@ -158,6 +171,7 @@ def test_image_decode_jpeg_and_draw(make_app, emu_factory, tmp_path):
     assert black(shot, 10, 10) and black(shot, 13, 12) and not black(shot, 14, 10)
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_package_image(make_app, emu_factory):
     app = make_app(
         "function on_load(c)\n  img, err = c.package:image('b.jpg')\n  miss, merr = c.package:image('none.jpg')\nend\n"
@@ -169,6 +183,7 @@ def test_package_image(make_app, emu_factory):
     assert emu.has_text("5 not_found") and black(emu.shot(), 4, 4)
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_png_decode_warns(make_app, emu_factory):
     buf = BytesIO()
     Image.new("L", (2, 2), 0).save(buf, "PNG")
@@ -183,6 +198,7 @@ def test_png_decode_warns(make_app, emu_factory):
     assert any("PNG" in w for w in emu.warnings) and any("PNG" in line for line in emu.log)
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_decode_garbage(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -194,6 +210,7 @@ def test_decode_garbage(make_app, emu_factory):
 
 
 @pytest.mark.allow_errors
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_released_image_draw_is_an_error(make_app, emu_factory):
     app = make_app(
         "function on_load(c) img = c.image:decode(c.package:read('b.jpg')); img:release() end\n"
@@ -206,6 +223,7 @@ def test_released_image_draw_is_an_error(make_app, emu_factory):
     assert not emu._images
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_qr_encode_draws(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -220,6 +238,7 @@ def test_qr_encode_draws(make_app, emu_factory):
     assert black(shot, 16, 16) and not black(shot, 36, 2)
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_qr_is_standard_size_without_border(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -230,6 +249,7 @@ def test_qr_is_standard_size_without_border(make_app, emu_factory):
     assert emu.has_text("21x21")
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_qr_too_long(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -240,6 +260,7 @@ def test_qr_too_long(make_app, emu_factory):
     assert emu.has_text("nil invalid_argument")
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_layer_draw(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -253,6 +274,7 @@ def test_layer_draw(make_app, emu_factory):
     assert emu.has_text("40x30")
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_layer_accumulates_and_released(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -268,6 +290,7 @@ def test_layer_accumulates_and_released(make_app, emu_factory):
 
 
 @pytest.mark.allow_errors
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_released_layer_draw_is_an_error(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -278,11 +301,13 @@ def test_released_layer_draw_is_an_error(make_app, emu_factory):
 
 
 @pytest.mark.allow_errors
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_dot_call_is_an_error(make_app, emu_factory):
     emu = emu_factory(make_app("function on_load(c) c.dialog.toast('x') end\n"))
     assert emu.errors and "colon" in emu.errors[0]
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_edit_close_inside_on_change_stops_feeding(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -299,6 +324,7 @@ def test_edit_close_inside_on_change_stops_feeding(make_app, emu_factory):
     assert emu.pending is None and emu.has_text("a,ab no")
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 4")
 def test_no_ttf_font_warns_once(make_app, emu_factory, monkeypatch):
     from inkemu import fonts
 

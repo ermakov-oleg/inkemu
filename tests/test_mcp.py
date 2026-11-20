@@ -4,6 +4,8 @@ import os
 import signal
 from pathlib import Path
 
+import pytest
+from conftest import IMPL
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
@@ -44,6 +46,7 @@ async def _scenario(state_root: Path):
         assert stopped["ok"]
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 10")
 def test_mcp_lists_tools_and_screenshot(tmp_path):
     try:
         asyncio.run(asyncio.wait_for(_scenario(tmp_path), 90))

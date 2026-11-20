@@ -530,6 +530,11 @@ impl Core {
         with(&self.st, |s| s.paused = false);
     }
 
+    /// The window and the daemon freeze the clock with this; only `status()` reports it.
+    pub fn set_paused(&mut self, paused: bool) {
+        with(&self.st, |s| s.paused = paused);
+    }
+
     // ---- inspection ----------------------------------------------------------------------------
 
     pub fn status(&self) -> Status {

@@ -200,6 +200,9 @@ impl Session {
         fn lock(&mut self);
         fn unlock(&mut self);
         fn resume(&mut self);
+        fn set_paused(&mut self, paused: bool);
+        fn set_locale(&mut self, locale: &str);
+        fn log_line(&mut self, msg: &str);
         fn lua_exec(&mut self, code: &str) -> Result<(), String>;
         fn lua_eval(&mut self, code: &str) -> Result<serde_json::Value, String>;
     }

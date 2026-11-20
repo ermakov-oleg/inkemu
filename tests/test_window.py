@@ -6,10 +6,13 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from conftest import IMPL
 
 tk = pytest.importorskip("tkinter")
 
 from inkemu import daemon, window  # noqa: E402
+
+pytestmark = pytest.mark.skipif(IMPL == "rust", reason="stage1: task 10")
 
 HELLO = Path(__file__).resolve().parent.parent / "examples" / "hello"
 

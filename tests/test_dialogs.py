@@ -1,4 +1,5 @@
 import pytest
+from conftest import IMPL
 
 from inkemu import daemon
 
@@ -15,6 +16,7 @@ def words(emu) -> list[str]:
     return [t["text"] for t in emu.texts()]
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_pending_confirm_is_drawn_and_listed(make_app, emu_factory):
     emu = emu_factory(make_app(CONFIRM))
     plain = emu.canvas.render()
@@ -25,11 +27,13 @@ def test_pending_confirm_is_drawn_and_listed(make_app, emu_factory):
     assert emu.status()["pending"] == {"kind": "confirm", "title": "Delete?", "text": "All notes go"}
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_window_can_ask_for_the_frame_without_the_dialog(make_app, emu_factory):
     emu = emu_factory(make_app(CONFIRM))
     assert emu.shot(dialog=False).tobytes() == emu.canvas.render().tobytes()
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_input_does_not_reach_the_app_while_a_dialog_is_open(make_app, emu_factory):
     emu = emu_factory(make_app(CONFIRM))
     emu.tap(10, 10)
@@ -44,6 +48,7 @@ def test_input_does_not_reach_the_app_while_a_dialog_is_open(make_app, emu_facto
 
 
 @pytest.mark.parametrize("label, res", [("Yes", "true"), ("No", "false")])
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_tap_text_on_dialog_button_answers(make_app, emu_factory, label, res):
     emu = emu_factory(make_app(CONFIRM))
     t0 = emu.clock.ms
@@ -52,6 +57,7 @@ def test_tap_text_on_dialog_button_answers(make_app, emu_factory, label, res):
     assert emu.clock.ms - t0 == 350  # one input, not two
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_text_dialog_plate_shows_field_and_buttons(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -65,6 +71,7 @@ def test_text_dialog_plate_shows_field_and_buttons(make_app, emu_factory):
     assert emu.has_text("got Ann") and emu.pending is None
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_edit_dialog_cancel_button(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -78,6 +85,7 @@ def test_edit_dialog_cancel_button(make_app, emu_factory):
     assert emu.has_text("ended cancel")
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_leave_dialog_is_drawn(make_app, emu_factory):
     emu = emu_factory(
         make_app("function on_input(c, ev) return false end\nfunction on_draw(c, g) g:text(0, 0, 'app') end\n")
@@ -88,6 +96,7 @@ def test_leave_dialog_is_drawn(make_app, emu_factory):
     assert emu.pending is None and emu.status()["running"]
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_daemon_texts_show_the_dialog(make_app, emu_factory):
     emu = emu_factory(make_app(CONFIRM))
     r = daemon.execute(emu, "tap-text", {"text": "taps 0 res none"})

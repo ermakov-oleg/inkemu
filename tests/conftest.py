@@ -1,10 +1,13 @@
 import json
+import os
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 from inkemu import Emu
+
+IMPL = os.environ.get("INKEMU_IMPL", "python")
 
 
 def pytest_configure(config):

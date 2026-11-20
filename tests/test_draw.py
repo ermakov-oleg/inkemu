@@ -1,9 +1,12 @@
 import pytest
+from conftest import IMPL
 from lupa import LuaError
 
 from inkemu.draw import Canvas
 from inkemu.fonts import Fonts
 from inkemu.lua_env import make_object, new_runtime
+
+pytestmark = pytest.mark.skipif(IMPL == "rust", reason="stage1: task 4")
 
 
 @pytest.fixture
@@ -138,6 +141,7 @@ def test_begin_frame_resets(env):
     assert [t["text"] for t in env[2].texts()] == ["b"]
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 3")
 def test_sandbox():
     L = new_runtime()
     for expr in ("io", "os", "dofile", "loadfile", "collectgarbage", "package.loadlib", "package.cpath", "python"):
@@ -154,6 +158,7 @@ def test_sandbox():
     assert L.eval("select('#', load(string.dump(function() end)))") == 2  # nil, message: binary chunks refused
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 3")
 def test_make_object_colon_check():
     L = new_runtime()
     obj = make_object(L, "clock", {"millis": lambda: 42}, {"tz": "UTC"})
@@ -164,6 +169,7 @@ def test_make_object_colon_check():
     assert "bad argument #2 to 'millis' (call ctx.clock:millis with a colon)" in str(e.value)
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 3")
 def test_colon_check_cannot_be_spoofed():
     L = new_runtime()
     L.globals().obj = make_object(L, "clock", {"millis": lambda: 1})

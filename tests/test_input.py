@@ -1,4 +1,5 @@
 import pytest
+from conftest import IMPL
 
 LOGGER = """
 function on_load(ctx) ctx.state.ev = {} end
@@ -27,11 +28,13 @@ def emu(make_app, emu_factory):
     return emu_factory(make_app(LOGGER))
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_tap_sequence(emu):
     emu.tap(10, 10)
     assert events(emu) == ["pointer:down::", "pointer:up:tap:"]
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_swipe_left(emu):
     emu.swipe("left")
     ev = events(emu)
@@ -39,21 +42,25 @@ def test_swipe_left(emu):
 
 
 @pytest.mark.parametrize("direction", ["left", "right", "up", "down"])
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_swipe_directions(emu, direction):
     emu.swipe(direction, distance=100)
     assert events(emu)[-1] == f"pointer:up:swipe_{direction}:"
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_swipe_bad_direction(emu):
     with pytest.raises(ValueError):
         emu.swipe("diagonal")
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_hold_then_long(emu):
     emu.hold(5, 5, ms=800)
     assert events(emu)[-2:] == ["pointer:hold::", "pointer:up:long:"]
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_hold_event_arrives_at_600ms(make_app, emu_factory):
     src = LOGGER.replace("e.type ..", "e.time_ms .. ':' .. e.type ..")
     emu = emu_factory(make_app(src))
@@ -63,22 +70,26 @@ def test_hold_event_arrives_at_600ms(make_app, emu_factory):
     assert int(ev[-2].split(":")[0]) - int(ev[0].split(":")[0]) == 600
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_two_taps_are_not_double(emu):
     emu.tap(5, 5)
     emu.tap(5, 5)
     assert "pointer:up:double_tap:" not in events(emu)
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_double_tap(emu):
     emu.double_tap(5, 5)
     assert events(emu)[-1] == "pointer:up:double_tap:"
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_key_down_up(emu):
     emu.key("up")
     assert events(emu)[-2:] == ["key:down::up", "key:up::up"]
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_every_input_advances_350ms(emu):
     t0 = emu.clock.ms
     emu.tap(1, 1)
@@ -89,6 +100,7 @@ def test_every_input_advances_350ms(emu):
     assert emu.clock.ms - t0 >= 5 * 350
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_pointer_classifies_on_up_with_virtual_time(emu):
     emu.pointer("down", 100, 100)
     emu.wait(700)
@@ -96,6 +108,7 @@ def test_pointer_classifies_on_up_with_virtual_time(emu):
     assert events(emu)[-1] == "pointer:up:long:"
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_pointer_small_move_is_tap_and_down_pos_kept(emu):
     emu.pointer("down", 100, 100)
     emu.pointer("move", 110, 100)
@@ -104,22 +117,26 @@ def test_pointer_small_move_is_tap_and_down_pos_kept(emu):
     assert (last(emu, "down_x"), last(emu, "x")) == (100, 110)
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_pointer_swipe_dominant_axis(emu):
     emu.pointer("down", 100, 100)
     emu.pointer("up", 190, 130)
     assert events(emu)[-1] == "pointer:up:swipe_right:"
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_pointer_up_without_down_is_ignored(emu):
     emu.pointer("up", 1, 1)
     assert events(emu) == []
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_pointer_unknown_phase(emu):
     with pytest.raises(ValueError):
         emu.pointer("wiggle", 1, 1)
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_drag_classified_by_thresholds(emu):
     emu.drag([(50, 50), (60, 50), (200, 52)], duration_ms=300)
     assert events(emu)[-1] == "pointer:up:swipe_right:"
@@ -127,11 +144,13 @@ def test_drag_classified_by_thresholds(emu):
     assert events(emu)[-1] == "pointer:up:tap:"
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_drag_needs_two_points(emu):
     with pytest.raises(ValueError):
         emu.drag([(1, 1)])
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_tap_text_missing_lists_texts(emu):
     with pytest.raises(LookupError, match="Taps: 0"):
         emu.tap_text("Nope")
@@ -150,6 +169,7 @@ end
 """
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_tap_text_picks_last_drawn(make_app, emu_factory):
     emu = emu_factory(make_app(PICK))
     emu.tap_text("Go")
@@ -157,12 +177,14 @@ def test_tap_text_picks_last_drawn(make_app, emu_factory):
     assert 590 < y < 640
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_tap_text_exact_beats_substring(make_app, emu_factory):
     emu = emu_factory(make_app(PICK))
     emu.tap_text("Go on")
     assert emu.L.eval("function() return ctx.state.y end")() < 340
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_tap_text_substring_fallback(make_app, emu_factory):
     emu = emu_factory(make_app(PICK))
     emu.tap_text("again")

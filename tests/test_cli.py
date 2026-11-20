@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
+from conftest import IMPL
 
 from inkemu.cli import main
 
@@ -27,6 +28,7 @@ def run(tmp_path, app, steps, *extra):
     )
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 10")
 def test_run_steps_hello(tmp_path):
     assert run(tmp_path, HELLO, "tap-text 'Tap me'; shot") == 0
     out = tmp_path / "out"
@@ -35,6 +37,7 @@ def test_run_steps_hello(tmp_path):
     assert (out / "001.png").exists()
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 10")
 def test_shot_with_path_and_numbering(tmp_path):
     target = tmp_path / "x" / "a.png"
     assert run(tmp_path, HELLO, f"shot; shot {target}; shot; wait 1m; swipe up; hold 10 10 700") == 0
@@ -43,17 +46,20 @@ def test_shot_with_path_and_numbering(tmp_path):
 
 
 @pytest.mark.allow_errors
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 10")
 def test_run_exit_code_on_lua_error(tmp_path, make_app):
     app = make_app("local x = = 1")
     assert run(tmp_path, app, "shot") == 1
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 10")
 def test_unknown_step_is_usage_error(tmp_path, capsys):
     assert run(tmp_path, HELLO, "jump 1") == 2
     assert "tap-text TEXT" in capsys.readouterr().err
     assert not (tmp_path / "out" / "texts.json").exists()
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 10")
 def test_bad_arguments_are_usage_errors(tmp_path):
     assert run(tmp_path, HELLO, "tap 1") == 2
     assert run(tmp_path, HELLO, "tap a b") == 2
@@ -61,12 +67,14 @@ def test_bad_arguments_are_usage_errors(tmp_path):
     assert run(tmp_path, HELLO, "answer maybe") == 2
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 10")
 def test_missing_text_fails_step_with_code_1(tmp_path, capsys):
     assert run(tmp_path, HELLO, "tap-text Nope; shot") == 1
     assert "Nope" in capsys.readouterr().err
     assert (tmp_path / "out" / "texts.json").exists()
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 10")
 def test_empty_and_stray_steps(tmp_path, capsys):
     assert run(tmp_path, HELLO, "") == 2
     assert run(tmp_path, HELLO, " ; ") == 2
@@ -75,6 +83,7 @@ def test_empty_and_stray_steps(tmp_path, capsys):
     assert (tmp_path / "out" / "001.png").exists()
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 10")
 def test_shot_write_error_is_exit_1(tmp_path, capsys):
     blocker = tmp_path / "f"
     blocker.write_text("x")
@@ -89,6 +98,7 @@ def test_client_without_daemon_is_exit_2(tmp_path, monkeypatch, capsys):
     assert main(["tap", "1"]) == 2
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_client_verbs_against_daemon(tmp_path, monkeypatch, capsys, emu_factory):
     import threading
     import time
@@ -120,6 +130,7 @@ def test_client_verbs_against_daemon(tmp_path, monkeypatch, capsys, emu_factory)
     assert daemon.read_info(tmp_path / "root") is None
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 10")
 def test_run_prints_texts_log_state_and_shots_in_order(tmp_path, capsys):
     assert run(tmp_path, HELLO, "tap-text 'Tap me'; texts; shot; state; log") == 0
     out = capsys.readouterr().out
@@ -129,6 +140,7 @@ def test_run_prints_texts_log_state_and_shots_in_order(tmp_path, capsys):
     assert any(line.endswith(" Taps: 1") and "," in line for line in out.splitlines())
 
 
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 10")
 def test_window_without_display_is_clean_exit_1(tmp_path, monkeypatch, capsys):
     tk = pytest.importorskip("tkinter")
     from inkemu import daemon, window
