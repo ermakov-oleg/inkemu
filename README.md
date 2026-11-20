@@ -183,6 +183,7 @@ Drawing (`g`): `clear`, `rect`, `round_rect`, `line`, `circle`, `arc`, `polygon`
 ```bash
 uv sync
 uv run pytest
+uv run ruff check && uv run ruff format --check
 uv run python docs/make_images.py    # regenerate the README screenshots
 ```
 
