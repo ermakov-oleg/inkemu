@@ -1,6 +1,7 @@
 import json
 import os
 import queue
+import socketserver
 import threading
 import time
 import urllib.error
@@ -244,6 +245,11 @@ def post_command(port: int, cmd: str, args: dict | None = None) -> dict:
 class _Server(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = False
+
+    def server_bind(self) -> None:
+        # HTTPServer.server_bind calls socket.getfqdn(), a reverse DNS lookup that takes seconds on some macOS hosts
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = HOST, self.server_address[1]
 
 
 class Daemon:
