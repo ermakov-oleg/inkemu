@@ -121,7 +121,7 @@ def test_stale_daemon_json_ignored(tmp_path):
 
 def test_daemon_json_live_roundtrip(tmp_path):
     write_info(tmp_path, 1234, "hello")
-    assert read_info(tmp_path) == {"port": 1234, "pid": os.getpid(), "app": "hello"}
+    assert read_info(tmp_path) == {"port": 1234, "pid": os.getpid(), "app": "hello", "window": False}
     daemon.remove_info(tmp_path)
     assert read_info(tmp_path) is None
 
@@ -201,3 +201,48 @@ def test_other_methods_and_paths_rejected_cleanly(emu_factory):
         assert d.queue.empty()
     finally:
         d.close()
+
+
+def test_daemon_json_records_window_mode(tmp_path):
+    write_info(tmp_path, 1234, "hello", window=True)
+    assert read_info(tmp_path)["window"] is True
+    daemon.remove_info(tmp_path)
+
+
+@pytest.fixture
+def foreign_server():
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    class H(BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.rfile.read(int(self.headers["Content-Length"]))
+            self.send_response(502)
+            self.send_header("Content-Type", "text/html")
+            self.end_headers()
+            self.wfile.write(b"<html>bad gateway</html>")
+
+        def log_message(self, *a):
+            pass
+
+    srv = HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield srv.server_port
+    srv.shutdown()
+    srv.server_close()
+
+
+def test_post_command_non_json_error_is_clean(foreign_server, capsys):
+    with pytest.raises(daemon.DaemonUnreachable, match="did not answer like an inkemu daemon"):
+        daemon.post_command(foreign_server, "state")
+    from inkemu.cli import main
+    assert main(["state", "--port", str(foreign_server)]) == 2
+    assert "did not answer like an inkemu daemon" in capsys.readouterr().err
+
+
+def test_post_command_nobody_listening():
+    import socket
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    with pytest.raises(daemon.DaemonUnreachable, match="cannot reach the daemon"):
+        daemon.post_command(port, "state")

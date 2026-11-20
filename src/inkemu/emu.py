@@ -1,5 +1,4 @@
 import json
-import os
 import random
 import re
 import shutil
@@ -15,6 +14,7 @@ from .clock import Scheduler, Timer, VirtualClock, parse_duration
 from .draw import Canvas
 from .fonts import Fonts
 from .lua_env import load_chunk, make_object, new_runtime, protected_call
+from .paths import app_id_of, state_root
 
 NET_MODES = ("replay", "record", "live")
 PERMISSIONS = ("net", "reader", "ble")
@@ -118,12 +118,8 @@ class Emu:
         self._hold_sent = False
 
         self.manifest, problem = self._read_manifest()
-        app_id = self.manifest.get("app_id")
-        # app_id comes from an untrusted manifest and names directories we may wipe
-        if not (isinstance(app_id, str) and re.fullmatch(r"[A-Za-z]+", app_id)):
-            app_id = re.sub(r"[^A-Za-z]", "", self.app_dir.name) or "app"
-        self.app_id = app_id
-        root = Path(os.environ.get("INKEMU_STATE_ROOT", ".emu")).absolute()
+        self.app_id = app_id_of(self.app_dir, self.manifest)
+        root = state_root()
         self.state_dir = Path(state_dir) if state_dir else root / self.app_id
         self.fixtures_dir = Path(fixtures_dir) if fixtures_dir else Path("tests/fixtures").absolute() / self.app_id
         self.secrets_file = Path(secrets_file) if secrets_file else root / "secrets.json"
