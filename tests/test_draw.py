@@ -33,7 +33,10 @@ def test_text_center_align_box(env):
 
 
 def test_text_valign_and_right(env):
-    run(env, "G:text(100, 100, 'ab', {align='right', valign='middle'}); G:text(10, 100, 'x', {valign='bottom', font=FONTS.small})")
+    run(
+        env,
+        "G:text(100, 100, 'ab', {align='right', valign='middle'}); G:text(10, 100, 'x', {valign='bottom', font=FONTS.small})",
+    )
     a, b = env[2].texts()
     assert a["x"] + a["w"] == 100 and a["y"] == 100 - 12
     assert b["y"] == 100 - 20
@@ -80,11 +83,14 @@ def test_pattern_rect_is_checker(env):
 
 
 def test_shapes_do_not_crash(env):
-    run(env, """
+    run(
+        env,
+        """
       G:round_rect(5, 5, 100, 40, 8, {fill=true}); G:circle(50, 50, 10); G:arc(60, 60, 20, 180, 360, {line_width=3})
       G:polygon({10,10, 50,10, 30,40}, {fill=true}); G:polyline({1,1, 20,30, 40,5}, {width=2})
       G:line(0, 0, 100, 100, {line_width=2})
-    """)
+    """,
+    )
     assert env[2].render().getbbox() is not None
 
 
@@ -113,6 +119,7 @@ def test_resize(env):
 
 def test_image_hook(env):
     from PIL import Image
+
     _, _, canvas, _ = env
     canvas.image_source = lambda obj: Image.new("1", (4, 4), 0)
     run(env, "G:image({}, 20, 20, {w=8, h=8})")
@@ -181,8 +188,11 @@ def test_frame_with_bad_command_does_not_crash(env):
 
 
 def test_runtime_is_collectable():
-    import gc, weakref
+    import gc
+    import weakref
+
     from inkemu import lua_env
+
     L = new_runtime()
     canvas = Canvas(L, Fonts())
     make_object(L, "x", {"f": lambda: 1})

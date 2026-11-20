@@ -1,4 +1,5 @@
 """Regenerate the README screenshots: `uv run python docs/make_images.py`."""
+
 import tempfile
 from pathlib import Path
 
@@ -18,8 +19,12 @@ def save(emu: Emu, name: str) -> None:
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
-        emu = Emu(ROOT / "examples" / "hello", state_dir=Path(tmp) / "state", fixtures_dir=Path(tmp) / "fx",
-                  start_time="2026-11-20T09:41:00")
+        emu = Emu(
+            ROOT / "examples" / "hello",
+            state_dir=Path(tmp) / "state",
+            fixtures_dir=Path(tmp) / "fx",
+            start_time="2026-11-20T09:41:00",
+        )
         for _ in range(3):
             emu.tap_text("Tap me")
         save(emu, "hello.png")

@@ -1,4 +1,5 @@
 """Basic ctx members: api, state, timers, clock, device, fonts. Installed by Emu on every boot."""
+
 import base64
 import binascii
 import hashlib
@@ -8,10 +9,11 @@ import re
 import shutil
 import uuid
 import zlib
+from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 from urllib.parse import quote, unquote_to_bytes
-from typing import TYPE_CHECKING, Any, Callable
 
 from lupa import lua55
 
@@ -26,8 +28,16 @@ _MAX_DEPTH = 64
 MAX_BYTES, MAX_FILES = 134217728, 512
 _ESCAPED = re.compile(r"\\x([0-9a-f]{2})")
 _BAD_NAME = re.compile(r"[\s/\\\x00-\x1f\x7f]")
-CAPABILITIES = {"dialog": True, "frontlight": True, "image_decode": True, "image_transform": True,
-                "pattern": True, "reader": True, "ui": False, "ttf": False}
+CAPABILITIES = {
+    "dialog": True,
+    "frontlight": True,
+    "image_decode": True,
+    "image_transform": True,
+    "pattern": True,
+    "reader": True,
+    "ui": False,
+    "ttf": False,
+}
 # Lua-side shim: strings with bytes >= 0x80 would fail the utf-8 decode on the way into Python,
 # so they travel as \xHH escapes and `raw()` restores them.
 _ENTRIES = r"""
@@ -75,7 +85,9 @@ def check_arg(fn: str, i: int, v: Any, expected: str) -> None:
         raise TypeError(f"bad argument #{i} to '{fn}' ({expected} expected, got {lua_typename(v)})")
 
 
-def lua_to_py(v: Any, warn: Callable[[str], None], path: str = "state", null: Any = None, L=None, _seen: tuple = ()) -> Any:
+def lua_to_py(
+    v: Any, warn: Callable[[str], None], path: str = "state", null: Any = None, L=None, _seen: tuple = ()
+) -> Any:
     """Lua value -> JSON-ready Python: 1..n tables become lists, other tables dicts with string keys.
     Functions, userdata, NaN/inf, cycles and too-deep nesting are skipped with a warning naming the key path.
     Pass the runtime `L` to detect cycles and the `null` sentinel (lupa wrappers only compare by rawequal)."""
@@ -125,7 +137,7 @@ def py_to_lua(L, v: Any, null: Any = None, _depth: int = 0) -> Any:
     """JSON-style Python value -> Lua; JSON null becomes `null` (nil when None, so keys vanish)."""
     if v is None:
         return null
-    if isinstance(v, int) and not isinstance(v, bool) and not -(2 ** 63) <= v < 2 ** 63:
+    if isinstance(v, int) and not isinstance(v, bool) and not -(2**63) <= v < 2**63:
         return float(v)
     if not isinstance(v, (dict, list)):
         return v
@@ -201,15 +213,20 @@ def install(emu: "Emu") -> None:
         check_arg("defer_full_refresh", 1, n, "number")
         emu.full_refresh_deferred = int(n)
 
-    add_methods(L, ctx, "ctx", {
-        "invalidate": lambda *a: emu.invalidate(),
-        "defer_full_refresh": defer_full_refresh,
-        "after": after,
-        "set_tick": set_tick,
-        "quit": lambda *a: emu._request_quit(),
-        "log": lambda *a: emu._log_line("[app] " + " ".join(_fmt(x) for x in a)),
-        "save_state": lambda *a: emu.save_state(),
-    })
+    add_methods(
+        L,
+        ctx,
+        "ctx",
+        {
+            "invalidate": lambda *a: emu.invalidate(),
+            "defer_full_refresh": defer_full_refresh,
+            "after": after,
+            "set_tick": set_tick,
+            "quit": lambda *a: emu._request_quit(),
+            "log": lambda *a: emu._log_line("[app] " + " ".join(_fmt(x) for x in a)),
+            "save_state": lambda *a: emu.save_state(),
+        },
+    )
     major, minor = emu.firmware_api
     ctx.api = L.table_from({"major": major, "minor": minor})
     ctx.state = py_to_lua(L, load_state(emu.state_dir / "state.json", emu._warn))
@@ -232,32 +249,55 @@ def _install_clock(emu: "Emu") -> None:
         dt = emu.clock.now()
         epoch = int(dt.timestamp())
         offset = int(dt.astimezone().utcoffset().total_seconds())
-        return L.table_from({
-            "year": dt.year, "month": dt.month, "day": dt.day, "hour": dt.hour, "minute": dt.minute,
-            "second": dt.second, "wday": dt.isoweekday() % 7 + 1, "yday": dt.timetuple().tm_yday,
-            "epoch_sec": epoch, "local_sec": epoch + offset, "valid": True, "hour12": False, "date_order": "dmy",
-        })
+        return L.table_from(
+            {
+                "year": dt.year,
+                "month": dt.month,
+                "day": dt.day,
+                "hour": dt.hour,
+                "minute": dt.minute,
+                "second": dt.second,
+                "wday": dt.isoweekday() % 7 + 1,
+                "yday": dt.timetuple().tm_yday,
+                "epoch_sec": epoch,
+                "local_sec": epoch + offset,
+                "valid": True,
+                "hour12": False,
+                "date_order": "dmy",
+            }
+        )
 
     emu._ctx.clock = make_object(L, "clock", {"now": now, "millis": lambda *a: emu.clock.ms})
 
 
 def _install_device(emu: "Emu") -> None:
     major, minor = emu.firmware_api
-    emu._ctx.device = make_object(emu.L, "device", {"battery": lambda *a: emu.L.table_from(dict(emu.battery))}, fields={
-        "firmware": f"inkemu (API {major}.{minor})",
-        "model": "X4 Pro",
-        "id_for_app": hashlib.sha256(f"inkemu:{emu.app_id}".encode()).hexdigest()[:16],
-    })
+    emu._ctx.device = make_object(
+        emu.L,
+        "device",
+        {"battery": lambda *a: emu.L.table_from(dict(emu.battery))},
+        fields={
+            "firmware": f"inkemu (API {major}.{minor})",
+            "model": "X4 Pro",
+            "id_for_app": hashlib.sha256(f"inkemu:{emu.app_id}".encode()).hexdigest()[:16],
+        },
+    )
 
 
 def _install_fonts(emu: "Emu") -> None:
     L, fonts = emu.L, emu.fonts
     handles = {}
     for name, lh in LINE_HEIGHTS.items():
+
         def measure(s=None, *_, _name=name):
             return fonts.measure(_name, _fmt(s))
-        handles[name] = make_object(L, f"fonts.{name}", {"measure": measure},
-                                    fields={"name": name, "line_height": lh, "ascent": fonts.pil(name).getmetrics()[0]})
+
+        handles[name] = make_object(
+            L,
+            f"fonts.{name}",
+            {"measure": measure},
+            fields={"name": name, "line_height": lh, "ascent": fonts.pil(name).getmetrics()[0]},
+        )
 
     def size(px=None, *_):
         check_arg("size", 1, px, "number")
@@ -374,11 +414,24 @@ def _install_files(emu: "Emu") -> None:
 
     def usage(*_):
         es = entries()
-        return emu.L.table_from({"used_bytes": sum(e.stat().st_size for e in es), "used_files": len(es),
-                                 "max_bytes": MAX_BYTES, "max_files": MAX_FILES})
+        return emu.L.table_from(
+            {
+                "used_bytes": sum(e.stat().st_size for e in es),
+                "used_files": len(es),
+                "max_bytes": MAX_BYTES,
+                "max_files": MAX_FILES,
+            }
+        )
 
-    methods = {"write": write, "read": read, "exists": exists, "size": size, "remove": remove, "usage": usage,
-               "list": lambda *a: emu.L.table_from(sorted(e.name for e in entries()))}
+    methods = {
+        "write": write,
+        "read": read,
+        "exists": exists,
+        "size": size,
+        "remove": remove,
+        "usage": usage,
+        "list": lambda *a: emu.L.table_from(sorted(e.name for e in entries())),
+    }
     emu._ctx.storage = _binary_object(emu.L, "storage", methods)
     emu._ctx.files = _binary_object(emu.L, "files", methods, {"path": f"/AppFiles/{emu.app_id}"})
 
@@ -414,8 +467,9 @@ def _install_package(emu: "Emu") -> None:
             buf.seek(int(pos))
             return True
 
-        return make_object(L, "text", {"read_line": read_line, "seek": seek, "tell": lambda *a: buf.tell(),
-                                       "close": lambda *a: True})
+        return make_object(
+            L, "text", {"read_line": read_line, "seek": seek, "tell": lambda *a: buf.tell(), "close": lambda *a: True}
+        )
 
     def image(name=None, *_):
         p = find(name)
@@ -426,11 +480,17 @@ def _install_package(emu: "Emu") -> None:
             return None, "unsupported"
         return decoder["decode"](decoder, p.read_bytes())
 
-    emu._ctx.package = _binary_object(L, "package", {
-        "read": read, "open_text": open_text, "image": image,
-        "exists": lambda name=None, *_: not isinstance(find(name), tuple),
-        "size": lambda name=None, *_: (lambda p: p if isinstance(p, tuple) else p.stat().st_size)(find(name)),
-    })
+    emu._ctx.package = _binary_object(
+        L,
+        "package",
+        {
+            "read": read,
+            "open_text": open_text,
+            "image": image,
+            "exists": lambda name=None, *_: not isinstance(find(name), tuple),
+            "size": lambda name=None, *_: (lambda p: p if isinstance(p, tuple) else p.stat().st_size)(find(name)),
+        },
+    )
 
 
 def _install_utils(emu: "Emu") -> None:
@@ -461,6 +521,7 @@ def _install_utils(emu: "Emu") -> None:
                 return f(_bytes_arg(fn, 1, s))
             except bad:
                 return None, "invalid_argument"
+
         return run
 
     def decompress(b: bytes) -> bytes:
@@ -476,18 +537,32 @@ def _install_utils(emu: "Emu") -> None:
 
     ctx = emu._ctx
     ctx.json = _binary_object(L, "json", {"decode": decode, "encode": encode}, {"null": null})
-    ctx.base64 = _binary_object(L, "base64", {
-        "encode": codec("encode", lambda b: base64.b64encode(b).decode()),
-        "decode": codec("decode", lambda b: base64.b64decode(b, validate=True), (ValueError, binascii.Error))})
-    ctx.hex = _binary_object(L, "hex", {
-        "encode": codec("encode", lambda b: b.hex()),
-        "decode": codec("decode", unhex, (ValueError, binascii.Error))})
-    ctx.hash = _binary_object(L, "hash", {
-        "sha1": codec("sha1", lambda b: hashlib.sha1(b).hexdigest()),
-        "sha256": codec("sha256", lambda b: hashlib.sha256(b).hexdigest())})
-    ctx.url = _binary_object(L, "url", {
-        "encode": codec("encode", lambda b: quote(b, safe="-_.~")),
-        "decode": codec("decode", unquote_to_bytes)})
+    ctx.base64 = _binary_object(
+        L,
+        "base64",
+        {
+            "encode": codec("encode", lambda b: base64.b64encode(b).decode()),
+            "decode": codec("decode", lambda b: base64.b64decode(b, validate=True), (ValueError, binascii.Error)),
+        },
+    )
+    ctx.hex = _binary_object(
+        L,
+        "hex",
+        {"encode": codec("encode", lambda b: b.hex()), "decode": codec("decode", unhex, (ValueError, binascii.Error))},
+    )
+    ctx.hash = _binary_object(
+        L,
+        "hash",
+        {
+            "sha1": codec("sha1", lambda b: hashlib.sha1(b).hexdigest()),
+            "sha256": codec("sha256", lambda b: hashlib.sha256(b).hexdigest()),
+        },
+    )
+    ctx.url = _binary_object(
+        L,
+        "url",
+        {"encode": codec("encode", lambda b: quote(b, safe="-_.~")), "decode": codec("decode", unquote_to_bytes)},
+    )
     ctx.zlib = _binary_object(L, "zlib", {"decompress": codec("decompress", decompress, (zlib.error,))})
     ctx.random = make_object(L, "random", {"uuid": lambda *a: str(uuid.UUID(int=emu.rng.getrandbits(128), version=4))})
 
@@ -503,8 +578,9 @@ def _install_screen(emu: "Emu") -> None:
     def orientation() -> str:
         return "landscape" if emu.canvas.width > emu.canvas.height else "portrait"
 
-    screen = make_object(L, "screen", {}, {"width": emu.canvas.width, "height": emu.canvas.height,
-                                           "orientation": orientation()})
+    screen = make_object(
+        L, "screen", {}, {"width": emu.canvas.width, "height": emu.canvas.height, "orientation": orientation()}
+    )
 
     def set_orientation(name=None, *_):
         if name not in sizes:
@@ -525,6 +601,7 @@ def _install_stubs(emu: "Emu") -> None:
     def count(kind: str):
         def run(*_):
             emu.refresh_counts[kind] += 1
+
         return run
 
     def set_light(n=None, *_):
@@ -541,8 +618,11 @@ def _install_stubs(emu: "Emu") -> None:
     ctx.display = make_object(L, "display", {"request_refresh": count("request"), "full_refresh": count("full")})
     ctx.frontlight = make_object(L, "frontlight", {"get": lambda *a: emu.frontlight, "set": set_light})
     ctx.system = make_object(L, "system", {"can_open": lambda *a: False, "open": open_url})
-    ctx.perf = make_object(L, "perf", {"info": lambda *a: L.table_from(
-        {"free_heap": 1048576, "min_free_heap": 524288, "uptime_ms": emu.clock.ms})})
+    ctx.perf = make_object(
+        L,
+        "perf",
+        {"info": lambda *a: L.table_from({"free_heap": 1048576, "min_free_heap": 524288, "uptime_ms": emu.clock.ms})},
+    )
     ctx.gc = make_object(L, "gc", {"collect": lambda *a: None, "count": lambda *a: 256.0})
     ctx.budget = make_object(L, "budget", {"extend": lambda *a: True})
 
@@ -561,8 +641,16 @@ def _install_reader(emu: "Emu") -> None:
         def run(*_):
             v = data().get(key, default)
             return None if v is None else py_to_lua(L, v)
+
         return run
 
-    emu._ctx.reader = make_object(L, "reader", {
-        "summary": part("summary", {"streak": 0, "books": 0, "seconds": 0}),
-        "books": part("books", []), "all_books": part("all_books", []), "current": part("current", None)})
+    emu._ctx.reader = make_object(
+        L,
+        "reader",
+        {
+            "summary": part("summary", {"streak": 0, "books": 0, "seconds": 0}),
+            "books": part("books", []),
+            "all_books": part("all_books", []),
+            "current": part("current", None),
+        },
+    )

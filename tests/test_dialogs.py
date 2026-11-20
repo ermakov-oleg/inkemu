@@ -2,11 +2,13 @@ import pytest
 
 from inkemu import daemon
 
-CONFIRM = ("taps = 0\nres = 'none'\n"
-           "function on_load(c) c.dialog:confirm({title='Delete?', text='All notes go'}, "
-           "function(c, ok) res = tostring(ok); c:invalidate() end) end\n"
-           "function on_input(c, ev) if ev.phase == 'up' then taps = taps + 1 end c:invalidate() return true end\n"
-           "function on_draw(c, g) g:clear(0); g:text(0, 0, 'taps ' .. taps .. ' res ' .. res) end\n")
+CONFIRM = (
+    "taps = 0\nres = 'none'\n"
+    "function on_load(c) c.dialog:confirm({title='Delete?', text='All notes go'}, "
+    "function(c, ok) res = tostring(ok); c:invalidate() end) end\n"
+    "function on_input(c, ev) if ev.phase == 'up' then taps = taps + 1 end c:invalidate() return true end\n"
+    "function on_draw(c, g) g:clear(0); g:text(0, 0, 'taps ' .. taps .. ' res ' .. res) end\n"
+)
 
 
 def words(emu) -> list[str]:
@@ -51,28 +53,35 @@ def test_tap_text_on_dialog_button_answers(make_app, emu_factory, label, res):
 
 
 def test_text_dialog_plate_shows_field_and_buttons(make_app, emu_factory):
-    emu = emu_factory(make_app(
-        "got = 'none'\nfunction on_load(c) c.input:text({title='Name', text='Ann'}, "
-        "function(c, s) got = s; c:invalidate() end) end\n"
-        "function on_draw(c, g) g:clear(0); g:text(0, 0, 'got ' .. got) end\n"))
+    emu = emu_factory(
+        make_app(
+            "got = 'none'\nfunction on_load(c) c.input:text({title='Name', text='Ann'}, "
+            "function(c, s) got = s; c:invalidate() end) end\n"
+            "function on_draw(c, g) g:clear(0); g:text(0, 0, 'got ' .. got) end\n"
+        )
+    )
     assert {"Name", "Ann", "OK", "Cancel"} <= set(words(emu))
     emu.tap_text("OK")
     assert emu.has_text("got Ann") and emu.pending is None
 
 
 def test_edit_dialog_cancel_button(make_app, emu_factory):
-    emu = emu_factory(make_app(
-        "ended = 'no'\nfunction on_load(c) c.input:edit({title='Note', text='', "
-        "on_end=function(c, s, why) ended = why; c:invalidate() end}) end\n"
-        "function on_draw(c, g) g:clear(0); g:text(0, 0, 'ended ' .. ended) end\n"))
+    emu = emu_factory(
+        make_app(
+            "ended = 'no'\nfunction on_load(c) c.input:edit({title='Note', text='', "
+            "on_end=function(c, s, why) ended = why; c:invalidate() end}) end\n"
+            "function on_draw(c, g) g:clear(0); g:text(0, 0, 'ended ' .. ended) end\n"
+        )
+    )
     assert {"Note", "OK", "Cancel"} <= set(words(emu)) and "" not in words(emu)
     emu.tap_text("Cancel")
     assert emu.has_text("ended cancel")
 
 
 def test_leave_dialog_is_drawn(make_app, emu_factory):
-    emu = emu_factory(make_app("function on_input(c, ev) return false end\n"
-                               "function on_draw(c, g) g:text(0, 0, 'app') end\n"))
+    emu = emu_factory(
+        make_app("function on_input(c, ev) return false end\nfunction on_draw(c, g) g:text(0, 0, 'app') end\n")
+    )
     emu.key("back")
     assert {"Leave app?", "Yes", "No"} <= set(words(emu))
     emu.tap_text("No")
