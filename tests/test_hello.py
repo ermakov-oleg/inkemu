@@ -28,3 +28,8 @@ def test_hello_clock_redraws_after_minute(emu_factory):
 def test_hello_shows_battery(emu_factory):
     emu = emu_factory(HELLO)
     assert emu.has_text("Battery 87%")
+
+
+def test_example_is_neutral_for_publishing(emu_factory):
+    assert emu_factory(HELLO).app_id == "hello"
+    assert "<you>" not in (ROOT / "README.md").read_text(encoding="utf-8")
