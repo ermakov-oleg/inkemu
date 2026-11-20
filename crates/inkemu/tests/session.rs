@@ -177,6 +177,48 @@ fn derived_state_dir_stays_under_the_root_whatever_the_app_id() {
     assert_eq!(s.state_dir(), root.join("myapp"));
     assert_eq!(s.secrets_file(), root.join("secrets.json"));
     assert!(s.fixtures_dir().ends_with("tests/fixtures/myapp"));
+
+    #[cfg(unix)]
+    {
+        let outside = tmp.path().join("outside");
+        fs::create_dir_all(&outside).unwrap();
+        fs::create_dir_all(&root).unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("linked")).unwrap();
+        let linked = tmp.path().join("linked");
+        fs::create_dir_all(&linked).unwrap();
+        fs::write(linked.join("manifest.json"), r#"{"app_id": "linked"}"#).unwrap();
+        let err = Session::open(&linked, SessionOptions::default())
+            .err()
+            .unwrap();
+        assert_eq!(
+            err,
+            format!(
+                "state dir {} is outside the state root {}",
+                root.join("linked").display(),
+                root.display()
+            )
+        );
+    }
+}
+
+#[test]
+fn a_bad_start_time_leaves_existing_state_alone() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = write_app(tmp.path(), "");
+    let state = tmp.path().join("state");
+    fs::create_dir_all(state.join("files")).unwrap();
+    fs::write(state.join("state.json"), "{}").unwrap();
+    fs::write(state.join("files/keep.txt"), "x").unwrap();
+    let r = Session::open(
+        &app,
+        SessionOptions {
+            fresh: true,
+            start_time: Some("nope".into()),
+            ..opts(tmp.path())
+        },
+    );
+    assert!(r.is_err());
+    assert!(state.join("state.json").exists() && state.join("files/keep.txt").exists());
 }
 
 #[test]

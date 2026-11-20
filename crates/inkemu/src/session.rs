@@ -73,6 +73,8 @@ impl Session {
                 py_repr_str(&opts.net)
             ));
         }
+        // parsed before anything on disk is touched, as in 0.1
+        let (start_local_ms, utc_offset_sec) = start_time(opts.start_time.as_deref())?;
         let net_mode = match opts.net.as_str() {
             "record" => NetMode::Record,
             "live" => NetMode::Live,
@@ -106,7 +108,6 @@ impl Session {
         if opts.seed_files.unwrap_or(opts.fresh) && problem.is_none() {
             state_disk::seed_files(&fixtures_dir, &state_dir);
         }
-        let (start_local_ms, utc_offset_sec) = start_time(opts.start_time.as_deref())?;
         let cfg = Config {
             start_local_ms,
             utc_offset_sec,
