@@ -4,6 +4,12 @@ from typing import Callable
 
 import pytest
 
+from inkemu import Emu
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "allow_errors: the test expects Lua errors in emu.errors")
+
 
 @pytest.fixture
 def make_app(tmp_path) -> Callable[..., Path]:
@@ -21,3 +27,21 @@ def make_app(tmp_path) -> Callable[..., Path]:
         return app
 
     return make
+
+
+@pytest.fixture
+def emu_factory(tmp_path, request) -> Callable[..., Emu]:
+    made: list[Emu] = []
+
+    def factory(app_dir: Path, **kw) -> Emu:
+        kw.setdefault("state_dir", tmp_path / "state")
+        kw.setdefault("fixtures_dir", tmp_path / "fixtures")
+        kw.setdefault("start_time", "2026-11-20T09:00:00")
+        emu = Emu(app_dir, **kw)
+        made.append(emu)
+        return emu
+
+    yield factory
+    if request.node.get_closest_marker("allow_errors") is None:
+        for emu in made:
+            assert emu.errors == [], "unexpected Lua errors:\n" + "\n".join(emu.errors)
