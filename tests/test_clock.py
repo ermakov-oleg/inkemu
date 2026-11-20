@@ -50,3 +50,20 @@ def test_periodic_timer_can_cancel_itself():
     holder["t"] = s.add(10, tick, period_ms=10)
     s.run_until(100)
     assert n == [10, 20]
+
+
+def test_scheduler_zero_delay_loop_is_cut():
+    c = VirtualClock(datetime(2026, 11, 20, 9))
+    msgs = []
+    s = Scheduler(c, on_overflow=msgs.append)
+    n = []
+
+    def again():
+        n.append(1)
+        s.add(0, again)
+
+    s.add(0, again)
+    s.add(0, lambda: None)
+    s.run_until(1000)
+    assert 9_990 <= len(n) <= 10_000 and len(msgs) == 1 and "same virtual instant" in msgs[0]
+    assert c.ms == 1000 and s.next_due() is None

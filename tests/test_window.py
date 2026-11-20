@@ -7,7 +7,7 @@ import pytest
 
 tk = pytest.importorskip("tkinter")
 
-from inkemu import window  # noqa: E402
+from inkemu import daemon, window  # noqa: E402
 
 HELLO = Path(__file__).resolve().parent.parent / "examples" / "hello"
 
@@ -129,18 +129,57 @@ def test_text_dialog_cancel(make_window, make_app, monkeypatch):
     assert app.emu.pending is None and app.emu.has_text("res none")
 
 
-def test_control_queue_runs_on_main_thread_and_freezes_clock(make_window):
-    q = queue.Queue()
-    app = make_window(control=SimpleNamespace(queue=q))
-    q.put(lambda: app.emu.tap_text("Tap me"))
-    q.put(lambda: 1 / 0)
-    for _ in range(3):
+def test_control_pump_runs_on_main_thread_and_freezes_clock(make_window):
+    calls = []
+    control = SimpleNamespace(stopped=False, pump=lambda: calls.append(1) or 0)
+    app = make_window(control=control)
+    for _ in range(2):
         app.root.update()
         app.root.after(80)
     app.root.update()
-    assert app.emu.has_text("Taps: 1")
-    assert app.emu.paused and app.remote_frozen
-    assert "paused (remote)" in app.status.cget("text") and "ZeroDivisionError" in app.status.cget("text")
+    assert calls and not app.emu.paused  # nothing ran: the clock keeps going
+
+    d = daemon.Daemon(app.emu, port=0)
+    try:
+        app.control = d
+        reply = queue.Queue(1)
+        d.queue.put(("tap-text", {"text": "Tap me"}, reply))
+        d.queue.put(("tap-text", {"text": "missing"}, queue.Queue(1)))
+        for _ in range(3):
+            app.root.update()
+            app.root.after(80)
+        app.root.update()
+        assert reply.get_nowait()["ok"]
+        assert app.emu.has_text("Taps: 1")
+        assert app.emu.paused and app.remote_frozen
+        assert "paused (remote)" in app.status.cget("text")
+        d.queue.put(("resume", {}, queue.Queue(1)))
+        for _ in range(2):
+            app.root.update()
+            app.root.after(80)
+        assert not app.emu.paused and not app.remote_frozen
+    finally:
+        d.close()
+
+
+def test_stop_command_closes_window_and_saves_state(make_window):
+    app = make_window()
+    d = daemon.Daemon(app.emu, port=0)
+    try:
+        app.control = d
+        app.root.after(window.CONTROL_POLL_MS, app._poll_control)
+        q = queue.Queue(1)
+        d.queue.put(("stop", {}, q))
+        for _ in range(4):
+            try:
+                app.root.update()
+            except tk.TclError:
+                break
+            time.sleep(0.08)
+        assert q.get_nowait()["ok"] and d.stopped
+        assert app._closed and not app.emu.running
+    finally:
+        d.close()
 
 
 GESTURES = """

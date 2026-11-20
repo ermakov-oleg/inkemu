@@ -290,3 +290,11 @@ def test_save_shot_writes_png(make_app, emu_factory, tmp_path):
     emu = emu_factory(make_app(DRAW_MSG))
     path = emu.save_shot(tmp_path / "shots" / "a.png")
     assert path.exists() and path.read_bytes()[:4] == b"\x89PNG"
+
+
+@pytest.mark.allow_errors
+def test_zero_delay_rearm_does_not_hang_wait(emu_factory, make_app):
+    app = make_app("function on_load(c) c:after(0, function() end) local f; f = function() c:after(0, f) end; f() end")
+    emu = emu_factory(app)
+    emu.wait("1s")
+    assert any("same virtual instant" in e for e in emu.errors)

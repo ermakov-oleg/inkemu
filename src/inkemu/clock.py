@@ -35,9 +35,13 @@ class Timer:
         self.cancelled = True
 
 
+MAX_FIRES_PER_INSTANT = 10_000
+
+
 class Scheduler:
-    def __init__(self, clock: VirtualClock):
+    def __init__(self, clock: VirtualClock, on_overflow: Callable[[str], None] | None = None):
         self.clock = clock
+        self.on_overflow = on_overflow
         self._heap: list[tuple[int, int, Timer]] = []
         self._seq = itertools.count()
 
@@ -54,11 +58,28 @@ class Scheduler:
             heapq.heappop(self._heap)
         return self._heap[0][0] if self._heap else None
 
+    def _drop_due(self, instant: int) -> None:
+        for _, _, t in self._heap:
+            if t.due <= instant:
+                t.cancel()
+
     def run_until(self, target_ms: int) -> None:
+        fired, instant = 0, -1
         while (due := self.next_due()) is not None and due <= target_ms:
             _, _, t = heapq.heappop(self._heap)
             if due > self.clock.ms:
                 self.clock.advance(due - self.clock.ms)
+            if due != instant:
+                fired, instant = 0, due
+            fired += 1
+            if fired > MAX_FIRES_PER_INSTANT:
+                # a timer re-arming itself with delay 0 would otherwise never let virtual time move on
+                t.cancel()
+                self._drop_due(instant)
+                if self.on_overflow:
+                    self.on_overflow(f"more than {MAX_FIRES_PER_INSTANT} timers fired at the same virtual instant "
+                                     "(a callback re-arms itself with delay 0?); timers due now were dropped")
+                continue
             t.fn()
             if t.period_ms > 0 and not t.cancelled:
                 t.due = due + t.period_ms

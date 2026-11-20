@@ -51,3 +51,56 @@ def test_missing_text_fails_step_with_code_1(tmp_path, capsys):
     assert run(tmp_path, HELLO, "tap-text Nope; shot") == 1
     assert "Nope" in capsys.readouterr().err
     assert (tmp_path / "out" / "texts.json").exists()
+
+
+def test_empty_and_stray_steps(tmp_path, capsys):
+    assert run(tmp_path, HELLO, "") == 2
+    assert run(tmp_path, HELLO, " ; ") == 2
+    assert "no steps" in capsys.readouterr().err
+    assert run(tmp_path, HELLO, "; shot ;; wait 1s;") == 0
+    assert (tmp_path / "out" / "001.png").exists()
+
+
+def test_shot_write_error_is_exit_1(tmp_path, capsys):
+    blocker = tmp_path / "f"
+    blocker.write_text("x")
+    assert run(tmp_path, HELLO, f"shot {blocker}/a.png") == 1
+    assert "step failed" in capsys.readouterr().err
+
+
+def test_client_without_daemon_is_exit_2(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("INKEMU_STATE_ROOT", str(tmp_path / "root"))
+    assert main(["texts"]) == 2
+    assert "no daemon running" in capsys.readouterr().err
+    assert main(["tap", "1"]) == 2
+
+
+def test_client_verbs_against_daemon(tmp_path, monkeypatch, capsys, emu_factory):
+    import threading
+    import time
+
+    from inkemu import daemon
+
+    monkeypatch.setenv("INKEMU_STATE_ROOT", str(tmp_path / "root"))
+    emu = emu_factory(HELLO)
+    t = threading.Thread(target=daemon.serve, args=(emu, 0, False), daemon=True)
+    t.start()
+    for _ in range(500):
+        if daemon.read_info(tmp_path / "root"):
+            break
+        time.sleep(0.02)
+    try:
+        assert main(["tap-text", "Tap me"]) == 0
+        capsys.readouterr()
+        assert main(["texts"]) == 0
+        assert "Taps: 1" in capsys.readouterr().out
+        monkeypatch.chdir(tmp_path)
+        assert main(["shot", "rel.png"]) == 0
+        assert (tmp_path / "rel.png").exists()
+        capsys.readouterr()
+        assert main(["tap-text", "nope"]) == 1
+        assert main(["wait", "bogus"]) == 2
+    finally:
+        assert main(["stop"]) == 0
+        t.join(10)
+    assert daemon.read_info(tmp_path / "root") is None
