@@ -1,0 +1,625 @@
+//! The emulator core: one app, its Lua state, virtual time and lifecycle, as 0.1 `emu.Emu`.
+use std::cell::{Ref, RefCell};
+use std::collections::BTreeSet;
+use std::rc::Rc;
+
+use mlua::{Function, IntoLuaMulti, Lua, LuaString, MultiValue, Table, Value};
+
+use crate::app::{app_id_of, read_manifest, AppFiles};
+use crate::clock::{iso, DateTime, Due, Run, Scheduler, TimerId, VirtualClock};
+use crate::config::{Config, Persisted};
+use crate::log::{py_repr, Log};
+use crate::lua;
+
+pub const ERROR_TITLE: &str = "App error, closed";
+const INSTALL_FAILED: &str = "Install failed";
+const NOT_YET: &str = "not implemented yet";
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TextItem {
+    pub text: String,
+    pub x: i32,
+    pub y: i32,
+    pub w: i32,
+    pub h: i32,
+    pub font: &'static str,
+}
+
+/// One byte per pixel, row by row: 0 white, 1 black.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Frame {
+    pub w: u32,
+    pub h: u32,
+    pub px: Vec<u8>,
+}
+
+/// A dialog waiting for the user.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Pending {
+    pub kind: &'static str,
+    pub title: String,
+    pub text: String,
+}
+
+/// 0.1 `Emu.status()`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Status {
+    pub time: String,
+    pub net: &'static str,
+    pub frame_commands: usize,
+    pub paused: bool,
+    pub screen: (u32, u32),
+    pub app_id: String,
+    pub running: bool,
+    pub pending: Option<Pending>,
+    pub locked: bool,
+}
+
+/// What a timer does when it fires.
+pub(crate) type TimerFn = Rc<dyn Fn(&Host)>;
+
+struct Canvas {
+    w: u32,
+    h: u32,
+    texts: Vec<TextItem>,
+    commands: usize,
+}
+
+impl Canvas {
+    fn new(w: u32, h: u32) -> Self {
+        Canvas {
+            w,
+            h,
+            texts: vec![],
+            commands: 0,
+        }
+    }
+
+    fn begin_frame(&mut self) {
+        self.texts.clear();
+        self.commands = 0;
+    }
+
+    fn end_frame(&mut self) -> usize {
+        self.commands
+    }
+}
+
+/// Core state shared with the Rust functions the app calls through Lua.
+pub(crate) struct State {
+    cfg: Config,
+    log: Log,
+    sched: Scheduler<TimerFn>,
+    /// The app's timers, cancelled when it stops.
+    timers: BTreeSet<TimerId>,
+    app_id: String,
+    ctx: Option<Table>,
+    g: Option<Table>,
+    running: bool,
+    paused: bool,
+    invalid: bool,
+    quit: bool,
+    leaving: bool,
+    depth: u32,
+    overlay: Option<(String, String)>,
+    pending: Option<Pending>,
+    pending_id: u64,
+    canvas: Canvas,
+    frame_commands: usize,
+    locked: bool,
+    lock_wakes: u32,
+    refresh_counts: (u32, u32),
+    persisted: Persisted,
+    persist_changed: bool,
+}
+
+impl State {
+    fn log_line(&mut self, msg: &str) {
+        let now = self.sched.clock.now();
+        self.log.line(now, msg);
+    }
+
+    fn stop(&mut self) {
+        self.running = false;
+        self.pending = None;
+        self.invalid = false;
+        for t in std::mem::take(&mut self.timers) {
+            self.sched.cancel(t);
+        }
+    }
+
+    fn fail(&mut self, message: &str, title: &str) {
+        self.log.errors.push(message.to_string());
+        self.log_line(&format!("ERROR {message}"));
+        let first = message.split('\n').next().unwrap_or_default();
+        self.overlay = Some((title.to_string(), first.to_string()));
+        self.stop();
+    }
+}
+
+pub(crate) type Shared = Rc<RefCell<State>>;
+
+/// Runs `f` on the shared state. The borrow ends when `f` returns: never call into Lua inside `f`.
+pub(crate) fn with<R>(st: &Shared, f: impl FnOnce(&mut State) -> R) -> R {
+    f(&mut st.borrow_mut())
+}
+
+/// The Lua state and the shared core state: all a host function needs to call back into the app.
+pub(crate) struct Host<'a> {
+    pub lua: &'a Lua,
+    pub st: &'a Shared,
+}
+
+impl Host<'_> {
+    /// Calls `f` under the instruction budget; a Lua error lands in `errors`, shows the error overlay and stops
+    /// the app. None when the app is not running or the call failed.
+    pub fn protected(
+        &self,
+        f: &Function,
+        args: impl IntoLuaMulti,
+        where_: &str,
+    ) -> Option<MultiValue> {
+        let running = with(self.st, |s| {
+            s.depth += u32::from(s.running);
+            s.running
+        });
+        if !running {
+            return None;
+        }
+        let r = lua::call_guarded(self.lua, f, args);
+        let quit_now = with(self.st, |s| {
+            s.depth -= 1;
+            match &r {
+                // an outer callback unwinding after a nested failure adds nothing
+                Err(e) if s.running || s.overlay.is_none() => {
+                    s.fail(&format!("Lua error in {where_}: {e}"), ERROR_TITLE);
+                    false
+                }
+                Err(_) => false,
+                Ok(_) => s.quit && s.depth == 0 && !s.leaving,
+            }
+        });
+        if quit_now {
+            self.leave();
+        }
+        r.ok()
+    }
+
+    /// Calls the app's global function `name` if it is defined; its first result.
+    pub fn call(&self, name: &str, args: impl IntoLuaMulti) -> Option<Value> {
+        if !with(self.st, |s| s.running) {
+            return None;
+        }
+        // raw: an app metatable on _G must not run here
+        let Ok(Value::Function(f)) = self.lua.globals().raw_get::<Value>(name) else {
+            return None;
+        };
+        self.protected(&f, args, name)?.into_iter().next()
+    }
+
+    fn ctx(&self) -> Option<Table> {
+        with(self.st, |s| s.ctx.clone())
+    }
+
+    pub fn leave(&self) {
+        let go = with(self.st, |s| {
+            let go = s.running && !s.leaving;
+            s.leaving |= go;
+            go
+        });
+        if !go {
+            return;
+        }
+        self.call("on_leave", self.ctx());
+        with(self.st, |s| {
+            s.leaving = false;
+            s.quit = false;
+            s.stop();
+            s.log_line("app left");
+        });
+    }
+
+    pub fn settle(&self) {
+        let draw = with(self.st, |s| std::mem::take(&mut s.invalid) && s.running);
+        if draw {
+            self.draw();
+        }
+    }
+
+    fn draw(&self) {
+        let (ctx, g) = with(self.st, |s| {
+            s.canvas.begin_frame();
+            (s.ctx.clone(), s.g.clone())
+        });
+        self.call("on_draw", (ctx, g));
+        with(self.st, |s| s.frame_commands = s.canvas.end_frame());
+    }
+}
+
+/// One emulated InkApp.
+pub struct Core {
+    st: Shared,
+    lua: Lua,
+    app: Rc<AppFiles>,
+}
+
+impl Core {
+    /// Boots the app: manifest, fresh Lua state, entry chunk, `on_load`, first frame.
+    pub fn new(app: AppFiles, cfg: Config, persisted: Persisted) -> Core {
+        let app_id = app_id_of(&read_manifest(&app, cfg.firmware_api).0);
+        let clock = VirtualClock::new(cfg.start_local_ms);
+        let st = Rc::new(RefCell::new(State {
+            cfg,
+            log: Log::default(),
+            sched: Scheduler::new(clock),
+            timers: BTreeSet::new(),
+            app_id,
+            ctx: None,
+            g: None,
+            running: false,
+            paused: false,
+            invalid: false,
+            quit: false,
+            leaving: false,
+            depth: 0,
+            overlay: None,
+            pending: None,
+            pending_id: 0,
+            canvas: Canvas::new(480, 800),
+            frame_commands: 0,
+            locked: false,
+            lock_wakes: 0,
+            refresh_counts: (0, 0),
+            persisted,
+            persist_changed: false,
+        }));
+        let mut core = Core {
+            st,
+            lua: lua::new_lua(),
+            app: Rc::new(app),
+        };
+        core.boot();
+        core
+    }
+
+    fn host(&self) -> Host<'_> {
+        Host {
+            lua: &self.lua,
+            st: &self.st,
+        }
+    }
+
+    fn boot(&mut self) {
+        let fw = with(&self.st, |s| {
+            s.stop();
+            (s.overlay, s.ctx, s.g, s.quit) = (None, None, None, false);
+            s.cfg.firmware_api
+        });
+        let (manifest, problem) = read_manifest(&self.app, fw);
+        let landscape = manifest
+            .get("display")
+            .and_then(|d| d.get("orientation"))
+            .is_some_and(|o| o == "landscape");
+        self.lua = lua::new_lua();
+        with(&self.st, |s| {
+            s.canvas = if landscape {
+                Canvas::new(800, 480)
+            } else {
+                Canvas::new(480, 800)
+            };
+            s.frame_commands = 0;
+        });
+        if let Some(p) = problem {
+            with(&self.st, |s| s.fail(&p, INSTALL_FAILED));
+            return;
+        }
+        let entry = manifest
+            .get("entry")
+            .cloned()
+            .unwrap_or_else(|| "index.lua".into());
+        let app = self.app.clone();
+        let Some((found, src)) = entry.as_str().and_then(|e| app.find(e)) else {
+            let msg = format!(
+                "manifest.json: entry {} not found in the app folder",
+                py_repr(&entry)
+            );
+            with(&self.st, |s| s.fail(&msg, INSTALL_FAILED));
+            return;
+        };
+        let (ctx, g) = self.install().expect("cannot set up the app's Lua state");
+        with(&self.st, |s| (s.ctx, s.g) = (Some(ctx.clone()), Some(g)));
+        let f = match lua::load_chunk(&self.lua, src, &format!("@{found}")) {
+            Ok(f) => f,
+            Err(e) => {
+                with(&self.st, |s| s.fail(&format!("{found}: {e}"), ERROR_TITLE));
+                return;
+            }
+        };
+        with(&self.st, |s| {
+            s.running = true;
+            s.invalid = true;
+            let msg = format!("app {} started", s.app_id);
+            s.log_line(&msg);
+        });
+        let h = self.host();
+        h.protected(&f, (), &found);
+        h.call("on_load", ctx);
+        h.settle();
+    }
+
+    /// `require`, the global `ctx` and the `g` passed to `on_draw`.
+    fn install(&self) -> mlua::Result<(Table, Table)> {
+        let lua = &self.lua;
+        lua::install_require(lua, self.app.clone())?;
+        let ctx = lua.create_table()?;
+        lua.globals().set("ctx", &ctx)?;
+        let g = lua.create_table()?;
+        let st = self.st.clone();
+        g.set(
+            "clear",
+            lua.create_function(move |_, _: MultiValue| {
+                with(&st, |s| {
+                    s.canvas.texts.clear();
+                    s.canvas.commands += 1;
+                });
+                Ok(())
+            })?,
+        )?;
+        let st = self.st.clone();
+        g.set(
+            "text",
+            lua.create_function(move |_, (_g, x, y, text): (Value, i32, i32, LuaString)| {
+                let text = text.to_string_lossy();
+                with(&st, |s| {
+                    s.canvas.commands += 1;
+                    s.canvas.texts.push(TextItem {
+                        text,
+                        x,
+                        y,
+                        w: 0,
+                        h: 24,
+                        font: "medium",
+                    });
+                });
+                Ok(())
+            })?,
+        )?;
+        Ok((ctx, g))
+    }
+
+    // ---- input --------------------------------------------------------------------------------
+
+    pub fn pointer(&mut self, _phase: &str, _x: i32, _y: i32) -> Result<(), String> {
+        Err(NOT_YET.into())
+    }
+
+    pub fn tap(&mut self, _x: i32, _y: i32) -> Result<(), String> {
+        Err(NOT_YET.into())
+    }
+
+    pub fn double_tap(&mut self, _x: i32, _y: i32) -> Result<(), String> {
+        Err(NOT_YET.into())
+    }
+
+    pub fn hold(&mut self, _x: i32, _y: i32, _ms: i64) -> Result<(), String> {
+        Err(NOT_YET.into())
+    }
+
+    pub fn drag(&mut self, _points: &[(i32, i32)], _duration_ms: i64) -> Result<(), String> {
+        Err(NOT_YET.into())
+    }
+
+    pub fn swipe(&mut self, _dir: &str, _at: (i32, i32), _distance: i32) -> Result<(), String> {
+        Err(NOT_YET.into())
+    }
+
+    pub fn tap_text(&mut self, _text: &str) -> Result<(), String> {
+        Err(NOT_YET.into())
+    }
+
+    pub fn key(&mut self, _name: &str) -> Result<(), String> {
+        Err(NOT_YET.into())
+    }
+
+    pub fn type_text(&mut self, _text: &str) -> Result<(), String> {
+        Err(NOT_YET.into())
+    }
+
+    pub fn answer(&mut self, _ok: bool) -> Result<(), String> {
+        Err(NOT_YET.into())
+    }
+
+    // ---- time and lifecycle --------------------------------------------------------------------
+
+    /// Runs virtual time forward, firing due timers and redrawing as needed.
+    pub fn wait(&mut self, ms: i64) -> Result<(), String> {
+        if ms < 0 {
+            return Err("wait() needs a non-negative duration".into());
+        }
+        let target = with(&self.st, |s| s.sched.clock.ms + ms);
+        let mut run = Run::default();
+        while let Some(due) = with(&self.st, |s| s.sched.pop_due(target, &mut run)) {
+            match due {
+                Due::Overflow(msg) => with(&self.st, |s| s.fail(&msg, ERROR_TITLE)),
+                Due::Fire {
+                    id,
+                    payload,
+                    periodic,
+                } => {
+                    if !periodic {
+                        with(&self.st, |s| s.timers.remove(&id));
+                    }
+                    payload(&self.host());
+                    self.host().settle();
+                    with(&self.st, |s| s.sched.rearm(id));
+                }
+            }
+        }
+        with(&self.st, |s| s.sched.advance_to(target));
+        self.host().settle();
+        Ok(())
+    }
+
+    pub fn leave(&mut self) {
+        self.host().leave();
+    }
+
+    pub fn restart(&mut self) {
+        self.leave();
+        self.boot();
+    }
+
+    pub fn reload(&mut self) {
+        self.boot();
+    }
+
+    pub fn lock(&mut self) {}
+
+    pub fn unlock(&mut self) {}
+
+    pub fn resume(&mut self) {
+        with(&self.st, |s| s.paused = false);
+    }
+
+    // ---- inspection ----------------------------------------------------------------------------
+
+    pub fn status(&self) -> Status {
+        let s = self.st.borrow();
+        Status {
+            time: iso(s.sched.clock.now()),
+            net: s.cfg.net_mode.as_str(),
+            frame_commands: s.frame_commands,
+            paused: s.paused,
+            screen: (s.canvas.w, s.canvas.h),
+            app_id: s.app_id.clone(),
+            running: s.running,
+            pending: s.pending.clone(),
+            locked: s.locked,
+        }
+    }
+
+    pub fn texts(&self) -> Vec<TextItem> {
+        self.st.borrow().canvas.texts.clone()
+    }
+
+    /// The screen with the error, toast and (if `dialog`) dialog plates.
+    pub fn frame(&self, _dialog: bool) -> Frame {
+        self.raw_frame()
+    }
+
+    /// The app's own frame, without plates.
+    pub fn raw_frame(&self) -> Frame {
+        let s = self.st.borrow();
+        let (w, h) = (s.canvas.w, s.canvas.h);
+        Frame {
+            w,
+            h,
+            px: vec![0; w as usize * h as usize],
+        }
+    }
+
+    pub fn log(&self) -> Ref<'_, [String]> {
+        Ref::map(self.st.borrow(), |s| s.log.log.as_slice())
+    }
+
+    pub fn errors(&self) -> Ref<'_, [String]> {
+        Ref::map(self.st.borrow(), |s| s.log.errors.as_slice())
+    }
+
+    pub fn warnings(&self) -> Ref<'_, [String]> {
+        Ref::map(self.st.borrow(), |s| s.log.warnings.as_slice())
+    }
+
+    pub fn toasts(&self) -> Ref<'_, [String]> {
+        Ref::map(self.st.borrow(), |s| s.log.toasts.as_slice())
+    }
+
+    pub fn log_line(&mut self, msg: &str) {
+        with(&self.st, |s| s.log_line(msg));
+    }
+
+    /// The app data to write to disk, when state, files or lock data changed since the last take.
+    pub fn take_persist(&mut self) -> Option<Persisted> {
+        with(&self.st, |s| {
+            std::mem::take(&mut s.persist_changed).then(|| s.persisted.clone())
+        })
+    }
+
+    /// Runs Lua code in the app's state under the budget (test helper).
+    pub fn lua_exec(&mut self, code: &str) -> Result<(), String> {
+        let f = lua::load_chunk(&self.lua, code.as_bytes(), "=lua_exec")?;
+        lua::call_guarded(&self.lua, &f, ()).map(|_| ())
+    }
+
+    /// Runs Lua code in the app's state under the budget and returns its first result as JSON (test helper).
+    pub fn lua_eval(&mut self, code: &str) -> Result<serde_json::Value, String> {
+        let f = lua::load_chunk(&self.lua, code.as_bytes(), "=lua_eval")?;
+        let r = lua::call_guarded(&self.lua, &f, ())?;
+        Ok(to_json(r.iter().next().unwrap_or(&Value::Nil), 0))
+    }
+
+    /// Milliseconds of virtual time since start.
+    pub fn clock_ms(&self) -> i64 {
+        self.st.borrow().sched.clock.ms
+    }
+
+    /// Local wall-clock time now.
+    pub fn now_local(&self) -> DateTime {
+        self.st.borrow().sched.clock.now()
+    }
+
+    /// (requested, full) screen refreshes.
+    pub fn refresh_counts(&self) -> (u32, u32) {
+        self.st.borrow().refresh_counts
+    }
+
+    pub fn set_locale(&mut self, locale: &str) {
+        with(&self.st, |s| s.cfg.locale = locale.to_string());
+    }
+
+    pub fn lock_wakes(&self) -> u32 {
+        self.st.borrow().lock_wakes
+    }
+
+    pub fn frame_commands(&self) -> usize {
+        self.st.borrow().frame_commands
+    }
+
+    /// Changes whenever a new dialog becomes pending.
+    pub fn pending_id(&self) -> u64 {
+        self.st.borrow().pending_id
+    }
+}
+
+/// Plain Lua values as JSON for the test helpers; tables become arrays when they have a sequence part.
+fn to_json(v: &Value, depth: u32) -> serde_json::Value {
+    use serde_json::Value as J;
+    match v {
+        Value::Nil => J::Null,
+        Value::Boolean(b) => J::Bool(*b),
+        Value::Integer(i) => J::from(*i),
+        Value::Number(n) => serde_json::Number::from_f64(f64::from(*n)).map_or(J::Null, J::Number),
+        Value::String(s) => J::String(s.to_string_lossy()),
+        Value::Table(t) if depth < 32 => {
+            let n = t.raw_len();
+            if n > 0 {
+                (1..=n)
+                    .map(|i| to_json(&t.raw_get::<Value>(i).unwrap_or(Value::Nil), depth + 1))
+                    .collect()
+            } else {
+                t.pairs::<Value, Value>()
+                    .flatten()
+                    .map(|(k, v)| {
+                        let k = match k {
+                            Value::String(s) => s.to_string_lossy(),
+                            k => k.to_string().unwrap_or_default(),
+                        };
+                        (k, to_json(&v, depth + 1))
+                    })
+                    .collect::<serde_json::Map<_, _>>()
+                    .into()
+            }
+        }
+        other => J::String(other.type_name().to_string()),
+    }
+}
