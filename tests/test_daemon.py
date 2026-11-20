@@ -77,7 +77,7 @@ def test_parse_words():
 
 def post(port, cmd, args=None):
     req = urllib.request.Request(f"http://127.0.0.1:{port}/cmd", method="POST",
-                                 data=json.dumps({"cmd": cmd, "args": args or {}}).encode())
+                                 headers={"Content-Type": "application/json"}, data=json.dumps({"cmd": cmd, "args": args or {}}).encode())
     with urllib.request.urlopen(req, timeout=10) as resp:
         return resp.status, json.load(resp)
 
@@ -102,6 +102,7 @@ def test_http_roundtrip(emu_factory):
         assert body["ok"] and d.stopped
         with pytest.raises(urllib.error.HTTPError) as e:
             urllib.request.urlopen(urllib.request.Request(f"http://127.0.0.1:{d.port}/cmd", method="POST",
+                                                          headers={"Content-Type": "application/json"},
                                                           data=b"not json"), timeout=5)
         assert e.value.code == 400
     finally:
@@ -155,3 +156,48 @@ def test_serve_headless_stops_and_cleans_up(emu_factory, tmp_path, monkeypatch):
     assert post(info["port"], "stop")[1]["ok"]
     t.join(10)
     assert result.get("done") and read_info(tmp_path / "root") is None
+
+
+def raw(port, method="POST", path="/cmd", headers=None, body=b'{"cmd": "tap-text", "args": {"text": "Tap me"}}'):
+    import http.client
+    c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+    try:
+        c.putrequest(method, path, skip_host=True)
+        for k, v in {"Host": f"127.0.0.1:{port}", "Content-Type": "application/json", **(headers or {})}.items():
+            if v is not None:
+                c.putheader(k, v)
+        c.putheader("Content-Length", str(len(body)))
+        c.endheaders(body)
+        r = c.getresponse()
+        return r.status, json.loads(r.read() or b"{}")
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("headers", [
+    {"Content-Type": "text/plain"},
+    {"Content-Type": None},
+    {"Host": "evil.example:7480"},
+    {"Host": "127.0.0.1"},
+    {"Origin": "http://evil.example"},
+])
+def test_browser_style_requests_are_rejected(emu_factory, headers):
+    emu = emu_factory(HELLO)
+    d = Daemon(emu, port=0)
+    try:
+        status, body = raw(d.port, headers=headers)
+        assert status == 403 and body["ok"] is False and body["error"]
+        assert d.queue.empty() and emu.has_text("Taps: 0")
+    finally:
+        d.close()
+
+
+def test_other_methods_and_paths_rejected_cleanly(emu_factory):
+    d = Daemon(emu_factory(HELLO), port=0)
+    try:
+        assert raw(d.port, "GET", body=b"")[0] == 405
+        assert raw(d.port, "PUT")[0] == 405
+        assert raw(d.port, path="/other")[0] == 404
+        assert d.queue.empty()
+    finally:
+        d.close()

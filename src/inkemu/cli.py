@@ -97,6 +97,7 @@ def _client(verb: str, words: list[str], port: int | None) -> int:
             return 2
         port = int(info["port"])
     req = urllib.request.Request(f"http://127.0.0.1:{port}/cmd", method="POST",
+                                 headers={"Content-Type": "application/json"},
                                  data=json.dumps({"cmd": cmd, "args": cmd_args}).encode("utf-8"))
     try:
         with urllib.request.urlopen(req, timeout=620) as resp:
