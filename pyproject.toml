@@ -48,7 +48,17 @@ build-backend = "hatchling.build"
 include = ["src", "tests", "examples", "README.md", "LICENSE", "pyproject.toml", "uv.lock"]
 
 [dependency-groups]
-dev = ["pytest>=9.2.0"]
+dev = [
+    "pytest>=9.2.0",
+    "ruff>=0.17.6",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
