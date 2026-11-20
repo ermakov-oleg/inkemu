@@ -104,3 +104,28 @@ def test_client_verbs_against_daemon(tmp_path, monkeypatch, capsys, emu_factory)
         assert main(["stop"]) == 0
         t.join(10)
     assert daemon.read_info(tmp_path / "root") is None
+
+
+def test_run_prints_texts_log_state_and_shots_in_order(tmp_path, capsys):
+    assert run(tmp_path, HELLO, "tap-text 'Tap me'; texts; shot; state; log") == 0
+    out = capsys.readouterr().out
+    i_texts, i_shot = out.index("Taps: 1"), out.index("001.png")
+    i_state, i_log = out.index('"status"'), out.rindex(" started")
+    assert i_texts < i_shot < i_state < i_log
+    assert any(line.endswith(" Taps: 1") and "," in line for line in out.splitlines())
+
+
+def test_window_without_display_is_clean_exit_1(tmp_path, monkeypatch, capsys):
+    tk = pytest.importorskip("tkinter")
+    from inkemu import daemon, window
+    monkeypatch.setenv("INKEMU_STATE_ROOT", str(tmp_path / "root"))
+
+    def no_display(*a, **kw):
+        raise tk.TclError("no display name and no $DISPLAY environment variable")
+
+    monkeypatch.setattr(window, "build_window", no_display)
+    code = main(["window", str(HELLO), "--port", "0", "--state", str(tmp_path / "state"),
+                 "--fixtures", str(tmp_path / "fx")])
+    err = capsys.readouterr().err
+    assert code == 1 and "cannot open the window: no display name" in err and "Traceback" not in err
+    assert daemon.read_info(tmp_path / "root") is None

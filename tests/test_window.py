@@ -260,3 +260,53 @@ def test_window_frame_has_no_dialog_plate(make_window, make_app, monkeypatch):
     app.emu.shot(dialog=False).convert("L").save(plain, "PNG")
     assert app._frame_png == plain.getvalue()  # the Tk dialog is the only rendering of it
     assert "Yes" in [t["text"] for t in app.emu.texts()]  # remote clients still see it
+
+
+def test_status_says_stopped(make_window):
+    app = make_window()
+    assert "stopped" not in app.status_text()
+    app.emu.leave()
+    assert "stopped (R to restart)" in app.status_text()
+    app.emu.lock()
+    assert "stopped" not in app.status_text() and "locked" in app.status_text()
+
+
+def test_stale_tk_dialog_does_not_answer_a_newer_one(make_window, make_app, monkeypatch):
+    app = make_window(make_app(ASKING % (
+        "c.dialog:confirm({title='A', text='first'}, function(c, ok) res = 'A ' .. tostring(ok); c:invalidate() end)")))
+    emu = app.emu
+
+    def user_slow_to_click(parent, title, text):
+        emu.answer(False)  # a remote `answer` resolves A while its Tk dialog is still open
+        emu.L.execute("ctx.dialog:confirm({title='B', text='second'}, function(c, ok) res = 'B ' .. tostring(ok) end)")
+        monkeypatch.setattr(window, "ask_yes_no", lambda *a: False)  # later dialogs: leave B unanswered by clicks
+        return True
+
+    monkeypatch.setattr(window, "ask_yes_no", user_slow_to_click)
+    app.on_key(SimpleNamespace(keysym="Return"))
+    app._open_dialog()
+    assert emu.has_text("res A false")
+    assert any("already answered" in ln for ln in emu.log)
+
+
+def test_ctrl_c_closes_the_window_cleanly(emu_factory, monkeypatch):
+    import os
+    import signal
+    try:
+        tk.Tk().destroy()
+    except tk.TclError as e:
+        pytest.skip(f"no display: {e}")
+    emu = emu_factory(HELLO)
+    real = window.build_window
+
+    def build(e, control=None):
+        a = real(e, control)
+        a.root.after(200, lambda: os.kill(os.getpid(), signal.SIGINT))
+        a.root.after(5000, a.root.destroy)  # safety net: without the handler the loop would never end
+        return a
+
+    monkeypatch.setattr(window, "build_window", build)
+    before = signal.getsignal(signal.SIGINT)
+    window.run_window(emu)
+    assert not emu.running  # closed through close() -> leave(), not the safety net
+    assert signal.getsignal(signal.SIGINT) is before

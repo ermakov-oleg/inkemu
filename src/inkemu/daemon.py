@@ -24,6 +24,10 @@ class UsageError(Exception):
     pass
 
 
+class WindowUnavailable(Exception):
+    """No display or no Tk: the window cannot be opened."""
+
+
 def _int(v: Any) -> int:
     if isinstance(v, bool):
         raise UsageError(f"expected an integer, got {v!r}")
@@ -339,7 +343,10 @@ def serve(emu: Emu, port: int = DEFAULT_PORT, window: bool = False) -> None:
     write_info(root, d.port, emu.app_id, window)
     try:
         if window:
-            from .window import run_window
+            try:
+                from .window import run_window
+            except ImportError as e:
+                raise WindowUnavailable(f"Tk is not available: {e}") from None
             run_window(emu, d)
         else:
             try:
