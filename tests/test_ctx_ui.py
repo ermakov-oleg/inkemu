@@ -191,8 +191,17 @@ def test_qr_encode_draws(make_app, emu_factory):
         "function on_load(c) qr = c.qr:encode('hi') end\n"
         "function on_draw(c, g) g:clear(0); g:image(qr, 0, 0, {w=99, h=99}) end\n"))
     shot = emu.shot()
-    assert all(black(shot, x, y) for x in range(7) for y in range(7))
-    assert not black(shot, 8, 8)
+    # 21 modules scaled to 99 px: outer ring black, inner ring white, 3x3 core black, separator white
+    assert all(black(shot, x, 2) for x in range(0, 31)) and black(shot, 2, 30)
+    assert not black(shot, 7, 7) and not black(shot, 24, 7)
+    assert black(shot, 16, 16) and not black(shot, 36, 2)
+
+
+def test_qr_is_standard_size_without_border(make_app, emu_factory):
+    emu = emu_factory(make_app(
+        "function on_load(c) qr = c.qr:encode('hi'); w, h = qr.width, qr.height end\n"
+        "function on_draw(c, g) g:text(0, 0, w .. 'x' .. h) end\n"))
+    assert emu.has_text("21x21")
 
 
 def test_qr_too_long(make_app, emu_factory):

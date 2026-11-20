@@ -146,7 +146,7 @@ def install(emu: "Emu") -> None:
 
     def qr_encode(text=None, *_):
         try:
-            code = segno.make(_bytes_arg("encode", 1, text).decode("utf-8"), error="m", boost_error=False)
+            code = segno.make_qr(_bytes_arg("encode", 1, text).decode("utf-8"), error="m", boost_error=False)
         except (UnicodeDecodeError, segno.DataOverflowError, ValueError):
             return None, "invalid_argument"
         rows = b"".join(bytes(0 if cell else 255 for cell in row) for row in code.matrix)
