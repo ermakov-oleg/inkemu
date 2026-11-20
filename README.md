@@ -120,7 +120,8 @@ requests with a foreign `Host`, an `Origin` header or a non-JSON content type.
   ("callback exceeded the instruction budget ... - infinite loop?"); the device has its own, unknown budget.
   Time spent inside C functions such as `string.rep` or pattern matching is not counted.
 - The app sees `debug == false` instead of `nil` (lupa reads that global on every call into Lua), and no
-  `python`, `io`, `os` or `package.searchpath`.
+  `python`, `io`, `os` or `package.searchpath`. An app that sets `debug = nil` itself and then installs an erroring
+  metatable on `_G` can still crash the emulator process (not escape it).
 
 ## Credits
 

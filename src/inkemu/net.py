@@ -24,7 +24,8 @@ _NAME = r"[A-Za-z0-9_.-]+"
 _PLACEHOLDER = re.compile(r"\{\{(" + _NAME + r")\}\}")
 _SECRET_LIKE = re.compile(r"[A-Za-z0-9_-]{20,}")
 _URL = re.compile(r"https?://[^/\s?#]+", re.I)
-_USERINFO_PASSWORD = re.compile(r"(\w+://[^/\s:@?#]*):[^/\s@?#]*@")
+# quotes, commas and brackets end a URL in JSON/HTML bodies, so they may not belong to the userinfo
+_USERINFO_PASSWORD = re.compile(r"(\w+://[^/\s:@?#\"',<>`]*):[^/\s@?#\"',<>`]*@")
 _USERINFO_PASSWORD_B = re.compile(_USERINFO_PASSWORD.pattern.encode())
 
 # Escapes bytes >= 0x80 and `\` so lupa never has to decode a non-UTF-8 string from the app.

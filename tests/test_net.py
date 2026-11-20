@@ -303,6 +303,15 @@ def test_userinfo_password_is_always_redacted(tmp_path):
     assert net.fixture_key("GET", "https://bob:hunter2@h.test/x", None) == "GET https://bob:{{userinfo}}@h.test/x"
 
 
+@pytest.mark.parametrize("text", ['{"site":"https://example.com","email":"a@b.c"}', 'https://h:8080","m":"x@y',
+                                  "<a href='https://h.test:1/'>x@y</a>"])
+def test_userinfo_redaction_leaves_bodies_alone(tmp_path, text):
+    from inkemu.net import Net
+    net = Net("record", tmp_path, {}, print, print)
+    assert net.redact(text) == text
+    assert net._redact_bytes(text.encode()) == text.encode()
+
+
 def test_userinfo_password_not_in_log_or_warnings(make_app, emu_factory, server):
     url = server.base.replace("http://", "http://bob:hunter2@") + "/ical/abcdefghij0123456789xyz/basic.ics"
     emu = emu_factory(app_with(make_app, "{url = '%s'}" % url, "msg = resp.status"), net="record")
