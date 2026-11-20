@@ -257,7 +257,7 @@ def _load_secrets(emu: "Emu") -> tuple[dict[str, str], list[str]]:
 
 
 def install(emu: "Emu") -> None:
-    if "net" not in (emu.manifest.get("permissions") or []):
+    if not emu._net_enabled():
         return
     L, ctx = emu.L, emu._ctx
     secrets, problems = _load_secrets(emu)
@@ -303,9 +303,27 @@ def install(emu: "Emu") -> None:
         resp = net.request(method_s, url_s, hdrs, body, round(timeout) if timeout else 0)
         if resp is None:
             return make_object(L, "job", {"cancel": lambda *a: None})
-        timer = emu._add_timer(resp.delay_ms, lambda: emu._protected(
-            fn, ctx, lua_response(resp), where="ctx.net:request callback"))
-        return make_object(L, "job", {"cancel": lambda *a: emu._cancel_timer(timer)})
+        active = [True]
+
+        def done():
+            if active[0]:
+                active[0] = False
+                emu.net_inflight -= 1
+
+        def deliver():
+            try:
+                emu._protected(fn, ctx, lua_response(resp), where="ctx.net:request callback")
+            finally:
+                done()
+
+        timer = emu._add_timer(resp.delay_ms, deliver)
+        emu.net_inflight += 1
+
+        def cancel(*_):
+            emu._cancel_timer(timer)
+            done()
+
+        return make_object(L, "job", {"cancel": cancel})
 
     def keep_wifi(ms=None, *_):
         check_arg("keep_wifi", 1, ms, "number")
