@@ -29,7 +29,15 @@ def server():
     class H(BaseHTTPRequestHandler):
         def do_GET(self):
             hits.append((self.path, dict(self.headers)))
+            if self.path.startswith("/short"):  # promises more than it sends
+                self.send_response(200)
+                self.send_header("Content-Length", "100")
+                self.end_headers()
+                self.wfile.write(b"ab")
+                return
             body = "привет".encode() if self.path.endswith(".ics") else b"\x00\xff\xfeok"
+            if self.path.startswith("/echo"):
+                body = self.path.encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/plain")
             self.send_header("Set-Cookie", "sid=abc")
@@ -262,3 +270,66 @@ def test_unusable_secret_warns_in_replay(make_app, emu_factory, tmp_path):
     secrets.write_text('{"bad name": "x", "ok": "y"}')
     emu = emu_factory(app_with(make_app, "{url = 'http://x.test/a'}"), secrets_file=secrets)
     assert any("'bad name'" in w for w in emu.warnings) and emu.errors == []
+
+
+@pytest.mark.parametrize("shown", ["pa+ss%2Fwd%2Bx", "pa%20ss%2fwd%2bx", "pa%20ss%2Fwd%2Bx", "pa ss/wd+x"])
+def test_redact_quote_plus_and_lowercase_percent(tmp_path, shown):
+    from inkemu.net import Net
+    net = Net("record", tmp_path, {"pw": "pa ss/wd+x"}, print, print)
+    assert net.redact(f"http://h.test/a/{shown}/b") == "http://h.test/a/{{pw}}/b"
+    assert net._redact_bytes(f"x={shown};".encode()) == b"x={{pw}};"
+
+
+def test_record_redacts_encoded_forms_everywhere(make_app, emu_factory, tmp_path, server):
+    secrets = tmp_path / "secrets.json"
+    secrets.write_text(json.dumps({"pw": "pa ss/wd+x"}))
+    lua = (DRAW + "function on_load(c)\n"
+           f"  c.net:request({{url = '{server.base}/echo/pa+ss%2Fwd%2Bx'}}, function() end)\n"
+           f"  c.net:request({{url = '{server.base}/echo2/pa%20ss%2fwd%2bx'}}, function() end)\nend\n")
+    emu = emu_factory(make_app(lua, manifest=NET), net="record", secrets_file=secrets)
+    emu.wait(300)
+    d = tmp_path / "fixtures" / "net"
+    assert len(list(d.glob("*.json"))) == 2
+    for text in [p.read_bytes().decode("latin-1") for p in d.iterdir()] + emu.log + emu.warnings:
+        low = text.lower()
+        assert "pa+ss" not in low and "pa%20ss" not in low and "wd%2b" not in low, text
+
+
+def test_userinfo_password_is_always_redacted(tmp_path):
+    from inkemu.net import Net
+    net = Net("record", tmp_path, {}, print, print)
+    assert net.redact("https://bob:hunter2@h.test/x?q=1") == "https://bob:{{userinfo}}@h.test/x?q=1"
+    assert net.redact("https://bob@h.test/x") == "https://bob@h.test/x"
+    assert net.fixture_key("GET", "https://bob:hunter2@h.test/x", None) == "GET https://bob:{{userinfo}}@h.test/x"
+
+
+def test_userinfo_password_not_in_log_or_warnings(make_app, emu_factory, server):
+    url = server.base.replace("http://", "http://bob:hunter2@") + "/ical/abcdefghij0123456789xyz/basic.ics"
+    emu = emu_factory(app_with(make_app, "{url = '%s'}" % url, "msg = resp.status"), net="record")
+    emu.wait(300)
+    assert any("looks like a secret" in w for w in emu.warnings)
+    assert not any("hunter2" in ln for ln in emu.log + emu.warnings)
+
+
+@pytest.mark.parametrize("bad", [{"delay_ms": None}, {"headers": ["a", "b"]}, {"status": "ok"},
+                                 {"delay_ms": -1}, {"body_file": 5}, {"status": True}])
+def test_malformed_fixture_is_ignored_with_a_warning(make_app, emu_factory, tmp_path, bad):
+    write_fixture(tmp_path, "hand", {"method": "GET", "url": "http://x.test/a"}, bad)
+    emu = emu_factory(app_with(make_app, "{url = 'http://x.test/a'}", "msg = tostring(resp.err)"))
+    emu.wait(300)
+    assert emu.has_text("msg no_fixture")
+    assert any("hand.json is not valid" in w for w in emu.warnings), emu.warnings
+
+
+def test_missing_body_file_warns_and_gives_empty_body(make_app, emu_factory, tmp_path):
+    write_fixture(tmp_path, "hand", {"method": "GET", "url": "http://x.test/a"}, {"status": 201, "body_file": "gone.body"})
+    emu = emu_factory(app_with(make_app, "{url = 'http://x.test/a'}", "msg = resp.status .. ':' .. #resp.body"))
+    emu.wait(300)
+    assert emu.has_text("msg 201:0")
+    assert any("gone.body" in w and "not found" in w for w in emu.warnings), emu.warnings
+
+
+def test_truncated_response_is_no_network(make_app, emu_factory, server):
+    emu = emu_factory(app_with(make_app, "{url = '%s/short'}" % server.base, "msg = tostring(resp.err)"), net="live")
+    emu.wait(300)
+    assert emu.has_text("msg no_network")

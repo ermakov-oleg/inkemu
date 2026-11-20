@@ -1,5 +1,6 @@
 import fnmatch
 import hashlib
+import http.client
 import json
 import re
 import socket
@@ -8,7 +9,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote, quote_plus, urlsplit
 
 from .ctx_basic import check_arg, raw
 from .lua_env import make_object
@@ -23,6 +24,8 @@ _NAME = r"[A-Za-z0-9_.-]+"
 _PLACEHOLDER = re.compile(r"\{\{(" + _NAME + r")\}\}")
 _SECRET_LIKE = re.compile(r"[A-Za-z0-9_-]{20,}")
 _URL = re.compile(r"https?://[^/\s?#]+", re.I)
+_USERINFO_PASSWORD = re.compile(r"(\w+://[^/\s:@?#]*):[^/\s@?#]*@")
+_USERINFO_PASSWORD_B = re.compile(_USERINFO_PASSWORD.pattern.encode())
 
 # Escapes bytes >= 0x80 and `\` so lupa never has to decode a non-UTF-8 string from the app.
 _OPTS = r"""
@@ -71,23 +74,30 @@ class Net:
 
     # ---- secrets ----------------------------------------------------------------------------
 
-    def _variants(self) -> list[tuple[str, str]]:
-        """(text to find, placeholder) pairs, longest first so a secret containing another wins."""
-        pairs = {}
+    def _variants(self) -> list[tuple[re.Pattern, re.Pattern, str]]:
+        """(str pattern, bytes pattern, placeholder), longest first so a secret containing another wins.
+        Percent escapes match in either case: servers and apps write %2f as well as %2F."""
+        pairs: dict[str, str] = {}
         for name, value in self.secrets.items():
-            for v in (value, quote(value, safe=""), quote(value, safe="@/:")):
+            for v in (value, quote(value, safe=""), quote(value, safe="@/:"), quote_plus(value, safe="")):
                 pairs.setdefault(v, "{{%s}}" % name)
-        return sorted(pairs.items(), key=lambda kv: -len(kv[0]))
+        out = []
+        for v, placeholder in sorted(pairs.items(), key=lambda kv: -len(kv[0])):
+            parts = re.split(r"(%[0-9A-F]{2})", v)
+            pat = "".join("%" + "".join(f"[{c}{c.lower()}]" if c.isalpha() else c for c in part[1:])
+                          if i % 2 else re.escape(part) for i, part in enumerate(parts))
+            out.append((re.compile(pat), re.compile(pat.encode()), placeholder))
+        return out
 
     def redact(self, text: str) -> str:
-        for value, placeholder in self._variants():
-            text = text.replace(value, placeholder)
-        return text
+        for pat, _, placeholder in self._variants():
+            text = pat.sub(lambda _m: placeholder, text)
+        return _USERINFO_PASSWORD.sub(r"\1:{{userinfo}}@", text)
 
     def _redact_bytes(self, data: bytes) -> bytes:
-        for value, placeholder in self._variants():
-            data = data.replace(value.encode(), placeholder.encode())
-        return data
+        for _, pat, placeholder in self._variants():
+            data = pat.sub(lambda _m: placeholder.encode(), data)
+        return _USERINFO_PASSWORD_B.sub(rb"\1:{{userinfo}}@", data)
 
     def expand(self, text: str) -> str:
         """`{{name}}` placeholders (from seeded files) -> real secret values for a live request."""
@@ -109,12 +119,13 @@ class Net:
     def _load(self, path: Path) -> dict | None:
         try:
             d = json.loads(path.read_text(encoding="utf-8"))
-            req, resp = d["request"], d["response"]
-            if isinstance(req["method"], str) and isinstance(req["url"], str) and isinstance(resp, dict):
-                return d
-        except (OSError, ValueError, KeyError, TypeError):
-            pass
-        self.warn(f"net: fixture {path.name} is not valid, ignored")
+        except (OSError, ValueError) as e:
+            problem = f"cannot be read ({type(e).__name__})"
+        else:
+            problem = _fixture_problem(d)
+        if problem is None:
+            return d
+        self.warn(f"net: fixture {path.name} is not valid ({problem}), ignored")
         return None
 
     def _find(self, method: str, url: str, body: bytes | None) -> Response | None:
@@ -145,11 +156,16 @@ class Net:
         r = d["response"]
         body_file = r.get("body_file")
         if body_file:
-            data = (path.parent / Path(body_file).name).read_bytes() if (path.parent / Path(body_file).name).is_file() else b""
+            f = path.parent / Path(body_file).name
+            try:
+                data = f.read_bytes()
+            except OSError:
+                self.warn(f"net: fixture {path.name}: body_file {f.name} not found, the body is empty")
+                data = b""
         else:
-            data = str(r.get("body", "")).encode("utf-8")
+            data = (r.get("body") or "").encode("utf-8")
         headers = {str(k).lower(): str(v) for k, v in (r.get("headers") or {}).items()}
-        return Response(int(r.get("status", 200)), headers, data, None, int(r.get("delay_ms", DEFAULT_DELAY_MS)))
+        return Response(r.get("status", 200), headers, data, None, round(r.get("delay_ms", DEFAULT_DELAY_MS)))
 
     def _save(self, method: str, url: str, headers: dict, body: bytes | None, resp: Response) -> None:
         stem = self._stem(method, url, body)
@@ -199,14 +215,15 @@ class Net:
         req = urllib.request.Request(real_url, data=data, method=method, headers=real_headers)
         timeout = (timeout_ms if timeout_ms and timeout_ms > 0 else DEFAULT_TIMEOUT_MS) / 1000
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as r:
-                return self._response(r.status, r.headers, r.read())
-        except urllib.error.HTTPError as e:
-            with e:
-                return self._response(e.code, e.headers, e.read())
+            try:
+                with urllib.request.urlopen(req, timeout=timeout) as r:
+                    return self._response(r.status, r.headers, r.read())
+            except urllib.error.HTTPError as e:
+                with e:
+                    return self._response(e.code, e.headers, e.read())
         except (TimeoutError, socket.timeout):
             return Response(0, {}, None, "timeout")
-        except (urllib.error.URLError, OSError, ValueError) as e:
+        except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as e:
             reason = getattr(e, "reason", e)
             return Response(0, {}, None, "timeout" if isinstance(reason, socket.timeout) else "no_network")
 
@@ -230,6 +247,33 @@ class Net:
             if _SECRET_LIKE.fullmatch(text):
                 self.warn(f"net: a {what} of {parts.scheme}://{parts.netloc} looks like a secret "
                           "but is not in secrets.json; it will be saved in the fixture as is")
+
+
+def _number(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def _fixture_problem(d) -> str | None:
+    """Why a hand-written fixture cannot be used, or None."""
+    if not isinstance(d, dict) or not isinstance(d.get("request"), dict) or not isinstance(d.get("response"), dict):
+        return "needs \"request\" and \"response\" objects"
+    req, resp = d["request"], d["response"]
+    if not isinstance(req.get("method"), str) or not isinstance(req.get("url"), str):
+        return "request.method and request.url must be strings"
+    if req.get("body_sha256") is not None and not isinstance(req["body_sha256"], str):
+        return "request.body_sha256 must be a string"
+    if d.get("match", "exact") not in ("exact", "prefix", "glob"):
+        return "match must be exact, prefix or glob"
+    if not (isinstance(resp.get("status", 200), int) and _number(resp.get("status", 200))):
+        return "response.status must be an integer"
+    if not (_number(resp.get("delay_ms", 0)) and 0 <= resp.get("delay_ms", 0) < float("inf")):
+        return "response.delay_ms must be a number >= 0"
+    if resp.get("headers") is not None and not isinstance(resp["headers"], dict):
+        return "response.headers must be an object"
+    for k in ("body", "body_file"):
+        if resp.get(k) is not None and not isinstance(resp[k], str):
+            return f"response.{k} must be a string"
+    return None
 
 
 def _load_secrets(emu: "Emu") -> tuple[dict[str, str], list[str]]:
