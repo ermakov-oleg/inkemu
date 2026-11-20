@@ -44,7 +44,9 @@ return function(o)
   out.timeout_ms = type(o.timeout_ms) == 'number' and o.timeout_ms or nil
   if type(o.headers) == 'table' then
     for k, v in pairs(o.headers) do
-      if type(k) == 'string' and (type(v) == 'string' or type(v) == 'number') then out.headers[esc(k)] = esc(tostring(v)) end
+      if type(k) == 'string' and (type(v) == 'string' or type(v) == 'number') then
+        out.headers[esc(k)] = esc(tostring(v))
+      end
     end
   end
   return out
@@ -90,7 +92,7 @@ class Net:
         pairs: dict[str, str] = {}
         for name, value in self.secrets.items():
             for v in (value, quote(value, safe=""), quote(value, safe="@/:"), quote_plus(value, safe="")):
-                pairs.setdefault(v, "{{%s}}" % name)
+                pairs.setdefault(v, "{{" + name + "}}")
         out = []
         for v, placeholder in sorted(pairs.items(), key=lambda kv: -len(kv[0])):
             parts = re.split(r"(%[0-9A-F]{2})", v)
@@ -103,12 +105,13 @@ class Net:
 
     def redact(self, text: str) -> str:
         for pat, _, placeholder in self._variants():
-            text = pat.sub(lambda _m: placeholder, text)
+            text = pat.sub(lambda _m, p=placeholder: p, text)
         return _USERINFO_PASSWORD.sub(r"\1:{{userinfo}}@", text)
 
     def _redact_bytes(self, data: bytes) -> bytes:
         for _, pat, placeholder in self._variants():
-            data = pat.sub(lambda _m: placeholder.encode(), data)
+            encoded = placeholder.encode()
+            data = pat.sub(lambda _m, p=encoded: p, data)
         return _USERINFO_PASSWORD_B.sub(rb"\1:{{userinfo}}@", data)
 
     def expand(self, text: str) -> str:

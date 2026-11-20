@@ -21,7 +21,7 @@ def test_leaked_python_object_has_no_attributes():
     L = new_runtime()
     L.globals().leak = lambda: 1
     for code in ("return leak.__class__", "return leak.__globals__", "leak.x = 1"):
-        with pytest.raises(Exception):
+        with pytest.raises(AttributeError):
             L.execute(code)
 
 

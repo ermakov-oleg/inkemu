@@ -1,3 +1,4 @@
+import contextlib
 import io
 import queue
 import time
@@ -29,10 +30,8 @@ def make_window(emu_factory):
 
     yield make
     for a in apps:
-        try:
+        with contextlib.suppress(tk.TclError):
             a.root.destroy()
-        except tk.TclError:
-            pass
 
 
 def click(app, x, y):

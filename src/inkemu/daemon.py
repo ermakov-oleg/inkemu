@@ -135,7 +135,7 @@ def parse_words(words: list[str]) -> tuple[str, dict]:
     if not lo <= len(rest) <= len(fields):
         want = str(lo) if lo == len(fields) else f"{lo}-{len(fields)}"
         raise UsageError(f"{cmd!r} takes {want} argument(s), got {len(rest)} (usage: {usage})")
-    args = {name: w for (name, _, _), w in zip(fields, rest)}
+    args = {name: w for (name, _, _), w in zip(fields, rest, strict=False)}
     return cmd, normalize(cmd, args)
 
 
@@ -289,7 +289,8 @@ class Daemon:
                 self.wfile.write(data)
 
             def _forbidden(self) -> str | None:
-                # a web page can POST to 127.0.0.1 (no-cors text/plain, DNS rebinding); our clients send neither Origin nor a foreign Host
+                # a web page can POST to 127.0.0.1 (no-cors text/plain, DNS rebinding);
+                # our clients send neither Origin nor a foreign Host
                 if self.headers.get("Host") not in (f"127.0.0.1:{daemon.port}", f"localhost:{daemon.port}"):
                     return "bad Host header"
                 if "Origin" in self.headers:
