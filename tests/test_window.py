@@ -1,3 +1,4 @@
+import io
 import queue
 import time
 from pathlib import Path
@@ -247,3 +248,15 @@ function on_draw(c, g) g:clear(0) end
     assert not app._down
     app._fire_hold(5, 5)
     assert calls == []
+
+
+def test_window_frame_has_no_dialog_plate(make_window, make_app, monkeypatch):
+    app = make_window(make_app(ASKING % "c.dialog:confirm({title='Sure', text='Really?'}, function() end)"))
+    monkeypatch.setattr(window, "ask_yes_no", lambda *a: False)
+    app.on_key(SimpleNamespace(keysym="Return"))
+    assert app.emu.pending
+    app.refresh()
+    plain = io.BytesIO()
+    app.emu.shot(dialog=False).convert("L").save(plain, "PNG")
+    assert app._frame_png == plain.getvalue()  # the Tk dialog is the only rendering of it
+    assert "Yes" in [t["text"] for t in app.emu.texts()]  # remote clients still see it

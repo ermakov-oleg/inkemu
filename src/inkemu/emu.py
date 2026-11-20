@@ -26,6 +26,7 @@ POINTER_PHASES = ("down", "move", "hold", "up")
 SWIPES = {"left": (-1, 0), "right": (1, 0), "up": (0, -1), "down": (0, 1)}
 ERROR_TITLE = "App error, closed"
 LOCK_WAIT_MS = 30_000
+DIALOG_BUTTONS = {"confirm": ("Yes", "No"), "leave": ("Yes", "No"), "text": ("OK", "Cancel"), "edit": ("OK", "Cancel")}
 
 _REQUIRE = r"""
 local find, load_chunk, error = ...
@@ -160,6 +161,12 @@ class Emu:
         gesture = _classify(x - dx, y - dy, held)
         if gesture:
             event["gesture"] = gesture
+        if gesture == "tap" and self.pending is not None:
+            hit = self._dialog_hit(x, y)
+            if hit is not None:
+                self._log_line(f"{self.pending['kind']} dialog: {hit[0]} tapped")
+                self.answer(hit[1])
+                return
         self._dispatch(event)
 
     def tap(self, x: int, y: int) -> None:
@@ -280,7 +287,8 @@ class Emu:
     def invalidate(self) -> None:
         self._invalid = True
 
-    def shot(self) -> Image.Image:
+    def shot(self, *, dialog: bool = True) -> Image.Image:
+        """The screen with the error, toast and (unless `dialog=False`, for a window with its own) dialog plates."""
         try:
             img = self.canvas.render()
         except Exception as e:  # bad option values from the app (e.g. width='abc') surface only here
@@ -288,9 +296,13 @@ class Emu:
             self.canvas.begin_frame()
             img = self.canvas.render()
         d = ImageDraw.Draw(img)
-        for items in self._plates():
-            top, bottom = items[0]["y"] - 16, items[-1]["y"] + items[-1]["h"] + 16
+        for plate in self._plates(dialog=dialog):
+            items, boxes = plate["items"], plate["boxes"]
+            top = min([it["y"] for it in items] + [b[1] for b in boxes]) - 16
+            bottom = max([it["y"] + it["h"] for it in items] + [b[3] for b in boxes]) + 16
             d.rectangle([16, top, self.canvas.width - 17, bottom], fill=255, outline=0, width=3)
+            for box in boxes:
+                d.rectangle(box, outline=0, width=2)
             for it in items:
                 f = self.fonts.pil(it["font"])
                 d.text((it["x"], it["y"] + (it["h"] - f.size) / 2), it["text"], font=f, fill=0)
@@ -596,6 +608,13 @@ class Emu:
         if self.locked:
             self._log_line(f"input ignored, the screen is locked: {event['type']} {event['phase']}")
             return
+        if self.pending is not None:
+            if event["phase"] == "up":
+                kind = self.pending["kind"]
+                how = "type text or answer it" if kind in ("text", "edit") else "answer it"
+                self._log_line(f"input went to the open {kind} dialog, not the app: "
+                               f"{event['type']} {event.get('gesture') or event.get('key') or ''} ({how})")
+            return
         if not self.running:
             self._log_line(f"input ignored, the app is not running: {event['type']} {event['phase']}")
             return
@@ -647,31 +666,70 @@ class Emu:
         self._toast = (text, self.clock.ms + TOAST_MS)
         self._log_line(f"toast: {text}")
 
-    def _plates(self) -> list[list[dict]]:
+    def _item(self, text: str, font: str, cx: float, y: int) -> dict:
+        tw, lh = self.fonts.measure(font, text), self.fonts.line_height(font)
+        return {"text": text, "x": round(cx - tw / 2), "y": y, "w": tw, "h": lh, "font": font}
+
+    def _plates(self, *, dialog: bool = True) -> list[dict]:
+        """Overlay plates over the app frame: {"items": text items, "boxes": outlined rects, "buttons": [(rect, label, ok)]}."""
         plates = []
+        w = self.canvas.width
         if self._overlay:
             title, msg = self._overlay
-            w = self.canvas.width
             items, y = [], self.canvas.height // 2 - 60
             for text, font in [(title, "large")] + [(line, "small") for line in self.canvas._wrap("small", msg, w - 64)[:4]]:
-                tw, lh = self.fonts.measure(font, text), self.fonts.line_height(font)
-                items.append({"text": text, "x": round((w - tw) / 2), "y": y, "w": tw, "h": lh, "font": font})
-                y += lh + (8 if font == "large" else 0)
-            plates.append(items)
+                items.append(self._item(text, font, w / 2, y))
+                y += items[-1]["h"] + (8 if font == "large" else 0)
+            plates.append({"items": items, "boxes": [], "buttons": []})
+        if dialog and self.pending is not None:
+            plates.append(self._dialog_plate())
         if self._toast and self.clock.ms < self._toast[1]:
-            w, lh = self.canvas.width, self.fonts.line_height("medium")
+            lh = self.fonts.line_height("medium")
             lines = self.canvas._wrap("medium", self._toast[0], w - 96)[:3]
             y = self.canvas.height - 48 - 16 - lh * len(lines)
             items = []
             for line in lines:
-                tw = self.fonts.measure("medium", line)
-                items.append({"text": line, "x": round((w - tw) / 2), "y": y, "w": tw, "h": lh, "font": "medium"})
+                items.append(self._item(line, "medium", w / 2, y))
                 y += lh
-            plates.append(items)
+            plates.append({"items": items, "boxes": [], "buttons": []})
         return plates
 
+    def _dialog_plate(self) -> dict:
+        p, w = self.pending, self.canvas.width
+        items, boxes, buttons = [], [], []
+        y = self.canvas.height // 2 - 100
+        if p["title"]:
+            items.append(self._item(p["title"], "large", w / 2, y))
+            y += items[-1]["h"] + 12
+        if p["kind"] in ("text", "edit"):
+            lh = self.fonts.line_height("medium")
+            boxes.append((40, y - 6, w - 41, y + lh + 6))
+            line = (self.canvas._wrap("medium", p["text"], w - 100) or [""])[-1]
+            if line:
+                items.append({**self._item(line, "medium", w / 2, y), "x": 50})
+            y += lh + 24
+        elif p["text"]:
+            for line in self.canvas._wrap("small", p["text"], w - 64)[:4]:
+                items.append(self._item(line, "small", w / 2, y))
+                y += items[-1]["h"]
+            y += 16
+        for (label, ok), cx in zip(zip(DIALOG_BUTTONS[p["kind"]], (True, False)), (w / 3, 2 * w / 3)):
+            it = self._item(label, "medium", cx, y)
+            rect = (round(cx - 70), y - 8, round(cx + 70), y + it["h"] + 8)
+            items.append(it)
+            boxes.append(rect)
+            buttons.append((rect, label, ok))
+        return {"items": items, "boxes": boxes, "buttons": buttons}
+
+    def _dialog_hit(self, x: int, y: int) -> tuple[str, bool] | None:
+        """(label, answer) of the dialog button at x, y."""
+        for (x0, y0, x1, y1), label, ok in self._dialog_plate()["buttons"]:
+            if x0 <= x <= x1 and y0 <= y <= y1:
+                return label, ok
+        return None
+
     def _overlay_items(self) -> list[dict]:
-        return [it for plate in self._plates() for it in plate]
+        return [it for plate in self._plates() for it in plate["items"]]
 
     # ---- log --------------------------------------------------------------------------------
 
