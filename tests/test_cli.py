@@ -30,7 +30,7 @@ def run(tmp_path, app, steps, *extra):
 def test_run_steps_hello(tmp_path):
     assert run(tmp_path, HELLO, "tap-text 'Tap me'; shot") == 0
     out = tmp_path / "out"
-    texts = json.load(open(out / "texts.json"))
+    texts = json.loads((out / "texts.json").read_text(encoding="utf-8"))
     assert any(t["text"] == "Taps: 1" for t in texts)
     assert (out / "001.png").exists()
 

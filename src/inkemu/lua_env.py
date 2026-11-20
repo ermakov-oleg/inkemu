@@ -38,7 +38,8 @@ local function count_hook()
     exhausted = true
     sethook(count_hook, '', 1)  -- fire on every instruction now, so an app pcall cannot swallow the abort
   end
-  local where = info.source:sub(1, 1) == '@' and info.currentline > 0 and info.short_src .. ':' .. info.currentline .. ': ' or ''
+  local where = info.source:sub(1, 1) == '@' and info.currentline > 0
+    and info.short_src .. ':' .. info.currentline .. ': ' or ''
   error(where .. budget_msg, 0)
 end
 

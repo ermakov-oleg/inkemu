@@ -716,7 +716,8 @@ class Emu:
         return {"text": text, "x": round(cx - tw / 2), "y": y, "w": tw, "h": lh, "font": font}
 
     def _plates(self, *, dialog: bool = True) -> list[dict]:
-        """Overlay plates over the app frame: {"items": text items, "boxes": outlined rects, "buttons": [(rect, label, ok)]}."""
+        """Overlay plates over the app frame:
+        {"items": text items, "boxes": outlined rects, "buttons": [(rect, label, ok)]}."""
         plates = []
         w = self.canvas.width
         if self._overlay:
@@ -760,7 +761,8 @@ class Emu:
                 items.append(self._item(line, "small", w / 2, y))
                 y += items[-1]["h"]
             y += 16
-        for (label, ok), cx in zip(zip(DIALOG_BUTTONS[p["kind"]], (True, False)), (w / 3, 2 * w / 3)):
+        labels = zip(DIALOG_BUTTONS[p["kind"]], (True, False), strict=True)
+        for (label, ok), cx in zip(labels, (w / 3, 2 * w / 3), strict=True):
             it = self._item(label, "medium", cx, y)
             rect = (round(cx - 70), y - 8, round(cx + 70), y + it["h"] + 8)
             items.append(it)
