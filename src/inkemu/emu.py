@@ -61,7 +61,7 @@ class Emu:
     def __init__(self, app_dir: str | Path, *, state_dir: str | Path | None = None,
                  fixtures_dir: str | Path | None = None, net: str = "replay",
                  start_time: str | datetime | None = None, firmware_api: tuple[int, int] = (2, 26),
-                 fresh: bool = False, secrets_file: str | Path | None = None):
+                 fresh: bool = False, secrets_file: str | Path | None = None, seed_files: bool | None = None):
         if net not in NET_MODES:
             raise ValueError(f"net must be one of {', '.join(NET_MODES)}, not {net!r}")
         self.app_dir = Path(app_dir).resolve()
@@ -75,6 +75,9 @@ class Emu:
         self.running = False
         self.battery = {"percent": 87, "charging": False, "voltage_mv": 4020, "temperature_c": 24}
         self.full_refresh_deferred = 0
+        self.locale = "en"
+        self.frontlight = 0
+        self.refresh_counts = {"request": 0, "full": 0}
         self.frame_commands = 0
         self.clock = VirtualClock(_parse_start(start_time))
         self.scheduler = Scheduler(self.clock)
@@ -104,6 +107,8 @@ class Emu:
             raise ValueError(f"state dir {self.state_dir} is outside the state root {root}")
         if fresh and not problem:
             self._wipe_state()
+        if (fresh if seed_files is None else seed_files) and not problem:
+            ctx_basic.seed_files(self)
         self._boot()
 
     # ---- public API -------------------------------------------------------------------------

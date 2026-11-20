@@ -36,6 +36,7 @@ def emu_factory(tmp_path, request) -> Callable[..., Emu]:
     def factory(app_dir: Path, **kw) -> Emu:
         kw.setdefault("state_dir", tmp_path / "state")
         kw.setdefault("fixtures_dir", tmp_path / "fixtures")
+        kw.setdefault("seed_files", True)
         kw.setdefault("start_time", "2026-11-20T09:00:00")
         emu = Emu(app_dir, **kw)
         made.append(emu)
