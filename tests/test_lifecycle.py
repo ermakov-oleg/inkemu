@@ -92,6 +92,30 @@ def test_manifest_strictness(make_app, emu_factory, manifest, needle):
     assert needle in emu.errors[0] and emu.status()["running"] is False
 
 
+@pytest.mark.allow_errors
+@pytest.mark.parametrize("bad_id", ["absolute", "../../victim", "../victim"])
+def test_bad_app_id_never_touches_disk_outside_state_root(make_app, emu_factory, tmp_path, monkeypatch, bad_id):
+    victim = tmp_path / "victim"
+    for sub in ("files", "shots"):
+        (victim / sub).mkdir(parents=True)
+        (victim / sub / "keep.txt").write_text("x")
+    (victim / "state.json").write_text("{}")
+    root = tmp_path / "root" / "emu"
+    monkeypatch.setenv("INKEMU_STATE_ROOT", str(root))
+    app_id = str(victim) if bad_id == "absolute" else bad_id
+    emu = emu_factory(make_app("", manifest={"app_id": app_id}), state_dir=None, fresh=True)
+    assert "app_id" in emu.errors[0] and emu.status()["running"] is False
+    assert (victim / "files" / "keep.txt").exists() and (victim / "shots" / "keep.txt").exists()
+    assert (victim / "state.json").exists()
+    assert emu.state_dir.resolve().is_relative_to(root.resolve())
+
+
+def test_derived_state_dir_uses_app_id(make_app, emu_factory, tmp_path, monkeypatch):
+    monkeypatch.setenv("INKEMU_STATE_ROOT", str(tmp_path / "root"))
+    emu = emu_factory(make_app(""), state_dir=None)
+    assert emu.state_dir == tmp_path / "root" / "testapp"
+
+
 def test_landscape_manifest_canvas(make_app, emu_factory):
     emu = emu_factory(make_app(DRAW_MSG, manifest={"display": {"orientation": "landscape"}}))
     assert emu.shot().size == (800, 480)

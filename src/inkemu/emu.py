@@ -75,14 +75,19 @@ class Emu:
         self._depth = 0
         self._overlay: tuple[str, str] | None = None
 
-        self.manifest, _ = self._read_manifest()
+        self.manifest, problem = self._read_manifest()
         app_id = self.manifest.get("app_id")
-        self.app_id = app_id if isinstance(app_id, str) and app_id else self.app_dir.name
+        # app_id comes from an untrusted manifest and names directories we may wipe
+        if not (isinstance(app_id, str) and re.fullmatch(r"[A-Za-z]+", app_id)):
+            app_id = re.sub(r"[^A-Za-z]", "", self.app_dir.name) or "app"
+        self.app_id = app_id
         root = Path(os.environ.get("INKEMU_STATE_ROOT", ".emu")).absolute()
         self.state_dir = Path(state_dir) if state_dir else root / self.app_id
         self.fixtures_dir = Path(fixtures_dir) if fixtures_dir else Path("tests/fixtures").absolute() / self.app_id
         self.secrets_file = Path(secrets_file) if secrets_file else root / "secrets.json"
-        if fresh:
+        if not state_dir and not self.state_dir.resolve().is_relative_to(root.resolve()):
+            raise ValueError(f"state dir {self.state_dir} is outside the state root {root}")
+        if fresh and not problem:
             self._wipe_state()
         self._boot()
 
