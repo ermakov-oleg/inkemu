@@ -28,12 +28,13 @@ uv tool install inkemu      # or: pipx install inkemu
 or as a dev dependency of your app project: `uv add --dev inkemu` (then prefix the commands with `uv run`).
 
 Python 3.11+, macOS or Linux. Everything is headless except the window, which needs Tk (`python3-tk` on
-Debian/Ubuntu; the Pythons from python.org and `uv python install` ship it).
+Debian/Ubuntu). CI runs on uv-managed Pythons (Tk 9); with the python.org builds (Tk 8.6) the window has been seen to
+crash on macOS 26.
 
 ## Quick start
 
 An app is a folder with `manifest.json` and `index.lua`; [`examples/hello`](https://github.com/ermakov-oleg/inkemu/tree/main/examples/hello)
-is a small one with a lock screen.
+is a small one with a lock screen (it is not in the package: clone the repository or copy the folder).
 
 ```bash
 inkemu window examples/hello          # a window: click = tap, drag = swipe, arrows/Enter/Esc = side buttons
@@ -162,8 +163,9 @@ Drawing (`g`): `clear`, `rect`, `round_rect`, `line`, `circle`, `arc`, `polygon`
 
 - Fonts are approximate: the system Helvetica, Arial or DejaVu (whichever exists) at fixed line heights 20/24/30,
   so text widths differ from the device; `ctx.fonts:size(px)` picks the nearest of the three, there is no TTF.
-- Lua is 5.5 via [lupa](https://pypi.org/project/lupa/), the same language version the reverse-engineering notes
-  report for the firmware. Integers are 64-bit here; the device is probably 32-bit.
+- Lua is 5.5 via [lupa](https://pypi.org/project/lupa/): the firmware reports `_VERSION` "Lua 5.5" in the
+  reverse-engineering notes (desktop test setups often run 5.4, whose for-loop variables are not constant).
+  Integers are 64-bit here; the device is probably built with 32-bit integers, so keep arithmetic below 2^31.
 - No `ctx.ui`, no BLE, no WebSocket; only GET and POST get a network callback.
 - Layer semantics and error codes are guesses based on the notes.
 - Remote commands (daemon verbs, MCP) freeze the window clock, read-only ones included, so a screenshot is stable;
