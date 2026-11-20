@@ -1,6 +1,5 @@
 import base64
 import io
-import queue
 import time
 import tkinter as tk
 from datetime import datetime
@@ -39,6 +38,7 @@ class WindowApp:
         self._down = False
         self._hold_job = None
         self._dialog_open = False
+        self._closed = False
         self._last_tick = time.monotonic()
         self._frame_png = b""
         self._photo: tk.PhotoImage | None = None
@@ -206,6 +206,7 @@ class WindowApp:
 
     def close(self) -> None:
         """Window closed: leave the app so on_leave runs and the state is saved."""
+        self._closed = True
         self._guard(self.emu.leave)
         self.root.destroy()
 
@@ -215,24 +216,21 @@ class WindowApp:
         self.root.after(TICK_MS, self._tick)
 
     def _poll_control(self) -> None:
-        """Items of control.queue are zero-argument callables; Task 9's Daemon decides what they wrap."""
         try:
-            while True:
-                try:
-                    item = self.control.queue.get_nowait()
-                except queue.Empty:
-                    break
+            ran = self._guard(self.control.pump)
+            if ran:
                 self.on_remote_command()
-                self._guard(item)
                 self.refresh()
+            if getattr(self.control, "stopped", False):
+                self.close()
+                return
         finally:
-            self.root.after(CONTROL_POLL_MS, self._poll_control)
+            if not self._closed:
+                self.root.after(CONTROL_POLL_MS, self._poll_control)
 
     def on_remote_command(self) -> None:
-        """The first remote command freezes the window clock; P or `resume` hands it back to real time."""
-        if not self.remote_frozen:
-            self.remote_frozen = True
-            self.emu.paused = True
+        """Remote commands freeze the clock (execute sets emu.paused); `resume` or P hands it back to real time."""
+        self.remote_frozen = self.emu.paused
         self._last_tick = time.monotonic()
 
 

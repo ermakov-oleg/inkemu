@@ -101,7 +101,7 @@ class Emu:
         self.refresh_counts = {"request": 0, "full": 0}
         self.frame_commands = 0
         self.clock = VirtualClock(_parse_start(start_time))
-        self.scheduler = Scheduler(self.clock)
+        self.scheduler = Scheduler(self.clock, on_overflow=self._fail)
         self.fonts = Fonts()
         self.L = None
         self.canvas: Canvas | None = None
