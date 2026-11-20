@@ -223,7 +223,7 @@ def test_require_only_from_app_folder(make_app, emu_factory, tmp_path, name):
 
 
 def test_sandbox_has_no_io_os(make_app, emu_factory):
-    app = make_app("assert(io == nil and os == nil and dofile == nil and loadfile == nil and debug == nil)\n"
+    app = make_app("assert(io == nil and os == nil and dofile == nil and loadfile == nil and not debug)\n"
                    "assert(print == nil and collectgarbage == nil and python == nil)")
     assert emu_factory(app).status()["running"] is True
 

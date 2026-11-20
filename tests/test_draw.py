@@ -133,8 +133,9 @@ def test_begin_frame_resets(env):
 
 def test_sandbox():
     L = new_runtime()
-    for expr in ("io", "os", "dofile", "loadfile", "debug", "collectgarbage", "package.loadlib", "package.cpath", "python"):
+    for expr in ("io", "os", "dofile", "loadfile", "collectgarbage", "package.loadlib", "package.cpath", "python"):
         assert L.eval(expr) is None, expr
+    assert L.eval("debug") is False
     assert L.eval("load('return 1 + 1')()") == 2
     for expr in ("package.loaded.io", "package.loaded.os", "package.loaded.debug", "print", "__objs", "__method"):
         assert L.eval(expr) is None, expr
