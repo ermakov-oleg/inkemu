@@ -1,0 +1,18 @@
+[project]
+name = "inkemu"
+version = "0.1.0"
+description = "Desktop emulator of the Xteink X4 Pro InkApp (XTOS Licorice) Lua host"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = ["lupa>=2.6", "pillow>=10"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = ["pytest>=9.2.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
