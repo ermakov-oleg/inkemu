@@ -1,0 +1,82 @@
+diff --git a/vendor/lua-src/lua-5.5.1/luaconf.h b/vendor/lua-src/lua-5.5.1/luaconf.h
+--- a/vendor/lua-src/lua-5.5.1/luaconf.h
++++ b/vendor/lua-src/lua-5.5.1/luaconf.h
+@@ -140,7 +140,7 @@
+ /*
+ @@ LUA_32BITS enables Lua with 32-bit integers and 32-bit floats.
+ */
+-/* #define LUA_32BITS */
++#define LUA_32BITS
+ 
+ 
+ /*
+diff --git a/vendor/mlua/src/value.rs b/vendor/mlua/src/value.rs
+--- a/vendor/mlua/src/value.rs
++++ b/vendor/mlua/src/value.rs
+@@ -285,9 +285,7 @@
+     /// If the value is a Lua [`Integer`], try to convert it to `i64` or return `None` otherwise.
+     #[inline]
+     pub fn as_i64(&self) -> Option<i64> {
+-        #[cfg(target_pointer_width = "64")]
+-        return self.as_integer();
+-        #[cfg(not(target_pointer_width = "64"))]
++        #[allow(clippy::useless_conversion)]
+         return self.as_integer().map(i64::from);
+     }
+ 
+@@ -337,7 +335,7 @@
+     /// If the value is a Lua [`Number`], try to convert it to `f32` or return `None` otherwise.
+     #[inline]
+     pub fn as_f32(&self) -> Option<f32> {
+-        self.as_number().and_then(f32::from_f64)
++        self.as_number().map(|n| n as f32)
+     }
+ 
+     /// Cast the value to `f64`.
+@@ -345,7 +343,7 @@
+     /// If the value is a Lua [`Number`], try to convert it to `f64` or return `None` otherwise.
+     #[inline]
+     pub fn as_f64(&self) -> Option<f64> {
+-        self.as_number()
++        self.as_number().map(|n| n as f64)
+     }
+ 
+     /// Returns `true` if the value is a [`LuaString`].
+@@ -514,7 +512,7 @@
+         fn cmp_integer_number(a: Integer, b: Number) -> Ordering {
+             match (a as Number).partial_cmp(&b) {
+                 // Integer::MAX can round up to a float outside the integer ranges
+-                Some(Ordering::Equal) => Integer::from_f64(b).map_or(Ordering::Less, |b| a.cmp(&b)),
++                Some(Ordering::Equal) => Integer::from_f64(b as f64).map_or(Ordering::Less, |b| a.cmp(&b)),
+                 ordering => ordering.unwrap_or(Ordering::Equal),
+             }
+         }
+@@ -619,7 +617,7 @@
+             (Value::LightUserData(a), Value::LightUserData(b)) => a == b,
+             (Value::Integer(a), Value::Integer(b)) => *a == *b,
+             (Value::Integer(a), Value::Number(b)) | (Value::Number(b), Value::Integer(a)) => {
+-                *a as Number == *b && Integer::from_f64(*b) == Some(*a)
++                *a as Number == *b && Integer::from_f64(*b as f64) == Some(*a)
+             }
+             (Value::Number(a), Value::Number(b)) => *a == *b,
+             #[cfg(feature = "luau")]
+diff --git a/vendor/mlua-sys/src/lua55/lua.rs b/vendor/mlua-sys/src/lua55/lua.rs
+--- a/vendor/mlua-sys/src/lua55/lua.rs
++++ b/vendor/mlua-sys/src/lua55/lua.rs
+@@ -71,13 +71,13 @@
+ pub const LUA_RIDX_LAST: lua_Integer = 3;
+ 
+ /// A Lua number, usually equivalent to `f64`
+-pub type lua_Number = c_double;
++pub type lua_Number = core::ffi::c_float;
+ 
+ /// A Lua integer, usually equivalent to `i64`
+-pub type lua_Integer = i64;
++pub type lua_Integer = i32;
+ 
+ /// A Lua unsigned integer, usually equivalent to `u64`
+-pub type lua_Unsigned = u64;
++pub type lua_Unsigned = u32;
+ 
+ /// Type for continuation-function contexts
+ pub type lua_KContext = isize;

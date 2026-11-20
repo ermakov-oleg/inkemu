@@ -23,6 +23,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+      - run: scripts/vendor-lua.sh
       - uses: astral-sh/setup-uv@v10.4.0
         with:
           python-version: "3.11"
@@ -41,6 +42,7 @@ jobs:
         python: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v7
+      - run: scripts/vendor-lua.sh
       - uses: astral-sh/setup-uv@v10.4.0
         with:
           python-version: ${{ matrix.python }}
@@ -53,23 +55,57 @@ jobs:
         if: runner.os != 'Linux'
         run: uv run --locked pytest -rs
 
-  package:
+  rust:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+      - run: scripts/vendor-lua.sh
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+
+  wasm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - run: scripts/vendor-lua.sh
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 7.0.0
+      - run: rustup target add wasm32-unknown-emscripten
+      - name: build the Lua number-type check for wasm and run it under node
+        env:
+          RUSTFLAGS: -C link-arg=-sSUPPORT_LONGJMP=wasm -C link-arg=-sENVIRONMENT=node
+        run: |
+          cargo build -p inkcore --example lua32_check --target wasm32-unknown-emscripten --release
+          node target/wasm32-unknown-emscripten/release/examples/lua32_check.js | grep -qx ok
+
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - run: scripts/vendor-lua.sh
       - uses: astral-sh/setup-uv@v10.4.0
         with:
           python-version: "3.11"
-      - run: uv build
-      - run: uvx twine check --strict dist/*
+      - run: uvx maturin build --release
+      - run: uvx maturin sdist
+      - run: uvx twine check --strict target/wheels/*
       - name: install the wheel into a clean venv and smoke-test it
         run: |
           cp -r examples/hello "$RUNNER_TEMP/hello"
           uv venv "$RUNNER_TEMP/venv"
-          uv pip install --python "$RUNNER_TEMP/venv/bin/python" dist/*.whl
+          uv pip install --python "$RUNNER_TEMP/venv/bin/python" target/wheels/*.whl
           cd "$RUNNER_TEMP"
           venv/bin/inkemu --help
-          venv/bin/python -c "import inkemu.mcp_server, inkemu.window"
+          venv/bin/python -c "import inkemu.mcp_server, inkemu.window, inkemu._core"
           venv/bin/inkemu run hello --fresh --out run --steps "tap-text 'Tap me'; texts" | tee out.txt
           grep -q "Taps: 1" out.txt
+      - name: build and import the sdist in another clean venv
+        run: |
+          uv venv "$RUNNER_TEMP/venv-sdist"
+          uv pip install --python "$RUNNER_TEMP/venv-sdist/bin/python" target/wheels/*.tar.gz
+          "$RUNNER_TEMP/venv-sdist/bin/python" -c "import inkemu._core"

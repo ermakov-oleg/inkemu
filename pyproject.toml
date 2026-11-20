@@ -41,11 +41,24 @@ inkemu = "inkemu.cli:main"
 inkemu-mcp = "inkemu.mcp_server:main"
 
 [build-system]
-requires = ["hatchling>=1.27"]
-build-backend = "hatchling.build"
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
 
-[tool.hatch.build.targets.sdist]
-include = ["src", "tests", "examples", "README.md", "LICENSE", "pyproject.toml", "uv.lock"]
+[tool.maturin]
+python-source = "src"
+module-name = "inkemu._core"
+manifest-path = "crates/inkemu-py/Cargo.toml"
+features = ["extension-module"]
+include = [
+    { path = "vendor/**/*", format = "sdist" },
+    { path = "patches/**/*", format = "sdist" },
+    { path = "scripts/**/*", format = "sdist" },
+    { path = "assets/**/*", format = "sdist" },
+    { path = "rust-toolchain.toml", format = "sdist" },
+    { path = "tests/**/*", format = "sdist" },
+    { path = "examples/**/*", format = "sdist" },
+    { path = "uv.lock", format = "sdist" },
+]
 
 [dependency-groups]
 dev = [

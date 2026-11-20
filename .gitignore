@@ -4,3 +4,7 @@ __pycache__/
 .emu/
 dist/
 .DS_Store
+
+/vendor/
+/target/
+*.so

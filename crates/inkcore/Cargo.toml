@@ -1,0 +1,9 @@
+[package]
+name = "inkcore"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+mlua = { version = "0.12.2", features = ["lua55", "vendored"] }

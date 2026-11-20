@@ -180,7 +180,12 @@ Drawing (`g`): `clear`, `rect`, `round_rect`, `line`, `circle`, `arc`, `polygon`
 
 ## Development
 
+Building needs a Rust toolchain (rustup) and `curl`. `scripts/vendor-lua.sh` downloads Lua 5.5 with the 32-bit number
+patch into `vendor/`; run it first on a fresh clone, otherwise Cargo cannot resolve the patched crates.
+
 ```bash
+scripts/vendor-lua.sh
+cargo test
 uv sync
 uv run pytest
 uv run ruff check && uv run ruff format --check
