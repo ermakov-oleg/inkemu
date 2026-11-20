@@ -10,7 +10,7 @@ from typing import Any, Callable
 from lupa import lua55
 from PIL import Image, ImageDraw
 
-from . import ctx_basic, ctx_ui, net as net_mod
+from . import ctx_basic, ctx_ui, lockscreen, net as net_mod
 from .clock import Scheduler, Timer, VirtualClock, parse_duration
 from .draw import Canvas
 from .fonts import Fonts
@@ -25,6 +25,7 @@ HOLD_MS = 600
 POINTER_PHASES = ("down", "move", "hold", "up")
 SWIPES = {"left": (-1, 0), "right": (1, 0), "up": (0, -1), "down": (0, 1)}
 ERROR_TITLE = "App error, closed"
+LOCK_WAIT_MS = 30_000
 
 _REQUIRE = r"""
 local find, load_chunk, error = ...
@@ -81,6 +82,16 @@ class Emu:
         self._toast: tuple[str, int] | None = None
         self._images: dict[int, Any] = {}
         self.running = False
+        self.locked = False
+        self.lock_wakes = 0
+        self.net_inflight = 0
+        self._lock_ctx: dict | None = None
+        self._lock_interval = 0
+        self._lock_cycle_ms = 0
+        self._lock_waiting = False
+        self._lock_wake_timer: Timer | None = None
+        self._lock_deadline: Timer | None = None
+        self._canvas_stale = False
         self.battery = {"percent": 87, "charging": False, "voltage_mv": 4020, "temperature_c": 24}
         self.full_refresh_deferred = 0
         self.locale = "en"
@@ -95,7 +106,8 @@ class Emu:
         self.L = None
         self.canvas: Canvas | None = None
         self._ctx = None
-        self._install: list[Callable[["Emu"], None]] = [ctx_basic.install, net_mod.install, ctx_ui.install]
+        self._install: list[Callable[["Emu"], None]] = [ctx_basic.install, net_mod.install, ctx_ui.install,
+                                                  lockscreen.install]
         self._timers: set[Timer] = set()
         self._tick: Timer | None = None
         self._invalid = self._quit = self._leaving = False
@@ -207,6 +219,10 @@ class Emu:
         self._settle()
 
     def leave(self) -> None:
+        if self.locked:
+            self._end_lock()
+            self._log_line("left while locked: the lock screen was dropped")
+            return
         if not self.running or self._leaving:
             return
         self._leaving = True
@@ -243,6 +259,8 @@ class Emu:
         self._boot()
 
     def reload(self) -> None:
+        if self.locked:
+            self._end_lock()
         if self.running:
             self.save_state()
         self._boot()
@@ -294,26 +312,39 @@ class Emu:
             "app_id": self.app_id,
             "running": self.running,
             "pending": self.pending,
+            "locked": self.locked,
         }
 
     # ---- lifecycle --------------------------------------------------------------------------
 
-    def _boot(self, *, resume: bool = False) -> None:
+    def _boot(self, *, resume: bool = False, lock: bool = False) -> None:
         """Fresh Lua state for the app: manifest, ctx, entry chunk, on_load (+ on_resume), first frame."""
         self._stop()
         self._overlay, self._ctx, self._toast = None, None, None
         self._images = {}
         self._quit = False
+        self.net_inflight = 0
+        self._lock_waiting = False
+        if not lock:
+            self._lock_ctx = None
         self.manifest, problem = self._read_manifest()
         landscape = (self.manifest.get("display") or {}).get("orientation") == "landscape"
         self.L = new_runtime()
-        self.canvas = Canvas(self.L, self.fonts, *((800, 480) if landscape else (480, 800)))
-        self.canvas.on_warning = self._warn
+        # a timer wake keeps showing the previous frame until the new state draws (e-ink keeps its image)
+        self._canvas_stale = bool(lock and self._lock_ctx["reason"] == "timer" and self.canvas is not None)
+        if not self._canvas_stale:
+            self.canvas = self._new_canvas(*((800, 480) if landscape else (480, 800)))
         self.frame_commands = 0
         if problem:
             self._fail(problem, "Install failed")
             return
-        entry = self.manifest.get("entry", "index.lua")
+        if lock:
+            block = self._lock_block()
+            if block is None:
+                return
+            entry = block.get("entry") or "lockscreen.lua"
+        else:
+            entry = self.manifest.get("entry", "index.lua")
         found, src = self._find_file(entry)
         if not found:
             self._fail(f"manifest.json: entry {entry!r} not found in the app folder", "Install failed")
@@ -334,7 +365,102 @@ class Emu:
         self._call("on_load", self._ctx)
         if resume:
             self._call("on_resume", self._ctx)
+        if lock:
+            self._lock_after_load()
+        else:
+            self._settle()
+
+    def _new_canvas(self, w: int, h: int) -> Canvas:
+        canvas = Canvas(self.L, self.fonts, w, h)
+        canvas.on_warning = self._warn
+        return canvas
+
+    # ---- lock screen ------------------------------------------------------------------------
+
+    def lock(self) -> None:
+        """Leave the app, then run the manifest's lock screen (a blank screen without one)."""
+        if self.locked:
+            return
+        self.leave()
+        self.locked = True
+        self.lock_wakes = 0
+        self._lock_interval = int(self._lock_block_get("interval_sec", 0))
+        self._lock_enter("lock")
+
+    def unlock(self) -> None:
+        """Drop the lock screen state and start the app again (on_load + on_resume, saved state kept)."""
+        if not self.locked:
+            return
+        self._end_lock()
+        self._boot(resume=True)
+
+    def _lock_block(self) -> dict | None:
+        block = self.manifest.get("lockscreen")
+        return block if isinstance(block, dict) and block.get("enabled", True) else None
+
+    def _lock_block_get(self, key: str, default):
+        v = (self._lock_block() or {}).get(key, default)
+        return v if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 else default
+
+    def _net_enabled(self) -> bool:
+        if self._lock_ctx is not None:
+            return self._lock_ctx["net"]
+        return "net" in (self.manifest.get("permissions") or [])
+
+    def _lock_enter(self, reason: str) -> None:
+        block = self._lock_block() or {}
+        now = self.clock.ms
+        self._lock_ctx = {"reason": reason, "net": bool(block.get("net")), "done": False,
+                          "elapsed": (now - self._lock_cycle_ms) // 1000 if reason == "timer" else 0}
+        self._lock_cycle_ms = now
+        self._boot(lock=True)
+        self._lock_schedule()
+
+    def _lock_schedule(self) -> None:
+        if self._lock_wake_timer:
+            self._cancel_timer(self._lock_wake_timer)
+            self._lock_wake_timer = None
+        if self.locked and self.running and self._lock_interval > 0:
+            due = self._lock_cycle_ms + int(self._lock_interval * 1000) - self.clock.ms
+            self._lock_wake_timer = self._add_timer(due, self._lock_wake)
+
+    def _lock_wake(self) -> None:
+        self.lock_wakes += 1
+        self._log_line("lock screen wake")
+        self._lock_enter("timer")
+
+    def _set_lock_interval(self, sec: float) -> None:
+        self._lock_interval = sec
+        self._lock_schedule()
+
+    def _lock_ready(self) -> bool:
+        return self._lock_ctx["done"] or self.net_inflight == 0
+
+    def _lock_after_load(self) -> None:
+        if not self.running:
+            return
+        if self._lock_ctx["reason"] == "lock" or self._lock_ready():
+            self._lock_present()
+        else:
+            self._lock_waiting = True
+            self._lock_deadline = self._add_timer(LOCK_WAIT_MS, self._lock_present)
+
+    def _lock_present(self) -> None:
+        if self._lock_waiting:
+            self._lock_waiting = False
+            self._cancel_timer(self._lock_deadline)
+        if self._canvas_stale:
+            self._canvas_stale = False
+            self.canvas = self._new_canvas(self.canvas.width, self.canvas.height)
+        self._invalid = True
         self._settle()
+
+    def _end_lock(self) -> None:
+        self._stop()
+        self.locked = False
+        self._lock_ctx = None
+        self._lock_waiting = self._canvas_stale = False
+        self._lock_wake_timer = None
 
     def _stop(self) -> None:
         self.running = False
@@ -429,6 +555,9 @@ class Emu:
         return res[0] if ok and res else None
 
     def _request_quit(self) -> None:
+        if self.locked:
+            self._log_line("ctx:quit ignored on the lock screen")
+            return
         self._quit = True
 
     def _add_timer(self, delay_ms: int, fn: Callable[[], Any], *, period_ms: int = 0) -> Timer:
@@ -457,6 +586,9 @@ class Emu:
 
     def _send(self, event: dict) -> None:
         """Deliver one input event to on_input and redraw if needed, without advancing time."""
+        if self.locked:
+            self._log_line(f"input ignored, the screen is locked: {event['type']} {event['phase']}")
+            return
         if not self.running:
             self._log_line(f"input ignored, the app is not running: {event['type']} {event['phase']}")
             return
@@ -472,6 +604,10 @@ class Emu:
         self.wait(INPUT_MS)
 
     def _settle(self) -> None:
+        if self._lock_waiting:
+            if self._lock_ready():
+                self._lock_present()
+            return
         if self._invalid and self.running:
             self._invalid = False
             self._draw()

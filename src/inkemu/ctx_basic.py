@@ -156,7 +156,7 @@ def load_state(path: Path, warn: Callable[[str], None]) -> dict | list:
 
 
 def save_state(emu: "Emu") -> None:
-    if emu._ctx is None:
+    if emu._ctx is None or emu.locked:  # the lock screen must not overwrite the app's state
         return
     data = lua_to_py(emu._ctx.state, emu._warn, L=emu.L)
     if data is None:
