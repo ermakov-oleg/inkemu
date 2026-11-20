@@ -87,3 +87,23 @@ fn wait_advances_virtual_time() {
         "wait() needs a non-negative duration"
     );
 }
+
+#[test]
+fn leave_and_reload_hand_out_the_state_to_persist() {
+    let mut core = boot("function on_load(c) c.state.n = 5 end\n", "2.2");
+    assert!(core.take_persist().is_none());
+    core.leave();
+    let saved = core.take_persist().expect("state saved on leave");
+    assert_eq!(saved.state_json.as_deref(), Some(br#"{"n":5}"#.as_slice()));
+    assert!(core.take_persist().is_none());
+
+    core.set_app(app(
+        "function on_load(c) c.state.n = c.state.n + 1 end\n",
+        "2.2",
+    ));
+    core.reload();
+    assert_eq!(
+        core.lua_eval("return ctx.state.n").unwrap(),
+        serde_json::json!(6)
+    );
+}

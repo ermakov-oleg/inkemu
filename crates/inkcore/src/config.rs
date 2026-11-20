@@ -48,6 +48,10 @@ pub struct Config {
     pub random_seed: Option<u64>,
     pub locale: String,
     pub battery: Battery,
+    /// The app folder as the host names it, for the missing-manifest message.
+    pub app_dir_label: String,
+    /// The app id when the manifest has none: the letters of the folder name.
+    pub fallback_app_id: String,
     pub reader_json: Option<Vec<u8>>,
     /// Recorded network fixtures by file name.
     pub fixtures: BTreeMap<String, Vec<u8>>,
@@ -63,6 +67,8 @@ impl Default for Config {
             random_seed: None,
             locale: "en".into(),
             battery: Battery::default(),
+            app_dir_label: "the app folder".into(),
+            fallback_app_id: "app".into(),
             reader_json: None,
             fixtures: BTreeMap::new(),
         }

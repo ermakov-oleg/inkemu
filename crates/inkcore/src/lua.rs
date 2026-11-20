@@ -166,25 +166,48 @@ pub fn call_guarded(
     let b = budget(lua);
     if b.depth.get() > 0 {
         b.depth.set(b.depth.get() + 1);
-        let r = f.call::<MultiValue>(args);
-        b.depth.set(b.depth.get() - 1);
-        return r.map_err(|e| error_text(&e));
+        let _unwind = Unwind {
+            lua,
+            b: &b,
+            outer: false,
+        };
+        return f.call::<MultiValue>(args).map_err(|e| error_text(&e));
     }
     b.left.set(b.units.get());
     b.exhausted.set(false);
     b.depth.set(1);
+    // restores the depth and the hook even when a Rust panic unwinds through the Lua call
+    let _unwind = Unwind {
+        lua,
+        b: &b,
+        outer: true,
+    };
     let b2 = b.clone();
     let hooked = lua.set_global_hook(
         HookTriggers::new().every_nth_instruction(HOOK_STEP),
         move |l, d| hook(&b2, l, d),
     );
-    let r = hooked.and_then(|()| f.call::<MultiValue>(args));
-    lua.remove_global_hook();
-    b.depth.set(0);
-    match r {
+    match hooked.and_then(|()| f.call::<MultiValue>(args)) {
         Ok(_) if b.exhausted.get() => Err(b.message()),
         Ok(v) => Ok(v),
         Err(e) => Err(error_text(&e)),
+    }
+}
+
+struct Unwind<'a> {
+    lua: &'a Lua,
+    b: &'a Budget,
+    outer: bool,
+}
+
+impl Drop for Unwind<'_> {
+    fn drop(&mut self) {
+        if self.outer {
+            self.lua.remove_global_hook();
+            self.b.depth.set(0);
+        } else {
+            self.b.depth.set(self.b.depth.get() - 1);
+        }
     }
 }
 
@@ -259,6 +282,30 @@ mod tests {
             );
             assert!(!err.contains("error in error handling"), "{code}: {err}");
         }
+    }
+
+    #[test]
+    fn a_rust_panic_in_a_host_function_leaves_the_budget_usable() {
+        let lua = new_lua();
+        set_budget(&lua, 1_000_000);
+        let boom = lua
+            .create_function(|_, ()| -> mlua::Result<()> { panic!("host bug") })
+            .unwrap();
+        lua.globals().set("boom", boom).unwrap();
+        // burns most of the budget before the panic: a leaked depth would carry it into the next call
+        let f = load_chunk(&lua, b"for _ = 1, 700000 do end boom()", "=burn").unwrap();
+        let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = call_guarded(&lua, &f, ());
+        }));
+        assert!(unwound.is_err());
+        let fine = load_chunk(&lua, b"for _ = 1, 700000 do end return 'ok'", "=fine").unwrap();
+        assert!(call_guarded(&lua, &fine, ()).is_ok());
+        let runaway = load_chunk(&lua, LOOP.as_bytes(), "=runaway").unwrap();
+        let err = call_guarded(&lua, &runaway, ()).unwrap_err();
+        assert!(
+            err.contains("callback exceeded the instruction budget"),
+            "{err}"
+        );
     }
 
     #[test]

@@ -59,12 +59,11 @@ fn latin_letters(s: &str) -> bool {
     !s.is_empty() && s.bytes().all(|b| b.is_ascii_alphabetic())
 }
 
-/// The manifest's app_id if it is Latin letters only.
-pub fn app_id_of(manifest: &Map<String, Value>) -> String {
+/// The manifest's app_id if it is Latin letters only, else `fallback` (the letters of the app folder's name).
+pub fn app_id_of(manifest: &Map<String, Value>, fallback: &str) -> String {
     match manifest.get("app_id") {
         Some(Value::String(id)) if latin_letters(id) => id.clone(),
-        // 0.1 falls back to the letters of the app folder name, which only the host knows
-        _ => "app".into(),
+        _ => fallback.to_string(),
     }
 }
 
@@ -85,12 +84,12 @@ fn cmp_digits(a: &str, b: &str) -> std::cmp::Ordering {
 pub fn read_manifest(
     files: &AppFiles,
     firmware_api: (u8, u8),
+    dir_label: &str,
 ) -> (Map<String, Value>, Option<String>) {
     let Some(raw) = files.get("manifest.json") else {
-        // 0.1 names the app folder here; the core does not know it
         return (
             Map::new(),
-            Some("manifest.json not found in the app folder".into()),
+            Some(format!("manifest.json not found in {dir_label}")),
         );
     };
     let m = match serde_json::from_slice::<Value>(raw) {

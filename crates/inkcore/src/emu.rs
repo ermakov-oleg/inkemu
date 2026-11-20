@@ -119,6 +119,11 @@ impl State {
         self.log.line(now, msg);
     }
 
+    pub(crate) fn warn(&mut self, msg: &str) {
+        self.log.warnings.push(msg.to_string());
+        self.log_line(&format!("WARN {msg}"));
+    }
+
     pub(crate) fn stop(&mut self) {
         self.running = false;
         self.pending = None;
@@ -211,11 +216,42 @@ impl Host<'_> {
             return;
         }
         self.call("on_leave", self.ctx());
+        if with(self.st, |s| s.running) {
+            self.save_state();
+        }
         with(self.st, |s| {
             s.leaving = false;
             s.quit = false;
             s.stop();
             s.log_line("app left");
+        });
+    }
+
+    /// Serialises `ctx.state` into the persisted data (0.1 `save_state`); the lock screen never overwrites it.
+    pub fn save_state(&self) {
+        let Some(ctx) = self.ctx() else { return };
+        if with(self.st, |s| s.locked) {
+            return;
+        }
+        let state = ctx.raw_get::<Value>("state").unwrap_or(Value::Nil);
+        let data = match state {
+            Value::Nil => serde_json::json!({}),
+            Value::Table(_) => to_json(&state, 0),
+            other => {
+                let msg = format!(
+                    "ctx.state is a {}, not a table: not saved",
+                    other.type_name()
+                );
+                with(self.st, |s| s.warn(&msg));
+                return;
+            }
+        };
+        let bytes = serde_json::to_vec(&data).unwrap_or_default();
+        with(self.st, |s| {
+            if s.persisted.state_json.as_deref() != Some(bytes.as_slice()) {
+                s.persisted.state_json = Some(bytes);
+                s.persist_changed = true;
+            }
         });
     }
 
@@ -246,7 +282,10 @@ pub struct Core {
 impl Core {
     /// Boots the app: manifest, fresh Lua state, entry chunk, `on_load`, first frame.
     pub fn new(app: AppFiles, cfg: Config, persisted: Persisted) -> Core {
-        let app_id = app_id_of(&read_manifest(&app, cfg.firmware_api).0);
+        let app_id = app_id_of(
+            &read_manifest(&app, cfg.firmware_api, &cfg.app_dir_label).0,
+            &cfg.fallback_app_id,
+        );
         let clock = VirtualClock::new(cfg.start_local_ms);
         let st = Rc::new(RefCell::new(State {
             cfg,
@@ -290,12 +329,12 @@ impl Core {
     }
 
     fn boot(&mut self) {
-        let fw = with(&self.st, |s| {
+        let (fw, label) = with(&self.st, |s| {
             s.stop();
             (s.overlay, s.ctx, s.g, s.quit) = (None, None, None, false);
-            s.cfg.firmware_api
+            (s.cfg.firmware_api, s.cfg.app_dir_label.clone())
         });
-        let (manifest, problem) = read_manifest(&self.app, fw);
+        let (manifest, problem) = read_manifest(&self.app, fw, &label);
         let landscape = manifest
             .get("display")
             .and_then(|d| d.get("orientation"))
@@ -353,6 +392,8 @@ impl Core {
         lua::install_require(lua, self.app.clone())?;
         let ctx = lua.create_table()?;
         lua.globals().set("ctx", &ctx)?;
+        let saved = with(&self.st, |s| s.persisted.state_json.clone());
+        ctx.set("state", load_state(lua, saved.as_deref())?)?;
         let g = lua.create_table()?;
         let st = self.st.clone();
         g.set(
@@ -470,7 +511,15 @@ impl Core {
     }
 
     pub fn reload(&mut self) {
+        if with(&self.st, |s| s.running) {
+            self.host().save_state();
+        }
         self.boot();
+    }
+
+    /// Replaces the app folder's contents; `reload()` then runs the new code.
+    pub fn set_app(&mut self, app: AppFiles) {
+        self.app = Rc::new(app);
     }
 
     pub fn lock(&mut self) {}
@@ -589,6 +638,43 @@ impl Core {
     pub fn pending_id(&self) -> u64 {
         self.st.borrow().pending_id
     }
+}
+
+/// `ctx.state` from the saved JSON; an unreadable or non-table file starts empty (0.1 also logs a warning).
+fn load_state(lua: &Lua, saved: Option<&[u8]>) -> mlua::Result<Value> {
+    match saved.and_then(|b| serde_json::from_slice::<serde_json::Value>(b).ok()) {
+        Some(v @ (serde_json::Value::Object(_) | serde_json::Value::Array(_))) => {
+            from_json(lua, &v)
+        }
+        _ => Ok(Value::Table(lua.create_table()?)),
+    }
+}
+
+fn from_json(lua: &Lua, v: &serde_json::Value) -> mlua::Result<Value> {
+    use serde_json::Value as J;
+    Ok(match v {
+        J::Null => Value::Nil,
+        J::Bool(b) => Value::Boolean(*b),
+        J::Number(n) => match n.as_i64().and_then(|i| i32::try_from(i).ok()) {
+            Some(i) => Value::Integer(i),
+            None => Value::Number(n.as_f64().unwrap_or(0.0) as _),
+        },
+        J::String(s) => Value::String(lua.create_string(s)?),
+        J::Array(a) => {
+            let t = lua.create_table()?;
+            for (i, x) in a.iter().enumerate() {
+                t.raw_set(i + 1, from_json(lua, x)?)?;
+            }
+            Value::Table(t)
+        }
+        J::Object(o) => {
+            let t = lua.create_table()?;
+            for (k, x) in o {
+                t.raw_set(k.as_str(), from_json(lua, x)?)?;
+            }
+            Value::Table(t)
+        }
+    })
 }
 
 /// Plain Lua values as JSON for the test helpers; tables become arrays when they have a sequence part.
