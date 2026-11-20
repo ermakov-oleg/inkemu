@@ -28,7 +28,8 @@ class Fonts:
         return LINE_HEIGHTS[self._name(name)]
 
     def measure(self, name: str, s: str) -> int:
-        return round(self._fonts[self._name(name)].getlength(s))
+        # Frames are 1-bit: mono hinting makes glyphs wider than the anti-aliased default advance.
+        return round(self._fonts[self._name(name)].getlength(s, mode="1"))
 
     def pil(self, name: str) -> ImageFont.FreeTypeFont:
         return self._fonts[self._name(name)]
