@@ -170,9 +170,9 @@ def test_codecs_and_hashes(make_app, emu_factory):
     assert emu.has_text(f"msg {b64}|ok|00ff61|ok|{sha1}|{sha256}|a%20b%2F%D1%8F%3F|a b/я+|36|nil")
 
 
-def test_random_uuid_is_deterministic_and_distinct(make_app, emu_factory, tmp_path):
+def test_random_uuid_is_reproducible_with_a_seed(make_app, emu_factory, tmp_path):
     app = make_app(DRAW_MSG + "function on_load(c) msg = c.random:uuid() .. ' ' .. c.random:uuid() end")
-    a, b = emu_factory(app), emu_factory(app, state_dir=tmp_path / "s2")
+    a, b = emu_factory(app, random_seed=1), emu_factory(app, state_dir=tmp_path / "s2", random_seed=1)
     first, second = a.texts()[0]["text"].split()[1:]
     assert first != second and a.texts() == b.texts()
 
@@ -297,3 +297,42 @@ def test_locale_is_configurable(make_app, emu_factory):
     emu.locale = "ru"
     emu.reload()
     assert emu.has_text("msg ru")
+
+
+def test_random_uuid_never_repeats_across_restarts_and_runs(make_app, emu_factory):
+    app = make_app(DRAW_MSG + "function on_load(c) msg = c.random:uuid() end")
+    emu = emu_factory(app)
+    seen = [emu.texts()[0]["text"]]
+    emu.restart()
+    seen.append(emu.texts()[0]["text"])
+    emu.reload()
+    seen.append(emu.texts()[0]["text"])
+    seen.append(emu_factory(app).texts()[0]["text"])
+    assert len(set(seen)) == 4
+
+
+def test_json_encode_top_level_strings_roundtrip(make_app, emu_factory):
+    emu = run(make_app, emu_factory,
+              "local a = ctx.json:encode('Привет')\nlocal b = ctx.json:encode('a\\\\b')\n"
+              "local n = ctx.json:encode({'Привет', 'a\\\\b'})\nlocal bad, e = ctx.json:encode('\\255')\n"
+              "msg = a .. b .. n .. tostring(ctx.json:decode(a) == 'Привет') .. tostring(ctx.json:decode(b) == 'a\\\\b')"
+              " .. tostring(ctx.json:decode(n)[2] == 'a\\\\b') .. tostring(bad) .. e")
+    assert emu.has_text('msg "Привет""a\\\\b"["Привет","a\\\\b"]truetruetruenilinvalid_argument')
+
+
+def test_state_with_binary_value_keeps_the_rest(make_app, emu_factory, tmp_path):
+    app = make_app(DRAW_MSG + "function on_load(c)\n  if c.state.keep then msg = c.state.keep .. c.state.nest.ok .. tostring(c.state.bin)\n"
+                   "  else c.state.keep = 'k'; c.state.bin = '\\255\\254'; c.state['b\\255'] = 1; c.state.nest = {ok = 'o', raw = '\\200'} end\nend\n")
+    emu = emu_factory(app)
+    emu.restart()
+    assert emu.has_text("msg konil")
+    saved = json.loads((tmp_path / "state" / "state.json").read_text(encoding="utf-8"))
+    assert saved == {"keep": "k", "nest": {"ok": "o"}}
+    assert any("state.bin" in w for w in emu.warnings) and any("state.nest.raw" in w for w in emu.warnings)
+    assert any("state.b\\xff" in w for w in emu.warnings)
+
+
+def test_non_table_state_warns_with_its_type(make_app, emu_factory):
+    emu = emu_factory(make_app("function on_load(c) c.state = 5 end"))
+    emu.leave()
+    assert any("ctx.state is a number" in w for w in emu.warnings)
