@@ -233,3 +233,39 @@ fn reader_comes_from_the_config_with_the_permission() {
         json!(true)
     );
 }
+
+#[test]
+fn far_off_image_positions_draw_nothing() {
+    let core = boot(
+        "function on_load(c) layer = c.layers:create(4, 4) layer:draw(function(g) g:clear(1) end) end\n\
+         function on_draw(c, g)\n\
+           for _, p in ipairs({{0, -1e30}, {-1e30, 0}, {1e30, 1e30}, {0, math.maxinteger}, {math.mininteger, 0}}) do\n\
+             g:image(layer, p[1], p[2], {w = 8192, h = 8192})\n\
+           end\n\
+         end",
+    );
+    no_errors(&core);
+    assert!(core.raw_frame().px.iter().all(|&v| v == 0));
+}
+
+#[test]
+fn layer_draw_nests_inside_layer_draw() {
+    let core = boot(
+        "function on_load(c)\n\
+           a, b = c.layers:create(10, 10), c.layers:create(10, 10)\n\
+           a:draw(function(g)\n\
+             g:rect(0, 0, 2, 2, {fill = true})\n\
+             b:draw(function(g2) g2:rect(5, 5, 2, 2, {fill = true}) end)\n\
+             a:draw(function(g3) g3:rect(8, 0, 2, 2, {fill = true}) end)\n\
+             g:image(b, 0, 0)\n\
+           end)\n\
+         end\n\
+         function on_draw(c, g) g:image(a, 0, 0) g:image(b, 20, 0) end",
+    );
+    no_errors(&core);
+    let f = core.raw_frame();
+    // b drew on its own; the inner a:draw restarted a's frame (one recorder per layer, as 0.1) and stored its rect,
+    // then the outer callback's remaining g:image(b) was pasted opaquely over all of a
+    assert_eq!([f.get(25, 5), f.get(20, 0)], [1, 0]);
+    assert_eq!([f.get(5, 5), f.get(8, 0), f.get(0, 0)], [1, 0, 0]);
+}

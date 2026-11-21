@@ -470,10 +470,12 @@ fn image_command(st: &Shared, a: &[Value]) -> Result<Cmd, String> {
     let o = opts_at(a, 3);
     let w = side("w", &get(&o, "w"), img.w)?;
     let h = side("h", &get(&o, "h"), img.h)?;
+    // far-off positions draw nothing; the clamp keeps the paste arithmetic from overflowing
+    let at = |v: f64| v.trunc().clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i64;
     Ok(Cmd::Image {
         img,
-        x: x.trunc() as i64,
-        y: y.trunc() as i64,
+        x: at(x),
+        y: at(y),
         w,
         h,
     })
