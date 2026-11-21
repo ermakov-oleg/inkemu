@@ -361,7 +361,7 @@ mod tests {
             let f = load_chunk(&lua, code.as_bytes(), "@index.lua").unwrap();
             call_guarded(&lua, &f, ())
         };
-        // 600 000 instructions per resume: an every-instruction hook would count them 10 000 times over
+        // ~30 % of the budget per resume: an every-instruction hook would count it 10 000 times over
         let spin = "for i = 1, 300000 do end";
         run(&format!(
             "kept = coroutine.wrap(function() while true do {spin} coroutine.yield() end end) kept()"
