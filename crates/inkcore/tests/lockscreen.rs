@@ -121,3 +121,44 @@ fn lockscreen_api_keeps_other_keys_of_lock_json() {
         .any(|l| l.ends_with("lockscreen: set_wallpaper (auto-confirmed)")));
     assert!(log.iter().any(|l| l.ends_with("lockscreen: clear_default")));
 }
+
+#[test]
+fn a_fetcher_answers_every_live_wake_within_one_wait() {
+    let lock = "function on_load(c)\n\
+          c.net:request({url = 'http://x.test/' .. c.clock:millis()}, function(c, r) got = r.body end)\n\
+        end\n\
+        function on_draw(c, g) g:text(0, 0, c.lock.reason .. ' ' .. tostring(got)) end\n";
+    let cfg = Config {
+        net_mode: NetMode::Live,
+        ..Config::default()
+    };
+    let fetcher: inkcore::Fetcher = Box::new(|r| inkcore::Fetched {
+        result: NetResult::Response {
+            status: 200,
+            headers: vec![],
+            body: r.url.rsplit('/').next().unwrap().as_bytes().to_vec(),
+            delay_ms: 300,
+        },
+        notes: vec![inkcore::NetNote::Log(format!("fetched {}", r.url))],
+    });
+    let mut core = Core::with_fetcher(
+        files(r#"{"interval_sec": 60, "net": true}"#, lock),
+        cfg,
+        Persisted::default(),
+        Some(fetcher),
+    );
+    core.lock();
+    core.wait(180_300).unwrap();
+    assert_eq!(core.lock_wakes(), 3);
+    assert!(has_text(&core, "timer 180000"), "{:?}", core.texts());
+    let fetched: Vec<String> = core
+        .log()
+        .iter()
+        .filter_map(|l| l.split_once("fetched ").map(|(_, u)| u.to_string()))
+        .collect();
+    assert_eq!(
+        fetched,
+        ["0", "60000", "120000", "180000"].map(|t| format!("http://x.test/{t}"))
+    );
+    assert!(core.take_outgoing().is_empty());
+}

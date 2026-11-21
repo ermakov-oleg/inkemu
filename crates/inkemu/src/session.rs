@@ -6,7 +6,9 @@ use std::path::{Path, PathBuf};
 use inkcore::app::read_manifest;
 use inkcore::clock::local_ms;
 use inkcore::log::py_repr_str;
-use inkcore::{AppFiles, Battery, Config, Core, Frame, NetMode, Pending, Persisted, Status};
+use inkcore::{
+    AppFiles, Battery, Config, Core, Fetcher, Frame, NetMode, Pending, Persisted, Status,
+};
 
 use crate::net_live::Net;
 use crate::paths;
@@ -60,11 +62,11 @@ pub struct Session {
     secrets_file: PathBuf,
     /// What is known to be on disk, so only changes are written.
     on_disk: Persisted,
-    net: Net,
+    net_mode: NetMode,
 }
 
-/// Runs a mutating `Core` method, performs the requests it queued, then writes the app data it changed. While
-/// locked, the secrets are read first: a lock screen wake inside the call boots a new Lua state.
+/// Runs a mutating `Core` method, then writes the app data it changed. While locked, the secrets are read first:
+/// a lock screen wake inside the call boots a new Lua state.
 macro_rules! mutating {
     ($($(#[$doc:meta])* fn $name:ident(&mut self $(, $arg:ident: $ty:ty)*) $(-> $ret:ty)?;)*) => {
         $($(#[$doc])* pub fn $name(&mut self $(, $arg: $ty)*) $(-> $ret)? {
@@ -72,7 +74,6 @@ macro_rules! mutating {
                 self.read_secrets();
             }
             let r = self.core.$name($($arg),*);
-            self.pump_net();
             self.flush();
             r
         })*
@@ -148,7 +149,8 @@ impl Session {
                 .unwrap_or(inkcore::lua::INSTRUCTION_BUDGET),
             storage_quota: opts.storage_quota.unwrap_or(inkcore::STORAGE_QUOTA),
         };
-        let core = Core::new(files, cfg, on_disk.clone());
+        let fetcher = fetcher(net_mode, secrets.values, net_dir);
+        let core = Core::with_fetcher(files, cfg, on_disk.clone(), fetcher);
         let mut session = Session {
             core,
             app_dir,
@@ -156,9 +158,8 @@ impl Session {
             fixtures_dir,
             secrets_file,
             on_disk,
-            net: Net::new(net_mode, secrets.values, net_dir),
+            net_mode,
         };
-        session.pump_net();
         session.flush();
         Ok(session)
     }
@@ -209,7 +210,6 @@ impl Session {
     pub fn restart(&mut self) {
         self.read_secrets();
         self.core.restart();
-        self.pump_net();
         self.flush();
     }
 
@@ -217,7 +217,6 @@ impl Session {
     pub fn lock(&mut self) {
         self.read_secrets();
         self.core.lock();
-        self.pump_net();
         self.flush();
     }
 
@@ -225,30 +224,16 @@ impl Session {
     pub fn unlock(&mut self) {
         self.read_secrets();
         self.core.unlock();
-        self.pump_net();
         self.flush();
-    }
-
-    /// Performs the `live`/`record` requests the core queued and hands back their answers; an answer whose
-    /// callback queues another request is followed up in the same call.
-    pub fn pump_net(&mut self) {
-        loop {
-            let out = self.core.take_outgoing();
-            if out.is_empty() {
-                return;
-            }
-            for r in out {
-                let result = self.net.perform(&mut self.core, &r);
-                self.core.deliver(r.id, result);
-            }
-        }
     }
 
     /// Re-reads the secrets file for the core and the shell together, as 0.1 did at every start: a secret added
     /// after a warning is redacted from the next recording on, and a broken file refuses `record` again.
     fn read_secrets(&mut self) {
         let secrets = secrets::load(&self.secrets_file);
-        self.net = self.net.with_secrets(secrets.values.clone());
+        let net_dir = self.fixtures_dir.join("net");
+        let fetcher = fetcher(self.net_mode, secrets.values.clone(), net_dir);
+        self.core.set_fetcher(fetcher);
         self.core.set_secrets(secrets.values, secrets.problems);
     }
 
@@ -259,7 +244,6 @@ impl Session {
             .set_fixtures(read_fixtures(&self.fixtures_dir.join("net")));
         self.read_secrets();
         self.core.reload();
-        self.pump_net();
         self.flush();
     }
 
@@ -295,6 +279,15 @@ impl Session {
     pub fn pending(&self) -> Option<Pending> {
         self.core.status().pending
     }
+}
+
+/// The core's fetcher for `record`/`live`: real HTTP requests at request time, as 0.1; none in `replay`.
+fn fetcher(mode: NetMode, secrets: Vec<(String, String)>, net_dir: PathBuf) -> Option<Fetcher> {
+    if mode == NetMode::Replay {
+        return None;
+    }
+    let net = Net::new(mode, secrets, net_dir);
+    Some(Box::new(move |r| net.perform(r)))
 }
 
 /// Every file under the app folder, by POSIX path; symlinks that leave the folder are skipped (0.1 `_find_file`).

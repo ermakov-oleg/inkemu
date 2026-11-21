@@ -1,5 +1,6 @@
-//! `ctx.net` (0.1 `net.install`): `replay` is answered here from fixtures; `record` and `live` requests wait in an
-//! outbox for the host, which performs them and hands the answer back through [`Core::deliver`].
+//! `ctx.net` (0.1 `net.install`): `replay` is answered here from fixtures. `record` and `live` requests go to the
+//! host's [`Fetcher`] at request time, as 0.1's synchronous fetch; a host without one (the web page) takes them
+//! from an outbox and hands the answer back through [`Core::deliver`].
 //!
 //! [`Core::deliver`]: crate::Core::deliver
 use std::cell::Cell;
@@ -46,6 +47,23 @@ pub enum NetResult {
     Error(String),
 }
 
+/// A line the fetcher hands back for the core's log, in order.
+#[derive(Clone, Debug, PartialEq)]
+pub enum NetNote {
+    Log(String),
+    Warn(String),
+}
+
+/// What a fetcher got for one request, and what to log about it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Fetched {
+    pub result: NetResult,
+    pub notes: Vec<NetNote>,
+}
+
+/// Performs a `record`/`live` request synchronously. It must not call back into the core.
+pub type Fetcher = Box<dyn FnMut(&OutRequest) -> Fetched>;
+
 /// A request the app is waiting for.
 struct Job {
     f: Function,
@@ -65,6 +83,7 @@ pub(crate) struct NetState {
     pub(crate) inflight: u32,
     pub(crate) fixtures: Rc<FixtureSet>,
     pub(crate) redactor: Rc<Redactor>,
+    pub(crate) fetcher: Option<Fetcher>,
 }
 
 impl NetState {
@@ -334,8 +353,14 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
     ctx.raw_set("net", net)
 }
 
+/// What [`request`] does after its first step.
+enum Next {
+    Done(Option<(Rc<Job>, Option<u64>)>),
+    Fetch(Rc<Job>, OutRequest, Fetcher),
+}
+
 /// 0.1 `Net.request` plus the timer: None when the request never gets an answer (an unsupported method), else
-/// the job and, for an outgoing request, its id.
+/// the job and, for a request left in the outbox, its id.
 fn request(
     st: &Shared,
     f: Function,
@@ -345,6 +370,38 @@ fn request(
     body: Vec<u8>,
     timeout_ms: i64,
 ) -> Option<(Rc<Job>, Option<u64>)> {
+    match first_step(st, f, method, url, headers, body, timeout_ms) {
+        Next::Done(r) => r,
+        Next::Fetch(job, out, mut fetcher) => {
+            // the fetcher is out of the state while it runs, so no borrow is held
+            let fetched = fetcher(&out);
+            with(st, |s| {
+                if s.net.fetcher.is_none() {
+                    s.net.fetcher = Some(fetcher);
+                }
+                for note in fetched.notes {
+                    match note {
+                        NetNote::Log(l) => s.log_line(&l),
+                        NetNote::Warn(w) => s.warn(&w),
+                    }
+                }
+                let delay = delay_of(&fetched.result);
+                schedule(s, job.clone(), fetched.result, delay);
+            });
+            Some((job, None))
+        }
+    }
+}
+
+fn first_step(
+    st: &Shared,
+    f: Function,
+    method: String,
+    url: String,
+    headers: Vec<(String, String)>,
+    body: Vec<u8>,
+    timeout_ms: i64,
+) -> Next {
     with(st, |s| {
         let red = s.net.redactor.clone();
         let shown = red.redact_str(&url);
@@ -353,7 +410,7 @@ fn request(
                 "net: {method} {shown} never gets an answer on the reader (only GET and POST work); \
                  send it as POST with an override header"
             ));
-            return None;
+            return Next::Done(None);
         }
         let job = Rc::new(Job {
             f,
@@ -370,21 +427,25 @@ fn request(
                 NetResult::Error("secrets_invalid".into()),
                 DEFAULT_DELAY_MS,
             );
-            return Some((job, None));
+            return Next::Done(Some((job, None)));
         }
         if s.cfg.net_mode != NetMode::Replay {
             s.net.next_id += 1;
             let id = s.net.next_id;
-            s.net.outbox.push(OutRequest {
+            let out = OutRequest {
                 id,
                 method,
                 url,
                 headers,
                 body,
                 timeout_ms,
-            });
+            };
+            if let Some(fetcher) = s.net.fetcher.take() {
+                return Next::Fetch(job, out, fetcher);
+            }
+            s.net.outbox.push(out);
             s.net.waiting.insert(id, job.clone());
-            return Some((job, Some(id)));
+            return Next::Done(Some((job, Some(id))));
         }
         let sha = red.body_sha(&method, &body);
         let mut warnings = Vec::new();
@@ -414,7 +475,7 @@ fn request(
         };
         let delay = delay_of(&resp);
         schedule(s, job.clone(), resp, delay);
-        Some((job, None))
+        Next::Done(Some((job, None)))
     })
 }
 

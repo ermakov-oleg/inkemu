@@ -519,6 +519,18 @@ def test_secret_added_before_reload_is_not_recorded(make_app, emu_factory, tmp_p
     assert "{{tok}}" in next(d.glob("*.json")).read_text()
 
 
+def test_live_request_in_a_timer_fires_at_request_time_plus_delay(make_app, emu_factory, server):
+    lua = (
+        DRAW + "function on_load(c)\n"
+        "  c:after(1000, function()\n"
+        f"    c.net:request({{url = '{server.base}/a'}}, function(c, r) at = c.clock:millis() end)\n"
+        "  end)\nend\n"
+    )
+    emu = emu_factory(make_app(lua, manifest=NET), net="live")
+    emu.wait(5000)
+    assert emu.lua_eval("return at") == 1300
+
+
 def test_big_integer_secret_is_redacted_by_its_digits(make_app, emu_factory, tmp_path):
     secrets = tmp_path / "secrets.json"
     secrets.write_text('{"pin": 123456789012345678901234}')

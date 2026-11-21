@@ -1,4 +1,6 @@
 import json
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 BLOCK = {"enabled": True, "entry": "lockscreen.lua", "interval_sec": 60, "net": True}
 APP = """
@@ -206,3 +208,46 @@ def test_wake_reads_secrets_again(make_app, emu_factory, tmp_path):
     secrets.write_text(json.dumps({"pin": "abcdef"}))
     emu.wait("60s")
     assert emu.lock_wakes == 1 and emu.has_text("reason got 200")
+
+
+def test_live_wakes_get_their_answers_within_one_wait(make_app, emu_factory):
+    hits = []
+
+    class H(BaseHTTPRequestHandler):
+        def do_GET(self):
+            hits.append(self.path)
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(self.path.encode())
+
+        def log_message(self, *a):
+            pass
+
+    srv = HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        lock = (
+            "local n\n"
+            "function on_load(c)\n"
+            "  n = tonumber(c.storage:read('count') or '0') + 1\n"
+            "  c.storage:write('count', tostring(n))\n"
+            f"  c.net:request({{url = 'http://127.0.0.1:{srv.server_port}/w' .. n}}, function(c, r)\n"
+            "    got = r.body; c:invalidate()\n"
+            "  end)\n"
+            "end\n"
+            "function on_draw(c, g)\n"
+            "  if got then c.storage:write('drawn', (c.storage:read('drawn') or '') .. got .. ',') end\n"
+            "  g:text(0, 0, 'got ' .. tostring(got))\n"
+            "end\n"
+        )
+        app = make_app(APP, manifest={"lockscreen": {"interval_sec": 60, "net": True}}, files={"lockscreen.lua": lock})
+        emu = emu_factory(app, net="live")
+        emu.lock()
+        emu.wait("181s")
+        assert emu.lock_wakes == 3 and hits == ["/w1", "/w2", "/w3", "/w4"]
+        drawn = emu.lua_eval("return ctx.storage:read('drawn')")
+        assert drawn == "/w1,/w2,/w3,/w4,"
+        assert emu.has_text("got /w4")
+    finally:
+        srv.shutdown()
+        srv.server_close()

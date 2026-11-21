@@ -14,7 +14,7 @@ pub mod lua;
 pub use crate::app::AppFiles;
 pub use crate::config::{Battery, Config, NetMode, Persisted, STORAGE_QUOTA};
 pub use crate::ctx::files::valid_name;
-pub use crate::ctx::net::{NetResult, OutRequest, DEFAULT_DELAY_MS};
+pub use crate::ctx::net::{Fetched, Fetcher, NetNote, NetResult, OutRequest, DEFAULT_DELAY_MS};
 pub use crate::draw::{Frame, TextItem};
 pub use crate::emu::{Core, Pending, Status, ERROR_TITLE};
 

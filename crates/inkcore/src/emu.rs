@@ -10,7 +10,7 @@ use rand_chacha::ChaCha20Rng;
 use crate::app::{app_id_of, read_manifest, AppFiles};
 use crate::clock::{iso, DateTime, Due, Run, Scheduler, TimerId, VirtualClock};
 use crate::config::{Config, Persisted};
-use crate::ctx::net::{self, NetResult, NetState, OutRequest};
+use crate::ctx::net::{self, Fetcher, NetResult, NetState, OutRequest};
 use crate::dialog::Handler;
 use crate::draw::image::Gray;
 use crate::draw::plates::{self, Overlays, Plate};
@@ -514,16 +514,27 @@ fn install(
 
 impl Core {
     /// Boots the app: manifest, fresh Lua state, entry chunk, `on_load`, first frame.
-    pub fn new(app: AppFiles, mut cfg: Config, persisted: Persisted) -> Core {
+    pub fn new(app: AppFiles, cfg: Config, persisted: Persisted) -> Core {
+        Core::with_fetcher(app, cfg, persisted, None)
+    }
+
+    /// Like [`Core::new`], with the fetcher that performs `record`/`live` requests from the first boot on.
+    pub fn with_fetcher(
+        app: AppFiles,
+        mut cfg: Config,
+        persisted: Persisted,
+        fetcher: Option<Fetcher>,
+    ) -> Core {
         let app_id = app_id_of(
             &read_manifest(&app, cfg.firmware_api, &cfg.app_dir_label).0,
             &cfg.fallback_app_id,
         );
         let clock = VirtualClock::new(cfg.start_local_ms);
-        let net = NetState::new(
+        let mut net = NetState::new(
             FixtureSet::from_files(std::mem::take(&mut cfg.fixtures)),
             Redactor::new(&cfg.secrets),
         );
+        net.fetcher = fetcher;
         let rng = match cfg.random_seed {
             Some(seed) => ChaCha20Rng::seed_from_u64(seed),
             None => {
@@ -628,7 +639,13 @@ impl Core {
 
     // ---- network ------------------------------------------------------------------------------
 
-    /// `record`/`live` requests made since the last call, for the host to perform.
+    /// Sets the fetcher that performs `record`/`live` requests at request time; None leaves them in the outbox.
+    pub fn set_fetcher(&mut self, fetcher: Option<Fetcher>) {
+        let old = with(&self.st, |s| std::mem::replace(&mut s.net.fetcher, fetcher));
+        drop(old);
+    }
+
+    /// `record`/`live` requests made since the last call, for a host without a fetcher to perform.
     pub fn take_outgoing(&mut self) -> Vec<OutRequest> {
         with(&self.st, |s| s.net.take_outgoing())
     }

@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use inkcore::fixtures::{sha256_hex, Redactor};
-use inkcore::{Core, NetMode, NetResult, OutRequest, DEFAULT_DELAY_MS};
+use inkcore::{Fetched, NetMode, NetNote, NetResult, OutRequest, DEFAULT_DELAY_MS};
 
 use crate::secrets::{expand, expand_str, unknown_secret_warnings, urlsplit};
 
@@ -76,30 +76,27 @@ impl Net {
         }
     }
 
-    /// The same mode and folder with other secrets.
-    pub fn with_secrets(&self, secrets: Vec<(String, String)>) -> Net {
-        Net::new(self.mode, secrets, self.dir.clone())
-    }
-
-    /// Performs one outgoing request: warnings and log lines go to `core`, the answer is returned for
-    /// `Core::deliver`.
-    pub fn perform(&self, core: &mut Core, r: &OutRequest) -> NetResult {
+    /// Performs one request (the core's fetcher): the answer, and the warnings and log lines for the core.
+    pub fn perform(&self, r: &OutRequest) -> Fetched {
+        let mut notes = Vec::new();
         let shown = self.redactor.redact_str(&r.url);
         if self.mode == NetMode::Record {
-            for w in unknown_secret_warnings(&shown) {
-                core.warn(&w);
-            }
+            notes.extend(
+                unknown_secret_warnings(&shown)
+                    .into_iter()
+                    .map(NetNote::Warn),
+            );
         }
         let resp = self.fetch(r);
         let outcome = match &resp {
             NetResult::Response { status, .. } => status.to_string(),
             NetResult::Error(e) => e.clone(),
         };
-        core.log_line(&format!(
+        notes.push(NetNote::Log(format!(
             "net: {} {shown} -> {outcome} ({})",
             r.method,
             self.mode.as_str()
-        ));
+        )));
         if self.mode == NetMode::Record {
             if let NetResult::Response {
                 status,
@@ -108,16 +105,19 @@ impl Net {
                 delay_ms,
             } = &resp
             {
-                match self.save(r, *status, headers, body, *delay_ms) {
-                    Ok(stem) => core.log_line(&format!("net: recorded net/{stem}.json")),
-                    Err(e) => core.warn(&format!(
+                notes.push(match self.save(r, *status, headers, body, *delay_ms) {
+                    Ok(stem) => NetNote::Log(format!("net: recorded net/{stem}.json")),
+                    Err(e) => NetNote::Warn(format!(
                         "net: cannot save a fixture in {}: {e}",
                         self.dir.display()
                     )),
-                }
+                });
             }
         }
-        resp
+        Fetched {
+            result: resp,
+            notes,
+        }
     }
 
     fn fetch(&self, r: &OutRequest) -> NetResult {
