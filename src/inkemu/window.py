@@ -54,7 +54,9 @@ class WindowApp:
         self._photo: tk.PhotoImage | None = None
         self.screen = tk.Label(self.root, borderwidth=0, highlightthickness=0, background="white")
         self.screen.pack()
-        self.status = tk.Label(self.root, anchor="w", justify="left", font=("Menlo", 11), wraplength=emu.canvas.width)
+        self.status = tk.Label(
+            self.root, anchor="w", justify="left", font=("Menlo", 11), wraplength=emu.status()["screen"][0]
+        )
         self.status.pack(fill="x")
         self.screen.bind("<ButtonPress-1>", self.on_press)
         self.screen.bind("<B1-Motion>", self.on_motion)
@@ -84,10 +86,8 @@ class WindowApp:
         return self.emu.pending is None and not self._dialog_open
 
     def _xy(self, event) -> tuple[int, int]:
-        return (
-            min(max(int(event.x), 0), self.emu.canvas.width - 1),
-            min(max(int(event.y), 0), self.emu.canvas.height - 1),
-        )
+        w, h = self.emu.status()["screen"]
+        return min(max(int(event.x), 0), w - 1), min(max(int(event.y), 0), h - 1)
 
     def refresh(self) -> None:
         try:
@@ -193,13 +193,14 @@ class WindowApp:
             self.root.after_cancel(self._hold_job)
             self._hold_job = None
         try:
-            p, asked = dict(emu.pending), emu._pending_h
+            p, asked = dict(emu.pending), emu.pending_id
             if p["kind"] in ("text", "edit"):
                 value = ask_string(self.root, p["title"], p["text"] if p["kind"] == "edit" else "", p["text"])
             else:
                 value = ask_yes_no(self.root, p["title"], p["text"])
-            if emu._pending_h is not asked:  # answered remotely meanwhile; the click must not answer a newer dialog
-                emu._log_line(f"window: the {p['kind']} dialog was already answered, the click is dropped")
+            # answered remotely meanwhile; the click must not answer a newer dialog
+            if emu.pending is None or emu.pending_id != asked:
+                emu.log_line(f"window: the {p['kind']} dialog was already answered, the click is dropped")
             elif p["kind"] not in ("text", "edit"):
                 self._guard(emu.answer, value)
             elif value is None:

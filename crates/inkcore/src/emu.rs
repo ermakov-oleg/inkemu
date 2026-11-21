@@ -730,6 +730,10 @@ impl Core {
 
     // ---- inspection ----------------------------------------------------------------------------
 
+    pub fn locked(&self) -> bool {
+        self.st.borrow().locked
+    }
+
     pub fn status(&self) -> Status {
         let s = self.st.borrow();
         Status {

@@ -50,6 +50,21 @@ impl Frame {
         self.px[(y * self.w + x) as usize]
     }
 
+    /// Rows packed 8 pixels per byte, MSB first, set bit = white: PIL's raw mode "1".
+    pub fn packed(&self) -> Vec<u8> {
+        let (w, h) = (self.w as usize, self.h as usize);
+        let stride = w.div_ceil(8);
+        let mut out = vec![0u8; stride * h];
+        for y in 0..h {
+            for x in 0..w {
+                if self.px[y * w + x] == 0 {
+                    out[y * stride + x / 8] |= 0x80 >> (x % 8);
+                }
+            }
+        }
+        out
+    }
+
     /// Sets one pixel; outside the frame does nothing.
     pub fn set(&mut self, x: i32, y: i32, v: u8) {
         if x >= 0 && y >= 0 && (x as u32) < self.w && (y as u32) < self.h {

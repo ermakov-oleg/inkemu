@@ -1,4 +1,4 @@
-//! `inkemu._core`: the native `Session` for the Python `Emu` wrapper (`src/inkemu/rust_emu.py`).
+//! `inkemu._core`: the native `Session` for the Python `Emu` wrapper (`src/inkemu/emu.py`).
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -25,19 +25,10 @@ type Status = (
 );
 type Text = (String, i32, i32, i32, i32, &'static str);
 
-/// (width, height, rows packed 8 pixels per byte, MSB first, set bit = white): PIL's raw mode "1".
+/// (width, height, PIL raw mode "1" bytes).
 fn pack(f: inkcore::Frame) -> (u32, u32, Vec<u8>) {
-    let (w, h) = (f.w as usize, f.h as usize);
-    let stride = w.div_ceil(8);
-    let mut out = vec![0u8; stride * h];
-    for y in 0..h {
-        for x in 0..w {
-            if f.px[y * w + x] == 0 {
-                out[y * stride + x / 8] |= 0x80 >> (x % 8);
-            }
-        }
-    }
-    (f.w, f.h, out)
+    let px = f.packed();
+    (f.w, f.h, px)
 }
 
 #[pyclass(module = "inkemu._core")]

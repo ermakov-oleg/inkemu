@@ -1,7 +1,5 @@
 import hashlib
 import json
-import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
@@ -26,39 +24,6 @@ def write_fixture(tmp_path, name, req, resp_extra, body="ok", match="exact"):
     d.mkdir(parents=True, exist_ok=True)
     doc = {"request": req, "match": match, "response": {"headers": {}, "body": body, **resp_extra}}
     (d / f"{name}.json").write_text(json.dumps(doc), encoding="utf-8")
-
-
-@pytest.fixture
-def server():
-    hits = []
-
-    class H(BaseHTTPRequestHandler):
-        def do_GET(self):
-            hits.append((self.path, dict(self.headers)))
-            if self.path.startswith("/short"):  # promises more than it sends
-                self.send_response(200)
-                self.send_header("Content-Length", "100")
-                self.end_headers()
-                self.wfile.write(b"ab")
-                return
-            body = "привет".encode() if self.path.endswith(".ics") else b"\x00\xff\xfeok"
-            if self.path.startswith("/echo"):
-                body = self.path.encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/plain")
-            self.send_header("Set-Cookie", "sid=abc")
-            self.end_headers()
-            self.wfile.write(body)
-
-        def log_message(self, *a):
-            pass
-
-    srv = HTTPServer(("127.0.0.1", 0), H)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    srv.hits, srv.base = hits, f"http://127.0.0.1:{srv.server_port}"
-    yield srv
-    srv.shutdown()
-    srv.server_close()
 
 
 def test_replay_hit(make_app, emu_factory, tmp_path):
@@ -470,7 +435,7 @@ def test_truncated_response_is_no_network(make_app, emu_factory, server):
 
 
 @pytest.mark.allow_errors
-def test_secrets_are_read_again_on_reload_and_restart(make_app, emu_factory, tmp_path):
+def test_secrets_are_read_again_on_reload_and_restart(make_app, emu_factory, tmp_path, server):
     secrets = tmp_path / "secrets.json"
     secrets.write_text("{}")
     write_fixture(tmp_path, "pin", {"method": "GET", "url": "http://x.test/{{pin}}"}, {"status": 200})
@@ -487,7 +452,7 @@ def test_secrets_are_read_again_on_reload_and_restart(make_app, emu_factory, tmp
     assert any("'bad name'" in w for w in emu.warnings)
     secrets.write_text("{}")
     emu3 = emu_factory(
-        app_with(make_app, "{url = 'http://x.test/a'}", "msg = resp.err"), net="record", secrets_file=secrets
+        app_with(make_app, "{url = '%s/a'}" % server.base, "msg = resp.err"), net="record", secrets_file=secrets
     )
     assert not emu3.errors
     secrets.write_text('{"bad name": "x"}')

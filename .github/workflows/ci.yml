@@ -75,12 +75,18 @@ jobs:
         with:
           version: 7.0.0
       - run: rustup target add wasm32-unknown-emscripten
-      - name: build the Lua number-type check for wasm and run it under node
+      - name: build the Lua number-type check and the hello frame hash for wasm and run them under node
         env:
-          RUSTFLAGS: -C link-arg=-sSUPPORT_LONGJMP=wasm -C link-arg=-sENVIRONMENT=node
+          RUSTFLAGS: -C link-arg=-sSUPPORT_LONGJMP=wasm -C link-arg=-sENVIRONMENT=node -C link-arg=-sALLOW_MEMORY_GROWTH=1
         run: |
-          cargo build -p inkcore --example lua32_check --target wasm32-unknown-emscripten --release
+          cargo build -p inkcore --example lua32_check --example hello_hash --target wasm32-unknown-emscripten --release
           node target/wasm32-unknown-emscripten/release/examples/lua32_check.js | grep -qx ok
+          node target/wasm32-unknown-emscripten/release/examples/hello_hash.js > "$RUNNER_TEMP/wasm-hash.txt"
+      - name: the wasm frame hash equals the native one
+        run: |
+          cargo run -q -p inkcore --example hello_hash > "$RUNNER_TEMP/native-hash.txt"
+          cd "$RUNNER_TEMP" && echo "native $(cat native-hash.txt), wasm $(cat wasm-hash.txt)"
+          test -s native-hash.txt && cmp native-hash.txt wasm-hash.txt
 
   package:
     runs-on: ubuntu-latest

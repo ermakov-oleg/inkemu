@@ -1,13 +1,12 @@
 import json
-import os
+import threading
 from collections.abc import Callable
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 import pytest
 
 from inkemu import Emu
-
-IMPL = os.environ.get("INKEMU_IMPL", "python")
 
 
 def pytest_configure(config):
@@ -49,3 +48,36 @@ def emu_factory(tmp_path, request) -> Callable[..., Emu]:
     if request.node.get_closest_marker("allow_errors") is None:
         for emu in made:
             assert emu.errors == [], "unexpected Lua errors:\n" + "\n".join(emu.errors)
+
+
+@pytest.fixture
+def server():
+    hits = []
+
+    class H(BaseHTTPRequestHandler):
+        def do_GET(self):
+            hits.append((self.path, dict(self.headers)))
+            if self.path.startswith("/short"):  # promises more than it sends
+                self.send_response(200)
+                self.send_header("Content-Length", "100")
+                self.end_headers()
+                self.wfile.write(b"ab")
+                return
+            body = "привет".encode() if self.path.endswith(".ics") else b"\x00\xff\xfeok"
+            if self.path.startswith("/echo"):
+                body = self.path.encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Set-Cookie", "sid=abc")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    srv = HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    srv.hits, srv.base = hits, f"http://127.0.0.1:{srv.server_port}"
+    yield srv
+    srv.shutdown()
+    srv.server_close()

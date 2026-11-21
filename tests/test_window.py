@@ -6,13 +6,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from conftest import IMPL
 
 tk = pytest.importorskip("tkinter")
 
 from inkemu import daemon, window  # noqa: E402
-
-pytestmark = pytest.mark.skipif(IMPL == "rust", reason="stage1: task 10")
 
 HELLO = Path(__file__).resolve().parent.parent / "examples" / "hello"
 
@@ -296,7 +293,7 @@ def test_stale_tk_dialog_does_not_answer_a_newer_one(make_window, make_app, monk
 
     def user_slow_to_click(parent, title, text):
         emu.answer(False)  # a remote `answer` resolves A while its Tk dialog is still open
-        emu.L.execute("ctx.dialog:confirm({title='B', text='second'}, function(c, ok) res = 'B ' .. tostring(ok) end)")
+        emu.lua_exec("ctx.dialog:confirm({title='B', text='second'}, function(c, ok) res = 'B ' .. tostring(ok) end)")
         monkeypatch.setattr(window, "ask_yes_no", lambda *a: False)  # later dialogs: leave B unanswered by clicks
         return True
 
@@ -304,6 +301,28 @@ def test_stale_tk_dialog_does_not_answer_a_newer_one(make_window, make_app, monk
     app.on_key(SimpleNamespace(keysym="Return"))
     app._open_dialog()
     assert emu.has_text("res A false")
+    assert any("already answered" in ln for ln in emu.log)
+
+
+def test_tk_dialog_answered_remotely_without_a_successor_is_dropped(make_window, make_app, monkeypatch):
+    app = make_window(
+        make_app(
+            ASKING
+            % (
+                "c.dialog:confirm({title='A', text='first'}, function(c, ok) res = 'A ' .. tostring(ok); c:invalidate() end)"
+            )
+        )
+    )
+    emu = app.emu
+
+    def user_slow_to_click(parent, title, text):
+        emu.answer(False)
+        return True
+
+    monkeypatch.setattr(window, "ask_yes_no", user_slow_to_click)
+    app.on_key(SimpleNamespace(keysym="Return"))
+    app._open_dialog()
+    assert emu.has_text("res A false") and not app.problem
     assert any("already answered" in ln for ln in emu.log)
 
 

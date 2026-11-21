@@ -70,7 +70,7 @@ pub struct Session {
 macro_rules! mutating {
     ($($(#[$doc:meta])* fn $name:ident(&mut self $(, $arg:ident: $ty:ty)*) $(-> $ret:ty)?;)*) => {
         $($(#[$doc])* pub fn $name(&mut self $(, $arg: $ty)*) $(-> $ret)? {
-            if self.core.status().locked {
+            if self.core.locked() {
                 self.read_secrets();
             }
             let r = self.core.$name($($arg),*);

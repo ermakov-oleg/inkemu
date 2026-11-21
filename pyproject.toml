@@ -25,10 +25,8 @@ classifiers = [
     "Topic :: System :: Emulators",
 ]
 dependencies = [
-    "lupa>=2.8",
     "mcp>=2.3.0",
     "pillow>=13.0",
-    "segno>=1.6.6",
 ]
 
 [project.urls]

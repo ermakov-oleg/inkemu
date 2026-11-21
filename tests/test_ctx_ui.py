@@ -1,10 +1,7 @@
 from io import BytesIO
 
 import pytest
-from conftest import IMPL
 from PIL import Image
-
-from inkemu.fonts import Fonts
 
 DRAW = "function on_draw(c, g) g:clear(0) %s end\n"
 
@@ -326,7 +323,6 @@ def test_edit_close_inside_on_change_stops_feeding(make_app, emu_factory):
     assert emu.pending is None and emu.has_text("a,ab no")
 
 
-@pytest.mark.skipif(IMPL != "rust" and Fonts().path is None, reason="0.1 needs a system TrueType font")
 def test_no_font_warning_is_logged(make_app, emu_factory):
     emu = emu_factory(make_app("function on_draw(c, g) g:text(0, 0, 'Привет') end\n"))
     emu.reload()

@@ -2,9 +2,6 @@ import re
 from datetime import datetime
 
 import pytest
-from conftest import IMPL
-
-pytestmark = pytest.mark.skipif(IMPL != "rust", reason="pins the Rust binding only")
 
 
 @pytest.fixture
