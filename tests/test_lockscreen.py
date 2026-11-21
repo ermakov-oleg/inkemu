@@ -209,12 +209,13 @@ def test_wake_reads_secrets_again(make_app, emu_factory, tmp_path):
 
 
 def test_live_wakes_get_their_answers_within_one_wait(make_app, emu_factory, server):
+    server.echo = True
     lock = (
         "local n\n"
         "function on_load(c)\n"
         "  n = tonumber(c.storage:read('count') or '0') + 1\n"
         "  c.storage:write('count', tostring(n))\n"
-        f"  c.net:request({{url = '{server.base}/echo/w' .. n}}, function(c, r)\n"
+        f"  c.net:request({{url = '{server.base}/w' .. n}}, function(c, r)\n"
         "    got = r.body; c:invalidate()\n"
         "  end)\n"
         "end\n"
@@ -228,7 +229,7 @@ def test_live_wakes_get_their_answers_within_one_wait(make_app, emu_factory, ser
     emu.lock()
     emu.wait("181s")
     hits = [path for path, _ in server.hits]
-    assert emu.lock_wakes == 3 and hits == ["/echo/w1", "/echo/w2", "/echo/w3", "/echo/w4"]
+    assert emu.lock_wakes == 3 and hits == ["/w1", "/w2", "/w3", "/w4"]
     drawn = emu.lua_eval("return ctx.storage:read('drawn')")
-    assert drawn == "/echo/w1,/echo/w2,/echo/w3,/echo/w4,"
-    assert emu.has_text("got /echo/w4")
+    assert drawn == "/w1,/w2,/w3,/w4,"
+    assert emu.has_text("got /w4")

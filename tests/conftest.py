@@ -64,7 +64,7 @@ def server():
                 self.wfile.write(b"ab")
                 return
             body = "привет".encode() if self.path.endswith(".ics") else b"\x00\xff\xfeok"
-            if self.path.startswith("/echo"):
+            if srv.echo or self.path.startswith("/echo"):
                 body = self.path.encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/plain")
@@ -77,7 +77,7 @@ def server():
 
     srv = HTTPServer(("127.0.0.1", 0), H)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
-    srv.hits, srv.base = hits, f"http://127.0.0.1:{srv.server_port}"
+    srv.hits, srv.base, srv.echo = hits, f"http://127.0.0.1:{srv.server_port}", False
     yield srv
     srv.shutdown()
     srv.server_close()
