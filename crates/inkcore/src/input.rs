@@ -210,7 +210,8 @@ impl Host<'_> {
                     let msg = format!("{kind} dialog: {label} tapped");
                     s.log_line(&msg);
                 });
-                return self.answer(ok);
+                // a lock screen wake in an earlier wait of this gesture may have replaced the Lua state
+                return Host::with_current(self.st, |h| h.answer(ok));
             }
         }
         self.dispatch(&ev)

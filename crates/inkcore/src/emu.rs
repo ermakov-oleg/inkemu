@@ -834,6 +834,41 @@ impl Core {
 mod tests {
     use super::*;
 
+    fn lock_app() -> AppFiles {
+        let manifest = br#"{"app_id": "testapp", "entry": "index.lua", "api": "2.2",
+            "lockscreen": {"interval_sec": 60}}"#;
+        let lock = b"function on_load(c) c:after(5000, function() end) end\n\
+            function on_draw(c, g) g:text(0, 0, 'locked') end\n";
+        AppFiles(
+            [
+                ("manifest.json".to_string(), manifest.to_vec()),
+                (
+                    "index.lua".to_string(),
+                    b"function on_draw(c, g) end\n".to_vec(),
+                ),
+                ("lockscreen.lua".to_string(), lock.to_vec()),
+            ]
+            .into(),
+        )
+    }
+
+    /// The Lua state's functions hold the shared state; dropping the core must free both.
+    #[test]
+    fn dropping_the_core_frees_its_state() {
+        let core = Core::new(lock_app(), Config::default(), Persisted::default());
+        let weak = Rc::downgrade(&core.st);
+        drop(core);
+        assert!(weak.upgrade().is_none());
+
+        let mut core = Core::new(lock_app(), Config::default(), Persisted::default());
+        core.lock();
+        core.wait(61_000).unwrap();
+        assert_eq!(core.lock_wakes(), 1);
+        let weak = Rc::downgrade(&core.st);
+        drop(core);
+        assert!(weak.upgrade().is_none());
+    }
+
     /// 0.1's host could call `wait()` from its `on_pending` hook while the app callback that opened the dialog was
     /// still running; the Rust API cannot, so a test-only global stands in for that host.
     #[test]
