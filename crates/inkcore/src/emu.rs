@@ -10,10 +10,12 @@ use rand_chacha::ChaCha20Rng;
 use crate::app::{app_id_of, read_manifest, AppFiles};
 use crate::clock::{iso, DateTime, Due, Run, Scheduler, TimerId, VirtualClock};
 use crate::config::{Config, Persisted};
+use crate::ctx::net::{self, NetResult, NetState, OutRequest};
 use crate::dialog::Handler;
 use crate::draw::image::Gray;
 use crate::draw::plates::{self, Overlays, Plate};
 use crate::draw::{Canvas, Frame, Target, TextItem};
+use crate::fixtures::{FixtureSet, Redactor};
 use crate::log::{py_repr, Log};
 use crate::lua;
 
@@ -88,6 +90,7 @@ pub(crate) struct State {
     pub(crate) rng: ChaCha20Rng,
     pub(crate) persisted: Persisted,
     pub(crate) persist_changed: bool,
+    pub(crate) net: NetState,
 }
 
 impl State {
@@ -109,6 +112,7 @@ impl State {
             self.sched.cancel(t);
         }
         self.tick = None;
+        self.net.stop();
     }
 
     pub(crate) fn clear_pending(&mut self) {
@@ -341,12 +345,16 @@ pub struct Core {
 
 impl Core {
     /// Boots the app: manifest, fresh Lua state, entry chunk, `on_load`, first frame.
-    pub fn new(app: AppFiles, cfg: Config, persisted: Persisted) -> Core {
+    pub fn new(app: AppFiles, mut cfg: Config, persisted: Persisted) -> Core {
         let app_id = app_id_of(
             &read_manifest(&app, cfg.firmware_api, &cfg.app_dir_label).0,
             &cfg.fallback_app_id,
         );
         let clock = VirtualClock::new(cfg.start_local_ms);
+        let net = NetState::new(
+            FixtureSet::from_files(std::mem::take(&mut cfg.fixtures)),
+            Redactor::new(&cfg.secrets),
+        );
         let rng = match cfg.random_seed {
             Some(seed) => ChaCha20Rng::seed_from_u64(seed),
             None => {
@@ -389,6 +397,7 @@ impl Core {
             rng,
             persisted,
             persist_changed: false,
+            net,
         }));
         let mut core = Core {
             st,
@@ -411,6 +420,7 @@ impl Core {
             s.stop();
             (s.overlay, s.ctx, s.g, s.quit, s.toast) = (None, None, None, false, None);
             (s.images, s.next_image) = (HashMap::new(), 0);
+            s.net.inflight = 0;
             (
                 s.cfg.firmware_api,
                 s.cfg.app_dir_label.clone(),
@@ -449,12 +459,14 @@ impl Core {
             with(&self.st, |s| s.fail(&msg, INSTALL_FAILED));
             return;
         };
-        let reader = manifest
-            .get("permissions")
-            .and_then(|p| p.as_array())
-            .is_some_and(|p| p.iter().any(|v| v == "reader"));
+        let permitted = |name: &str| {
+            manifest
+                .get("permissions")
+                .and_then(|p| p.as_array())
+                .is_some_and(|p| p.iter().any(|v| v == name))
+        };
         let (ctx, g) = self
-            .install(reader)
+            .install(permitted("reader"), permitted("net"))
             .expect("cannot set up the app's Lua state");
         with(&self.st, |s| (s.ctx, s.g) = (Some(ctx.clone()), Some(g)));
         let f = match lua::load_chunk(&self.lua, src, &format!("@{found}")) {
@@ -477,10 +489,10 @@ impl Core {
     }
 
     /// `require`, the global `ctx` and the `g` passed to `on_draw`.
-    fn install(&self, reader: bool) -> mlua::Result<(Table, Table)> {
+    fn install(&self, reader: bool, net: bool) -> mlua::Result<(Table, Table)> {
         let lua = &self.lua;
         lua::install_require(lua, self.app.clone())?;
-        let ctx = crate::ctx::new_ctx(lua, &self.st, &self.app, reader)?;
+        let ctx = crate::ctx::new_ctx(lua, &self.st, &self.app, reader, net)?;
         lua.globals().set("ctx", &ctx)?;
         let g = crate::draw::new_g(lua, &self.st, Target::Screen)?;
         Ok((ctx, g))
@@ -530,6 +542,31 @@ impl Core {
     /// Answers the pending dialog: confirm yes/no, leave yes/no, text OK/cancel.
     pub fn answer(&mut self, ok: bool) -> Result<(), String> {
         self.host().answer(ok)
+    }
+
+    // ---- network ------------------------------------------------------------------------------
+
+    /// `record`/`live` requests made since the last call, for the host to perform.
+    pub fn take_outgoing(&mut self) -> Vec<OutRequest> {
+        with(&self.st, |s| s.net.take_outgoing())
+    }
+
+    /// The host's answer to an outgoing request; the callback fires at request time + delay, at once if that
+    /// has passed.
+    pub fn deliver(&mut self, id: u64, result: NetResult) {
+        net::deliver(&self.host(), id, result);
+    }
+
+    /// Requests the app still waits for.
+    pub fn net_inflight(&self) -> u32 {
+        self.st.borrow().net.inflight
+    }
+
+    /// Replaces the `<fixtures>/net/` files `replay` answers from.
+    pub fn set_fixtures(&mut self, files: std::collections::BTreeMap<String, Vec<u8>>) {
+        with(&self.st, |s| {
+            s.net.fixtures = Rc::new(FixtureSet::from_files(files))
+        });
     }
 
     // ---- time and lifecycle --------------------------------------------------------------------
@@ -630,6 +667,11 @@ impl Core {
 
     pub fn log_line(&mut self, msg: &str) {
         with(&self.st, |s| s.log_line(msg));
+    }
+
+    /// A warning: in `warnings` and the log as "WARN ...".
+    pub fn warn(&mut self, msg: &str) {
+        with(&self.st, |s| s.warn(msg));
     }
 
     /// The app data to write to disk, when state, files or lock data changed since the last take.

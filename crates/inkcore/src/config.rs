@@ -61,8 +61,14 @@ pub struct Config {
     pub state_read_error: Option<String>,
     /// `<fixtures>/reader.json` for `ctx.reader`.
     pub reader_json: Option<Vec<u8>>,
-    /// Recorded network fixtures by file name.
+    /// The files of `<fixtures>/net/` by name: `.json` fixtures and their body files.
     pub fixtures: BTreeMap<String, Vec<u8>>,
+    /// `<fixtures>/net` as the host names it, for the missing-fixture warning.
+    pub net_fixtures_label: String,
+    /// Usable secrets as (name, non-empty value), redacted to `{{name}}` in logs and fixture keys.
+    pub secrets: Vec<(String, String)>,
+    /// Why entries of the secrets file are unusable; warned at every start, and they refuse `record`.
+    pub secret_problems: Vec<String>,
     /// Lua instructions one outermost callback may run; kept across reboots of the Lua state.
     pub instruction_budget: i64,
     /// Total bytes and number of files the app may keep in `ctx.storage`.
@@ -85,6 +91,9 @@ impl Default for Config {
             state_read_error: None,
             reader_json: None,
             fixtures: BTreeMap::new(),
+            net_fixtures_label: "net".into(),
+            secrets: Vec::new(),
+            secret_problems: Vec::new(),
             instruction_budget: crate::lua::INSTRUCTION_BUDGET,
             storage_quota: STORAGE_QUOTA,
         }

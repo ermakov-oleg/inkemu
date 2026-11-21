@@ -1,4 +1,5 @@
 //! `Session`: an `inkcore::Core` plus the app folder and the state directory on disk.
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -7,7 +8,9 @@ use inkcore::clock::local_ms;
 use inkcore::log::py_repr_str;
 use inkcore::{AppFiles, Battery, Config, Core, Frame, NetMode, Pending, Persisted, Status};
 
+use crate::net_live::Net;
 use crate::paths;
+use crate::secrets;
 use crate::state_disk;
 
 const NET_MODES: [&str; 3] = ["replay", "record", "live"];
@@ -57,13 +60,15 @@ pub struct Session {
     secrets_file: PathBuf,
     /// What is known to be on disk, so only changes are written.
     on_disk: Persisted,
+    net: Net,
 }
 
-/// Runs a mutating `Core` method, then writes the app data it changed.
+/// Runs a mutating `Core` method, performs the requests it queued, then writes the app data it changed.
 macro_rules! mutating {
     ($($(#[$doc:meta])* fn $name:ident(&mut self $(, $arg:ident: $ty:ty)*) $(-> $ret:ty)?;)*) => {
         $($(#[$doc])* pub fn $name(&mut self $(, $arg: $ty)*) $(-> $ret)? {
             let r = self.core.$name($($arg),*);
+            self.pump_net();
             self.flush();
             r
         })*
@@ -115,6 +120,8 @@ impl Session {
             state_disk::seed_files(&fixtures_dir, &state_dir);
         }
         let (on_disk, state_read_error) = state_disk::load(&state_dir);
+        let secrets = secrets::load(&secrets_file);
+        let net_dir = fixtures_dir.join("net");
         let cfg = Config {
             start_local_ms,
             utc_offset_sec,
@@ -128,11 +135,14 @@ impl Session {
             state_label: state_dir.join("state.json").display().to_string(),
             state_read_error,
             reader_json: fs::read(fixtures_dir.join("reader.json")).ok(),
+            fixtures: read_fixtures(&net_dir),
+            net_fixtures_label: net_dir.display().to_string(),
+            secrets: secrets.values.clone(),
+            secret_problems: secrets.problems,
             instruction_budget: opts
                 .instruction_budget
                 .unwrap_or(inkcore::lua::INSTRUCTION_BUDGET),
             storage_quota: opts.storage_quota.unwrap_or(inkcore::STORAGE_QUOTA),
-            ..Config::default()
         };
         let core = Core::new(files, cfg, on_disk.clone());
         let mut session = Session {
@@ -142,7 +152,9 @@ impl Session {
             fixtures_dir,
             secrets_file,
             on_disk,
+            net: Net::new(net_mode, secrets.values, net_dir),
         };
+        session.pump_net();
         session.flush();
         Ok(session)
     }
@@ -189,10 +201,28 @@ impl Session {
         }
     }
 
-    /// Re-reads the app folder, then reloads: edited code takes effect.
+    /// Performs the `live`/`record` requests the core queued and hands back their answers; an answer whose
+    /// callback queues another request is followed up in the same call.
+    pub fn pump_net(&mut self) {
+        loop {
+            let out = self.core.take_outgoing();
+            if out.is_empty() {
+                return;
+            }
+            for r in out {
+                let result = self.net.perform(&mut self.core, &r);
+                self.core.deliver(r.id, result);
+            }
+        }
+    }
+
+    /// Re-reads the app folder and the fixtures, then reloads: edited code takes effect.
     pub fn reload(&mut self) {
         self.core.set_app(read_app_files(&self.app_dir));
+        self.core
+            .set_fixtures(read_fixtures(&self.fixtures_dir.join("net")));
         self.core.reload();
+        self.pump_net();
         self.flush();
     }
 
@@ -262,6 +292,20 @@ fn read_app_files(app_dir: &Path) -> AppFiles {
     let mut out = AppFiles::default();
     walk(app_dir, app_dir, &mut out);
     out
+}
+
+/// The regular files of `<fixtures>/net/` by name.
+fn read_fixtures(dir: &Path) -> BTreeMap<String, Vec<u8>> {
+    let Ok(rd) = fs::read_dir(dir) else {
+        return BTreeMap::new();
+    };
+    rd.flatten()
+        .filter(|e| e.path().is_file())
+        .filter_map(|e| {
+            let data = fs::read(e.path()).ok()?;
+            Some((e.file_name().to_string_lossy().into_owned(), data))
+        })
+        .collect()
 }
 
 /// FNV-1a: any text gives the same seed on every run.

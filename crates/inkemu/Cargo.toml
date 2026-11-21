@@ -8,6 +8,8 @@ publish.workspace = true
 [dependencies]
 inkcore = { path = "../inkcore" }
 serde_json = "1"
+# no gzip: urllib in 0.1 neither asked for nor decoded compressed bodies
+ureq = { version = "2.12", default-features = false, features = ["tls"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

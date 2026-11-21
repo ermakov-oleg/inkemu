@@ -4,7 +4,6 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
-from conftest import IMPL
 
 DRAW = "msg = 'none'\nfunction on_draw(c, g) g:clear(0); g:text(0, 0, 'msg ' .. tostring(msg)) end\n"
 NET = {"permissions": ["net"]}
@@ -62,7 +61,6 @@ def server():
     srv.server_close()
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_replay_hit(make_app, emu_factory, tmp_path):
     write_fixture(tmp_path, "hand", {"method": "GET", "url": "http://x.test/a"}, {"status": 200})
     emu = emu_factory(app_with(make_app, "{url = 'http://x.test/a'}"))
@@ -72,7 +70,6 @@ def test_replay_hit(make_app, emu_factory, tmp_path):
     assert emu.has_text("msg 200:ok")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_response_fields_and_delay(make_app, emu_factory, tmp_path):
     write_fixture(
         tmp_path,
@@ -94,7 +91,6 @@ def test_response_fields_and_delay(make_app, emu_factory, tmp_path):
     assert emu.has_text("msg 201bar3")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_replay_without_fixture(make_app, emu_factory):
     emu = emu_factory(app_with(make_app, "{url = 'http://x.test/b'}", "msg = resp.err .. resp.error .. resp.status"))
     emu.wait(300)
@@ -103,7 +99,6 @@ def test_replay_without_fixture(make_app, emu_factory):
     assert "GET http://x.test/b" in line and "--net record" in line
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_record_then_replay(make_app, emu_factory, tmp_path, server):
     url = server.base + "/data"
     emu = emu_factory(
@@ -126,7 +121,6 @@ def test_record_then_replay(make_app, emu_factory, tmp_path, server):
     assert emu2.has_text("msg 200:5")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_binary_body_reaches_lua(make_app, emu_factory, tmp_path, server):
     emu = emu_factory(
         app_with(
@@ -140,7 +134,6 @@ def test_binary_body_reaches_lua(make_app, emu_factory, tmp_path, server):
     assert emu.has_text("msg 0,255,254")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_record_redacts_secret_in_path(make_app, emu_factory, tmp_path, server):
     secrets = tmp_path / "secrets.json"
     secrets.write_text(json.dumps({"cal": "private-abc123"}))
@@ -158,7 +151,6 @@ def test_record_redacts_secret_in_path(make_app, emu_factory, tmp_path, server):
     assert not any("abc123" in ln for ln in emu.log + emu.warnings)
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_record_drops_auth_headers(make_app, emu_factory, tmp_path, server):
     emu = emu_factory(
         app_with(
@@ -176,7 +168,6 @@ def test_record_drops_auth_headers(make_app, emu_factory, tmp_path, server):
     assert server.hits[0][1]["Authorization"] == "Bearer s3cr3t"
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_placeholder_url_matches(make_app, emu_factory, tmp_path, server):
     secrets = tmp_path / "secrets.json"
     secrets.write_text(json.dumps({"cal": "private-abc123"}))
@@ -197,7 +188,6 @@ def test_placeholder_url_matches(make_app, emu_factory, tmp_path, server):
     assert emu2.has_text("msg 200")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_placeholder_expands_for_real_request(make_app, emu_factory, tmp_path, server):
     secrets = tmp_path / "secrets.json"
     secrets.write_text(json.dumps({"cal": "private-abc123"}))
@@ -209,7 +199,6 @@ def test_placeholder_expands_for_real_request(make_app, emu_factory, tmp_path, s
     assert not any("abc123" in ln for ln in emu.log)
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_unknown_secret_warns(make_app, emu_factory, server):
     emu = emu_factory(
         app_with(make_app, "{url = '%s/ical/abcdefghij0123456789xyz/basic.ics'}" % server.base), net="record"
@@ -217,7 +206,6 @@ def test_unknown_secret_warns(make_app, emu_factory, server):
     assert any("looks like a secret" in w and "abcdefghij0123456789xyz" not in w for w in emu.warnings)
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_patch_never_answers(make_app, emu_factory):
     emu = emu_factory(app_with(make_app, "{url = 'http://x.test/p', method = 'PATCH'}"))
     emu.wait("60s")
@@ -225,7 +213,6 @@ def test_patch_never_answers(make_app, emu_factory):
     assert any("PATCH" in w for w in emu.warnings)
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_glob_match_fixture(make_app, emu_factory, tmp_path):
     write_fixture(tmp_path, "err", {"method": "GET", "url": "http://x.test/err*"}, {"status": 500}, match="glob")
     emu = emu_factory(app_with(make_app, "{url = 'http://x.test/errors/1'}"))
@@ -233,7 +220,6 @@ def test_glob_match_fixture(make_app, emu_factory, tmp_path):
     assert emu.has_text("msg 500:")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_prefix_match_fixture_and_exact_wins(make_app, emu_factory, tmp_path):
     write_fixture(tmp_path, "a", {"method": "GET", "url": "http://x.test/"}, {"status": 404}, match="prefix")
     write_fixture(tmp_path, "b", {"method": "GET", "url": "http://x.test/a"}, {"status": 200})
@@ -242,7 +228,6 @@ def test_prefix_match_fixture_and_exact_wins(make_app, emu_factory, tmp_path):
     assert emu.has_text("msg 200:")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_post_matches_by_body_hash(make_app, emu_factory, tmp_path):
     sha = hashlib.sha256(b"q=1").hexdigest()
     write_fixture(
@@ -258,12 +243,11 @@ def test_post_matches_by_body_hash(make_app, emu_factory, tmp_path):
     assert emu2.has_text("msg 0:nil")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_cancel_before_delivery(make_app, emu_factory, tmp_path):
     write_fixture(tmp_path, "h", {"method": "GET", "url": "http://x.test/a"}, {"status": 200})
     emu = emu_factory(app_with(make_app, "{url = 'http://x.test/a'}"))
     emu.wait(100)
-    emu.L.execute("job:cancel()")
+    emu.lua_exec("job:cancel()")
     emu.wait(1000)
     assert emu.has_text("msg none")
 
@@ -274,7 +258,6 @@ def test_net_nil_without_permission(make_app, emu_factory):
 
 
 @pytest.mark.allow_errors
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_keep_wifi_and_websocket(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -285,10 +268,9 @@ def test_keep_wifi_and_websocket(make_app, emu_factory):
         )
     )
     assert any("bad argument" in e for e in emu.errors)
-    assert "not emulated" in emu.L.globals().msg
+    assert "not emulated" in emu.lua_eval("return msg")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_live_mode_hits_server(make_app, emu_factory, tmp_path, server):
     emu = emu_factory(app_with(make_app, "{url = '%s/live'}" % server.base, "msg = resp.status"), net="live")
     emu.wait(300)
@@ -296,7 +278,6 @@ def test_live_mode_hits_server(make_app, emu_factory, tmp_path, server):
     assert not (tmp_path / "fixtures").exists()
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_network_error_gives_err(make_app, emu_factory):
     emu = emu_factory(
         app_with(
@@ -311,7 +292,6 @@ def test_network_error_gives_err(make_app, emu_factory):
 
 
 @pytest.mark.allow_errors
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_request_argument_errors(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -321,10 +301,9 @@ def test_request_argument_errors(make_app, emu_factory):
         )
     )
     assert "bad extra argument" in emu.errors[0]
-    assert emu.L.globals().msg == "nilinvalid_argument"
+    assert emu.lua_eval("return msg") == "nilinvalid_argument"
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_hyphenated_name_and_numeric_value_are_redacted(make_app, emu_factory, tmp_path, server):
     secrets = tmp_path / "secrets.json"
     secrets.write_text(json.dumps({"my-cal": "private-abc123", "pin": 987654}))
@@ -346,7 +325,6 @@ def test_hyphenated_name_and_numeric_value_are_redacted(make_app, emu_factory, t
 @pytest.mark.parametrize(
     "content", ['{"bad name": "private-abc123"}', '{"cal": ["private-abc123"]}', "{not json private-abc123"]
 )
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_unusable_secrets_refuse_record(make_app, emu_factory, tmp_path, server, content):
     secrets = tmp_path / "secrets.json"
     secrets.write_text(content)
@@ -362,7 +340,6 @@ def test_unusable_secrets_refuse_record(make_app, emu_factory, tmp_path, server,
     assert emu.warnings and not any("abc123" in ln for ln in emu.log + emu.warnings + emu.errors)
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_unusable_secret_warns_in_replay(make_app, emu_factory, tmp_path):
     secrets = tmp_path / "secrets.json"
     secrets.write_text('{"bad name": "x", "ok": "y"}')
@@ -370,17 +347,53 @@ def test_unusable_secret_warns_in_replay(make_app, emu_factory, tmp_path):
     assert any("'bad name'" in w for w in emu.warnings) and emu.errors == []
 
 
+def two_requests(url_lua: str, body_lua: str) -> str:
+    """A GET of `url_lua` and a POST of `body_lua` (Lua expressions); `msg` collects status and body of each."""
+    cb = "function(c, r) msg = msg .. r.status .. tostring(r.body); c:invalidate() end"
+    return (
+        DRAW + "function on_load(c)\n  msg = ''\n"
+        f"  c.net:request({{url = {url_lua}}}, {cb})\n"
+        f"  c.net:request({{url = 'http://h.test/p', method = 'POST', body = {body_lua}}}, {cb})\nend\n"
+    )
+
+
+def fixtures_for(tmp_path, url: str, body: bytes) -> None:
+    """Fixtures that answer only the redacted forms: `url` and a POST body hashing like `body`."""
+    write_fixture(tmp_path, "u", {"method": "GET", "url": url}, {"status": 200}, body="url")
+    sha = hashlib.sha256(body).hexdigest()
+    write_fixture(
+        tmp_path, "b", {"method": "POST", "url": "http://h.test/p", "body_sha256": sha}, {"status": 200}, body="body"
+    )
+
+
 @pytest.mark.parametrize("shown", ["pa+ss%2Fwd%2Bx", "pa%20ss%2fwd%2bx", "pa%20ss%2Fwd%2Bx", "pa ss/wd+x"])
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
-def test_redact_quote_plus_and_lowercase_percent(tmp_path, shown):
-    from inkemu.net import Net
+def test_redact_quote_plus_and_lowercase_percent(make_app, emu_factory, tmp_path, shown):
+    secrets = tmp_path / "secrets.json"
+    secrets.write_text(json.dumps({"pw": "pa ss/wd+x"}))
+    fixtures_for(tmp_path, "http://h.test/a/{{pw}}/b", b"x={{pw}};")
+    emu = emu_factory(
+        make_app(two_requests(f"'http://h.test/a/{shown}/b'", f"'x={shown};'"), manifest=NET), secrets_file=secrets
+    )
+    emu.wait(300)
+    assert emu.lua_eval("return msg") == "200url200body"
+    assert any("GET http://h.test/a/{{pw}}/b -> 200 (fixture)" in ln for ln in emu.log)
 
-    net = Net("record", tmp_path, {"pw": "pa ss/wd+x"}, print, print)
-    assert net.redact(f"http://h.test/a/{shown}/b") == "http://h.test/a/{{pw}}/b"
-    assert net._redact_bytes(f"x={shown};".encode()) == b"x={{pw}};"
+
+def test_userinfo_password_is_always_redacted(make_app, emu_factory, tmp_path):
+    write_fixture(tmp_path, "u", {"method": "GET", "url": "https://bob:{{userinfo}}@h.test/x?q=1"}, {"status": 200})
+    lua = (
+        DRAW + "function on_load(c)\n  msg = ''\n"
+        "  for _, u in ipairs({'https://bob:hunter2@h.test/x?q=1', 'https://bob@h.test/x'}) do\n"
+        "    c.net:request({url = u}, function(c, r) msg = msg .. r.status .. ',' end)\n  end\nend\n"
+    )
+    emu = emu_factory(make_app(lua, manifest=NET))
+    emu.wait(300)
+    assert emu.lua_eval("return msg") == "200,0,"
+    assert any("GET https://bob:{{userinfo}}@h.test/x?q=1 -> 200 (fixture)" in ln for ln in emu.log)
+    assert any("no fixture for GET https://bob@h.test/x;" in w for w in emu.warnings)
+    assert not any("hunter2" in ln for ln in emu.log + emu.warnings)
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_record_redacts_encoded_forms_everywhere(make_app, emu_factory, tmp_path, server):
     secrets = tmp_path / "secrets.json"
     secrets.write_text(json.dumps({"pw": "pa ss/wd+x"}))
@@ -398,16 +411,6 @@ def test_record_redacts_encoded_forms_everywhere(make_app, emu_factory, tmp_path
         assert "pa+ss" not in low and "pa%20ss" not in low and "wd%2b" not in low, text
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
-def test_userinfo_password_is_always_redacted(tmp_path):
-    from inkemu.net import Net
-
-    net = Net("record", tmp_path, {}, print, print)
-    assert net.redact("https://bob:hunter2@h.test/x?q=1") == "https://bob:{{userinfo}}@h.test/x?q=1"
-    assert net.redact("https://bob@h.test/x") == "https://bob@h.test/x"
-    assert net.fixture_key("GET", "https://bob:hunter2@h.test/x", None) == "GET https://bob:{{userinfo}}@h.test/x"
-
-
 @pytest.mark.parametrize(
     "text",
     [
@@ -416,16 +419,13 @@ def test_userinfo_password_is_always_redacted(tmp_path):
         "<a href='https://h.test:1/'>x@y</a>",
     ],
 )
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
-def test_userinfo_redaction_leaves_bodies_alone(tmp_path, text):
-    from inkemu.net import Net
-
-    net = Net("record", tmp_path, {}, print, print)
-    assert net.redact(text) == text
-    assert net._redact_bytes(text.encode()) == text.encode()
+def test_userinfo_redaction_leaves_bodies_alone(make_app, emu_factory, tmp_path, text):
+    fixtures_for(tmp_path, "http://h.test/?q=" + text, text.encode())
+    emu = emu_factory(make_app(two_requests(f"'http://h.test/?q=' .. [==[{text}]==]", f"[==[{text}]==]"), manifest=NET))
+    emu.wait(300)
+    assert emu.lua_eval("return msg") == "200url200body"
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_userinfo_password_not_in_log_or_warnings(make_app, emu_factory, server):
     url = server.base.replace("http://", "http://bob:hunter2@") + "/ical/abcdefghij0123456789xyz/basic.ics"
     emu = emu_factory(app_with(make_app, "{url = '%s'}" % url, "msg = resp.status"), net="record")
@@ -445,7 +445,6 @@ def test_userinfo_password_not_in_log_or_warnings(make_app, emu_factory, server)
         {"status": True},
     ],
 )
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_malformed_fixture_is_ignored_with_a_warning(make_app, emu_factory, tmp_path, bad):
     write_fixture(tmp_path, "hand", {"method": "GET", "url": "http://x.test/a"}, bad)
     emu = emu_factory(app_with(make_app, "{url = 'http://x.test/a'}", "msg = tostring(resp.err)"))
@@ -454,7 +453,6 @@ def test_malformed_fixture_is_ignored_with_a_warning(make_app, emu_factory, tmp_
     assert any("hand.json is not valid" in w for w in emu.warnings), emu.warnings
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_missing_body_file_warns_and_gives_empty_body(make_app, emu_factory, tmp_path):
     write_fixture(
         tmp_path, "hand", {"method": "GET", "url": "http://x.test/a"}, {"status": 201, "body_file": "gone.body"}
@@ -465,7 +463,6 @@ def test_missing_body_file_warns_and_gives_empty_body(make_app, emu_factory, tmp
     assert any("gone.body" in w and "not found" in w for w in emu.warnings), emu.warnings
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 8")
 def test_truncated_response_is_no_network(make_app, emu_factory, server):
     emu = emu_factory(app_with(make_app, "{url = '%s/short'}" % server.base, "msg = tostring(resp.err)"), net="live")
     emu.wait(300)

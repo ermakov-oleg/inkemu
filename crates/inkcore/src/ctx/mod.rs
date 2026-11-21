@@ -7,6 +7,7 @@ pub(crate) mod files;
 mod fonts;
 mod image;
 mod layers;
+pub(crate) mod net;
 pub(crate) mod object;
 mod package;
 mod reader;
@@ -32,6 +33,7 @@ pub(crate) fn new_ctx(
     st: &Shared,
     app: &Rc<AppFiles>,
     reader: bool,
+    net: bool,
 ) -> mlua::Result<Table> {
     let invalidate = {
         let st = st.clone();
@@ -123,6 +125,9 @@ pub(crate) fn new_ctx(
     utils::install(lua, &ctx, st)?;
     screen::install(lua, &ctx, st)?;
     stubs::install(lua, &ctx, st)?;
+    if net {
+        net::install(lua, &ctx, st)?;
+    }
     if reader {
         reader::install(lua, &ctx, st)?;
     }
