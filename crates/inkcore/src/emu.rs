@@ -13,7 +13,8 @@ use crate::lua;
 
 pub const ERROR_TITLE: &str = "App error, closed";
 const INSTALL_FAILED: &str = "Install failed";
-const NOT_YET: &str = "not implemented yet";
+/// What the not-yet-ported input and lock methods return; the Python binding maps it to NotImplementedError.
+pub const NOT_YET: &str = "not implemented yet";
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextItem {
@@ -390,7 +391,7 @@ impl Core {
     fn install(&self) -> mlua::Result<(Table, Table)> {
         let lua = &self.lua;
         lua::install_require(lua, self.app.clone())?;
-        let ctx = lua.create_table()?;
+        let ctx = crate::ctx::new_ctx(lua, &self.st)?;
         lua.globals().set("ctx", &ctx)?;
         let saved = with(&self.st, |s| s.persisted.state_json.clone());
         ctx.set("state", load_state(lua, saved.as_deref())?)?;

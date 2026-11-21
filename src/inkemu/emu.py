@@ -600,6 +600,24 @@ class Emu:
             self.leave()
         return True, res
 
+    def lua_exec(self, code: str) -> None:
+        """Run Lua code in the app's state under the instruction budget; a Lua error raises RuntimeError."""
+        self._lua_run(code, "=lua_exec")
+
+    def lua_eval(self, code: str) -> Any:
+        """Like lua_exec; returns the first result as plain Python data (a table becomes a list or dict)."""
+        res = self._lua_run(code, "=lua_eval")
+        return ctx_basic.lua_to_py(res[0], lambda _msg: None, L=self.L) if res else None
+
+    def _lua_run(self, code: str, name: str) -> tuple:
+        fn, err = load_chunk(self.L, code, name)
+        if fn is None:
+            raise RuntimeError(err)
+        ok, res = protected_call(self.L, fn)
+        if not ok:
+            raise RuntimeError(res[0])
+        return res
+
     def _call(self, name: str, *args) -> Any:
         """Call the app's global callback `name` if it is defined; returns its first result."""
         if not self.running:

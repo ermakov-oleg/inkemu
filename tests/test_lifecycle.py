@@ -15,7 +15,6 @@ def test_dot_call_on_ctx_is_error(make_app, emu_factory):
 
 
 @pytest.mark.allow_errors
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 3")
 def test_dot_call_on_ctx_level_method_is_error(make_app, emu_factory):
     emu = emu_factory(make_app("function on_load(c) ctx.invalidate() end"))
     assert "ctx:invalidate" in emu.errors[0]

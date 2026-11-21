@@ -42,6 +42,24 @@ end }
 return function(f) find = f end
 "#;
 
+// Object methods: `objs` is weak and private, so an app cannot fake an object. A method body returns (true, ...) or
+// (false, message): the error is raised here, at the app's line.
+const OBJECTS: &str = r#"
+local error, pack, unpack = error, table.pack, table.unpack
+local objs = setmetatable({}, { __mode = 'k' })
+return function(t, name) objs[t] = name end,
+  function(obj_name, fn_name, fn)
+    local where = obj_name == 'ctx' and 'ctx' or 'ctx.' .. obj_name
+    local msg = "bad argument #2 to '" .. fn_name .. "' (call " .. where .. ":" .. fn_name .. " with a colon)"
+    return function(self, ...)
+      if objs[self] ~= obj_name then error(msg, 2) end
+      local r = pack(fn(...))
+      if r[1] then return unpack(r, 2, r.n) end
+      error(r[2], 2)
+    end
+  end
+"#;
+
 struct Budget {
     units: Cell<i64>,
     left: Cell<i64>,
@@ -82,6 +100,15 @@ pub fn new_lua() -> Lua {
         .call(HOST_SRC)
         .expect("sandbox setup failed");
     lua.set_named_registry_value("inkemu.set_find", set_find)
+        .expect("sandbox setup failed");
+    let (register, method): (Function, Function) = lua
+        .load(OBJECTS)
+        .set_name(HOST_SRC)
+        .call(())
+        .expect("sandbox setup failed");
+    lua.set_named_registry_value("inkemu.register_object", register)
+        .expect("sandbox setup failed");
+    lua.set_named_registry_value("inkemu.object_method", method)
         .expect("sandbox setup failed");
     lua.set_app_data(Rc::new(Budget {
         units: Cell::new(0),

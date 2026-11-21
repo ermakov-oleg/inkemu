@@ -30,7 +30,7 @@ fn value_err(e: String) -> PyErr {
 }
 
 fn err(e: String, make: fn(String) -> PyErr) -> PyErr {
-    if e == "not implemented yet" {
+    if e == inkcore::NOT_YET {
         PyNotImplementedError::new_err(e)
     } else {
         make(e)

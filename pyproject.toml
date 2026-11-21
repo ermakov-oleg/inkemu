@@ -69,6 +69,8 @@ cache-keys = [
     { file = "crates/**/*.rs" },
     { file = "crates/**/Cargo.toml" },
     { file = "patches/**/*" },
+    { file = "vendor/**/*" },
+    { file = "rust-toolchain.toml" },
 ]
 
 [dependency-groups]
