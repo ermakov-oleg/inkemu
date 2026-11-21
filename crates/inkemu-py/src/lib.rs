@@ -73,7 +73,7 @@ impl Session {
     #[new]
     #[pyo3(signature = (app_dir, *, state_dir=None, fixtures_dir=None, net="replay".to_string(), start_time=None,
         firmware_api=(2, 26), fresh=false, secrets_file=None, seed_files=None, random_seed=None,
-        instruction_budget=None))]
+        instruction_budget=None, storage_quota=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         py: Python<'_>,
@@ -88,6 +88,7 @@ impl Session {
         seed_files: Option<bool>,
         random_seed: Option<String>,
         instruction_budget: Option<i64>,
+        storage_quota: Option<(u64, usize)>,
     ) -> PyResult<Self> {
         let opts = SessionOptions {
             state_dir,
@@ -100,6 +101,7 @@ impl Session {
             seed_files,
             random_seed,
             instruction_budget,
+            storage_quota,
         };
         let s = py
             .detach(|| Native::open(&app_dir, opts).map(SessionCell))
@@ -316,6 +318,7 @@ fn parse_duration(s: &str) -> PyResult<i64> {
 fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", inkcore::VERSION)?;
     m.add("INSTRUCTION_BUDGET", inkcore::lua::INSTRUCTION_BUDGET)?;
+    m.add("STORAGE_QUOTA", inkcore::STORAGE_QUOTA)?;
     m.add_class::<Session>()?;
     m.add_function(wrap_pyfunction!(parse_duration, m)?)?;
     Ok(())

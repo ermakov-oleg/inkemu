@@ -1,6 +1,9 @@
 //! One frame's draw commands, as 0.1 `draw.Canvas`: the first 1024 are kept, text is laid out as it is recorded.
+use std::rc::Rc;
+
 use unicode_bidi::{bidi_class, BidiClass};
 
+use super::image::{self, Gray};
 use super::raster::Style;
 use super::text::Fonts;
 use super::{pattern, Frame, TextItem};
@@ -75,7 +78,16 @@ pub enum Cmd {
         text: String,
         opts: TextOpts,
     },
-    Image,
+    /// An image as it was when the command was recorded.
+    Image {
+        img: Rc<Gray>,
+        x: i64,
+        y: i64,
+        w: u32,
+        h: u32,
+    },
+    /// Counted, draws nothing (`g:image` of something that is not an image).
+    Skip,
     Pattern {
         x: i32,
         y: i32,
@@ -297,7 +309,11 @@ impl Canvas {
     }
 
     pub fn render(&self) -> Frame {
-        let mut f = Frame::new(self.w, self.h);
+        self.render_on(Frame::new(self.w, self.h))
+    }
+
+    /// The last finished frame drawn over `f` (a layer's previous contents).
+    pub fn render_on(&self, mut f: Frame) -> Frame {
         for op in &self.ops {
             match op {
                 Op::Lines { font, lines } => {
@@ -345,6 +361,13 @@ fn draw(f: &mut Frame, cmd: &Cmd) {
             ink,
         } if pts.len() >= 2 => f.polyline(pts, width, ink),
         Cmd::Pattern { x, y, w, h } => pattern::fill(f, x, y, w, h),
+        Cmd::Image {
+            ref img,
+            x,
+            y,
+            w,
+            h,
+        } => image::paste(f, img, x, y, w, h),
         _ => {}
     }
 }

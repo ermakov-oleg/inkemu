@@ -27,6 +27,8 @@ pub struct SessionOptions {
     pub random_seed: Option<String>,
     /// Lua instructions one callback may run; None: the default.
     pub instruction_budget: Option<i64>,
+    /// `ctx.storage` quota (bytes, files); None: the default.
+    pub storage_quota: Option<(u64, usize)>,
 }
 
 impl Default for SessionOptions {
@@ -42,6 +44,7 @@ impl Default for SessionOptions {
             seed_files: None,
             random_seed: None,
             instruction_budget: None,
+            storage_quota: None,
         }
     }
 }
@@ -111,6 +114,7 @@ impl Session {
         if opts.seed_files.unwrap_or(opts.fresh) && problem.is_none() {
             state_disk::seed_files(&fixtures_dir, &state_dir);
         }
+        let (on_disk, state_read_error) = state_disk::load(&state_dir);
         let cfg = Config {
             start_local_ms,
             utc_offset_sec,
@@ -122,12 +126,14 @@ impl Session {
             app_dir_label: app_dir.display().to_string(),
             fallback_app_id: paths::fallback_app_id(&app_dir),
             state_label: state_dir.join("state.json").display().to_string(),
+            state_read_error,
+            reader_json: fs::read(fixtures_dir.join("reader.json")).ok(),
             instruction_budget: opts
                 .instruction_budget
                 .unwrap_or(inkcore::lua::INSTRUCTION_BUDGET),
+            storage_quota: opts.storage_quota.unwrap_or(inkcore::STORAGE_QUOTA),
             ..Config::default()
         };
-        let on_disk = state_disk::load(&state_dir);
         let core = Core::new(files, cfg, on_disk.clone());
         let mut session = Session {
             core,

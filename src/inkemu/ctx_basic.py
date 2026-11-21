@@ -377,7 +377,8 @@ def _install_files(emu: "Emu") -> None:
         if body is None:
             return None, "invalid_argument"
         others = [e for e in entries() if e.name != p.name]
-        if len(body) + sum(e.stat().st_size for e in others) > MAX_BYTES or len(others) + 1 > MAX_FILES:
+        max_bytes, max_files = emu.storage_quota
+        if len(body) + sum(e.stat().st_size for e in others) > max_bytes or len(others) + 1 > max_files:
             return None, "no_space"
         root.mkdir(parents=True, exist_ok=True)
         tmp = root / (p.name + ".inkemu-tmp")
@@ -414,12 +415,13 @@ def _install_files(emu: "Emu") -> None:
 
     def usage(*_):
         es = entries()
+        max_bytes, max_files = emu.storage_quota
         return emu.L.table_from(
             {
                 "used_bytes": sum(e.stat().st_size for e in es),
                 "used_files": len(es),
-                "max_bytes": MAX_BYTES,
-                "max_files": MAX_FILES,
+                "max_bytes": max_bytes,
+                "max_files": max_files,
             }
         )
 

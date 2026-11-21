@@ -1,7 +1,6 @@
 import re
 
 import pytest
-from conftest import IMPL
 from PIL import ImageChops
 
 FONTS = "FONTS = {small = {name = 'small'}, medium = {name = 'medium'}, large = {name = 'large'}}\n"
@@ -105,7 +104,6 @@ def test_resize(draw):
     assert emu.lua_eval("return (function() local w, h = G:size(); return w end)()") == 800
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_image_is_drawn_scaled(make_app, emu_factory):
     emu = emu_factory(
         make_app(

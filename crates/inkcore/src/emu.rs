@@ -1,6 +1,6 @@
 //! The emulator core: one app, its Lua state, virtual time and lifecycle, as 0.1 `emu.Emu`.
 use std::cell::{Ref, RefCell};
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::rc::Rc;
 
 use mlua::{Function, IntoLuaMulti, Lua, MultiValue, Table, Value};
@@ -11,8 +11,9 @@ use crate::app::{app_id_of, read_manifest, AppFiles};
 use crate::clock::{iso, DateTime, Due, Run, Scheduler, TimerId, VirtualClock};
 use crate::config::{Config, Persisted};
 use crate::dialog::Handler;
+use crate::draw::image::Gray;
 use crate::draw::plates::{self, Overlays, Plate};
-use crate::draw::{Canvas, Frame, TextItem};
+use crate::draw::{Canvas, Frame, Target, TextItem};
 use crate::log::{py_repr, Log};
 use crate::lua;
 
@@ -74,6 +75,9 @@ pub(crate) struct State {
     /// Text and the clock ms it stays up to.
     pub(crate) toast: Option<(String, i64)>,
     pub(crate) canvas: Canvas,
+    /// `ctx.image`, `ctx.qr` and `ctx.layers` images by `_id`, until released; dropped with the Lua state.
+    pub(crate) images: HashMap<i64, Rc<Gray>>,
+    pub(crate) next_image: i64,
     pub(crate) frame_commands: usize,
     pub(crate) locked: bool,
     pub(crate) lock_wakes: u32,
@@ -374,6 +378,8 @@ impl Core {
             hold_sent: false,
             toast: None,
             canvas: Canvas::new(480, 800),
+            images: HashMap::new(),
+            next_image: 0,
             frame_commands: 0,
             locked: false,
             lock_wakes: 0,
@@ -404,6 +410,7 @@ impl Core {
         let (fw, label, budget) = with(&self.st, |s| {
             s.stop();
             (s.overlay, s.ctx, s.g, s.quit, s.toast) = (None, None, None, false, None);
+            (s.images, s.next_image) = (HashMap::new(), 0);
             (
                 s.cfg.firmware_api,
                 s.cfg.app_dir_label.clone(),
@@ -442,7 +449,13 @@ impl Core {
             with(&self.st, |s| s.fail(&msg, INSTALL_FAILED));
             return;
         };
-        let (ctx, g) = self.install().expect("cannot set up the app's Lua state");
+        let reader = manifest
+            .get("permissions")
+            .and_then(|p| p.as_array())
+            .is_some_and(|p| p.iter().any(|v| v == "reader"));
+        let (ctx, g) = self
+            .install(reader)
+            .expect("cannot set up the app's Lua state");
         with(&self.st, |s| (s.ctx, s.g) = (Some(ctx.clone()), Some(g)));
         let f = match lua::load_chunk(&self.lua, src, &format!("@{found}")) {
             Ok(f) => f,
@@ -464,12 +477,12 @@ impl Core {
     }
 
     /// `require`, the global `ctx` and the `g` passed to `on_draw`.
-    fn install(&self) -> mlua::Result<(Table, Table)> {
+    fn install(&self, reader: bool) -> mlua::Result<(Table, Table)> {
         let lua = &self.lua;
         lua::install_require(lua, self.app.clone())?;
-        let ctx = crate::ctx::new_ctx(lua, &self.st)?;
+        let ctx = crate::ctx::new_ctx(lua, &self.st, &self.app, reader)?;
         lua.globals().set("ctx", &ctx)?;
-        let g = crate::draw::new_g(lua, &self.st)?;
+        let g = crate::draw::new_g(lua, &self.st, Target::Screen)?;
         Ok((ctx, g))
     }
 

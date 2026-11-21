@@ -112,7 +112,6 @@ def test_answer_or_type_text_without_pending(make_app, emu_factory):
         emu.type_text("x")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_leave_answer_yes_calls_on_leave(make_app, emu_factory):
     emu = emu_factory(make_app("function on_load(c) end\nfunction on_leave(c) c.storage:write('left', 'yes') end\n"))
     emu.key("back")
@@ -149,7 +148,6 @@ def test_toast_lifetime_is_virtual_2s(make_app, emu_factory):
     assert not emu.has_text("Hi")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_image_decode_jpeg_and_draw(make_app, emu_factory, tmp_path):
     app = make_app(
         "function on_load(c)\n  img = c.image:decode(c.package:read('b.jpg'))\n  w, h = img.width, img.height\nend\n"
@@ -163,7 +161,6 @@ def test_image_decode_jpeg_and_draw(make_app, emu_factory, tmp_path):
     assert black(shot, 10, 10) and black(shot, 13, 12) and not black(shot, 14, 10)
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_package_image(make_app, emu_factory):
     app = make_app(
         "function on_load(c)\n  img, err = c.package:image('b.jpg')\n  miss, merr = c.package:image('none.jpg')\nend\n"
@@ -175,7 +172,6 @@ def test_package_image(make_app, emu_factory):
     assert emu.has_text("5 not_found") and black(emu.shot(), 4, 4)
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_png_decode_warns(make_app, emu_factory):
     buf = BytesIO()
     Image.new("L", (2, 2), 0).save(buf, "PNG")
@@ -190,7 +186,31 @@ def test_png_decode_warns(make_app, emu_factory):
     assert any("PNG" in w for w in emu.warnings) and any("PNG" in line for line in emu.log)
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
+def test_scaled_image_matches_pillow(make_app, emu_factory):
+    src = Image.new("RGBA", (40, 30))
+    src.putdata([(x * 6, y * 8, (x * y) % 256, 255 - (x + y) * 3) for y in range(30) for x in range(40)])
+    buf = BytesIO()
+    src.save(buf, "PNG")
+    app = make_app(
+        "function on_load(c) img = c.image:decode(c.package:read('g.png')) end\n"
+        "function on_draw(c, g) g:image(img, 0, 0, {w=13, h=9}); g:image(img, 100, 0, {w=57, h=41});"
+        " g:image(img, 0, 100, {w=35, h=6}); g:image(img, 200, 0) end\n"
+    )
+    (app / "data").mkdir()
+    (app / "data" / "g.png").write_bytes(buf.getvalue())
+    frame = emu_factory(app).raw_frame()
+    flat = Image.alpha_composite(Image.new("RGBA", src.size, (255, 255, 255, 255)), src).convert("L")
+    for (x, y), size, how in [
+        ((0, 0), (13, 9), Image.LANCZOS),
+        ((100, 0), (57, 41), Image.NEAREST),
+        ((0, 100), (35, 6), Image.LANCZOS),
+        ((200, 0), (40, 30), None),
+    ]:
+        want = (flat if how is None else flat.resize(size, how)).convert("1")
+        got = frame.crop((x, y, x + size[0], y + size[1]))
+        assert got.tobytes() == want.tobytes(), (x, y)
+
+
 def test_decode_garbage(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -202,7 +222,6 @@ def test_decode_garbage(make_app, emu_factory):
 
 
 @pytest.mark.allow_errors
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_released_image_draw_is_an_error(make_app, emu_factory):
     app = make_app(
         "function on_load(c) img = c.image:decode(c.package:read('b.jpg')); img:release() end\n"
@@ -212,10 +231,8 @@ def test_released_image_draw_is_an_error(make_app, emu_factory):
     (app / "data" / "b.jpg").write_bytes(jpeg_bytes())
     emu = emu_factory(app)
     assert emu.errors and "released" in emu.errors[0]
-    assert not emu._images
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_qr_encode_draws(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -230,7 +247,6 @@ def test_qr_encode_draws(make_app, emu_factory):
     assert black(shot, 16, 16) and not black(shot, 36, 2)
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_qr_is_standard_size_without_border(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -241,7 +257,6 @@ def test_qr_is_standard_size_without_border(make_app, emu_factory):
     assert emu.has_text("21x21")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_qr_too_long(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -252,7 +267,6 @@ def test_qr_too_long(make_app, emu_factory):
     assert emu.has_text("nil invalid_argument")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_layer_draw(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -266,7 +280,6 @@ def test_layer_draw(make_app, emu_factory):
     assert emu.has_text("40x30")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_layer_accumulates_and_released(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -282,7 +295,6 @@ def test_layer_accumulates_and_released(make_app, emu_factory):
 
 
 @pytest.mark.allow_errors
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_released_layer_draw_is_an_error(make_app, emu_factory):
     emu = emu_factory(
         make_app(

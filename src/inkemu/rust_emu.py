@@ -8,7 +8,7 @@ from typing import Any
 
 from PIL import Image
 
-from ._core import INSTRUCTION_BUDGET, Session, parse_duration
+from ._core import INSTRUCTION_BUDGET, STORAGE_QUOTA, Session, parse_duration
 
 
 class Clock:
@@ -35,6 +35,7 @@ class Emu:
     """One emulated InkApp: Lua state, ctx, virtual time, screen and lifecycle."""
 
     instruction_budget = INSTRUCTION_BUDGET  # per outermost callback; tests lower it on the class
+    storage_quota = STORAGE_QUOTA  # ctx.storage (bytes, files); tests lower it on the class
 
     def __init__(
         self,
@@ -62,6 +63,7 @@ class Emu:
             seed_files=seed_files,
             random_seed=None if random_seed is None else str(random_seed),
             instruction_budget=self.instruction_budget,
+            storage_quota=tuple(self.storage_quota),
         )
         self.net_mode = net
         self.firmware_api = tuple(firmware_api)

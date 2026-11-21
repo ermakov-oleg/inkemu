@@ -171,9 +171,15 @@ fn log_prints_numbers_as_python_did() {
 
 #[test]
 fn an_empty_table_from_on_input_handles_the_back_key() {
-    let mut core = boot("function on_input(c, ev) return {} end");
+    // Lua truthiness, as on the device: only nil and false leave the back key to the host
+    for handled in ["{}", "0", "''"] {
+        let mut core = boot(&format!("function on_input(c, ev) return {handled} end"));
+        core.key("back").unwrap();
+        assert_eq!(core.status().pending, None, "return {handled}");
+    }
+    let mut core = boot("function on_input(c, ev) return false end");
     core.key("back").unwrap();
-    assert_eq!(core.status().pending, None);
+    assert_eq!(core.status().pending.map(|p| p.kind), Some("leave"));
 }
 
 #[test]
@@ -203,4 +209,12 @@ fn a_non_table_state_is_not_saved_and_named_a_number() {
         core.warnings().to_vec(),
         ["ctx.state is a number, not a table: not saved"]
     );
+}
+
+#[test]
+fn dialog_option_floats_print_like_ctx_log() {
+    let core =
+        boot("function on_load(c) c.input:text({title = 0.1, text = 1e16}, function() end) end");
+    let p = core.status().pending.expect("text dialog");
+    assert_eq!((p.title.as_str(), p.text.as_str()), ("0.1", "1e+16"));
 }

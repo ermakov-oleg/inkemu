@@ -268,3 +268,53 @@ fn start_time_sets_the_virtual_clock() {
     );
     assert_eq!(bad.err().unwrap(), "Invalid isoformat string: 'nope'");
 }
+
+#[test]
+fn seeded_files_are_read_and_written_through_ctx_storage() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = write_app(
+        tmp.path(),
+        "function on_load(c) seen = c.storage:read('cal.txt') c.storage:write('out.bin', '\\0\\255') end\n",
+    );
+    let files = tmp.path().join("fixtures/files");
+    fs::create_dir_all(&files).unwrap();
+    fs::write(files.join("cal.txt"), "Событие").unwrap();
+    let mut s = Session::open(
+        &app,
+        SessionOptions {
+            seed_files: Some(true),
+            ..opts(tmp.path())
+        },
+    )
+    .unwrap();
+    assert!(
+        s.core().errors().is_empty(),
+        "{:?}",
+        s.core().errors().to_vec()
+    );
+    assert_eq!(s.lua_eval("return seen").unwrap(), json!("Событие"));
+    assert_eq!(
+        fs::read(tmp.path().join("state/files/out.bin")).unwrap(),
+        [0, 255]
+    );
+}
+
+#[test]
+fn an_unreadable_state_json_warns_and_starts_empty() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = write_app(tmp.path(), "");
+    let state = tmp.path().join("state/state.json");
+    fs::create_dir_all(&state).unwrap();
+    let s = Session::open(&app, opts(tmp.path())).unwrap();
+    let warnings = s.core().warnings().to_vec();
+    let expected = format!(
+        "{}: unreadable state ([Errno 21] Is a directory: '{}'), starting with an empty ctx.state",
+        state.display(),
+        state.display()
+    );
+    assert_eq!(warnings, [expected]);
+    let log = s.core().log().to_vec();
+    let warned = log.iter().position(|l| l.contains("unreadable state"));
+    let started = log.iter().position(|l| l.contains("app testapp started"));
+    assert!(warned < started, "{log:?}");
+}

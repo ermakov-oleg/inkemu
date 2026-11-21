@@ -4,42 +4,58 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-use inkcore::Persisted;
+use inkcore::log::py_repr_str;
+use inkcore::{valid_name, Persisted};
 
-/// A storage file name the app may use (0.1 `_valid_name`).
-pub fn valid_name(name: &str) -> bool {
-    !name.is_empty()
-        && name != "."
-        && name != ".."
-        && name.len() <= 255
-        && !name
-            .chars()
-            .any(|c| c.is_whitespace() || c == '/' || c == '\\' || c.is_control())
+/// `state.json` or `lock.json`; a read error other than a missing file is returned worded as 0.1's OSError.
+fn read_opt(p: &Path) -> Result<Option<Vec<u8>>, String> {
+    match fs::read(p) {
+        Ok(data) => Ok(Some(data)),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(py_os_error(&e, p)),
+    }
 }
 
-fn read_opt(p: &Path) -> Option<Vec<u8>> {
-    fs::read(p).ok()
+/// Python's `str(OSError)`: `[Errno 21] Is a directory: '/path'`.
+fn py_os_error(e: &io::Error, p: &Path) -> String {
+    let text = e.to_string();
+    let Some(code) = e.raw_os_error() else {
+        return text;
+    };
+    let msg = text
+        .strip_suffix(&format!(" (os error {code})"))
+        .unwrap_or(&text);
+    format!(
+        "[Errno {code}] {msg}: {}",
+        py_repr_str(&p.display().to_string())
+    )
 }
 
-pub fn load(state_dir: &Path) -> Persisted {
+/// The app data on disk, and why `state.json` could not be read (for the core's "unreadable state" warning).
+pub fn load(state_dir: &Path) -> (Persisted, Option<String>) {
     let mut files = BTreeMap::new();
     if let Ok(rd) = fs::read_dir(state_dir.join("files")) {
         for e in rd.flatten() {
             let Ok(name) = e.file_name().into_string() else {
                 continue;
             };
-            if e.path().is_file() && valid_name(&name) {
+            if e.path().is_file() && valid_name(name.as_bytes()) {
                 if let Ok(data) = fs::read(e.path()) {
                     files.insert(name, data);
                 }
             }
         }
     }
-    Persisted {
-        state_json: read_opt(&state_dir.join("state.json")),
-        lock_json: read_opt(&state_dir.join("lock.json")),
+    let (state_json, state_error) = match read_opt(&state_dir.join("state.json")) {
+        Ok(data) => (data, None),
+        Err(e) => (None, Some(e)),
+    };
+    let persisted = Persisted {
+        state_json,
+        lock_json: read_opt(&state_dir.join("lock.json")).unwrap_or_default(),
         files,
-    }
+    };
+    (persisted, state_error)
 }
 
 fn write_atomic(path: &Path, tmp: &Path, data: &[u8]) -> io::Result<()> {
@@ -114,7 +130,7 @@ pub fn seed_files(fixtures_dir: &Path, state_dir: &Path) {
             continue;
         };
         let is_file = e.file_type().is_ok_and(|t| t.is_file());
-        if is_file && valid_name(&name) && !dst.join(&name).exists() {
+        if is_file && valid_name(name.as_bytes()) && !dst.join(&name).exists() {
             let _ = fs::create_dir_all(&dst);
             let _ = fs::copy(e.path(), dst.join(&name));
         }

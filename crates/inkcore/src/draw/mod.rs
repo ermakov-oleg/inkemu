@@ -1,9 +1,13 @@
 //! The screen: draw commands, 1-bit rendering, text and the host's overlay plates.
 pub mod canvas;
+pub mod image;
 mod pattern;
 pub(crate) mod plates;
 pub mod raster;
 pub mod text;
+
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use mlua::{IntoLuaMulti, Lua, MultiValue, Table, Value};
 
@@ -72,28 +76,47 @@ const SPECS: [(&str, &str); 13] = [
     ("fill_pattern", "nnnn"),
 ];
 
-/// The `g` passed to `on_draw`.
-pub(crate) fn new_g(lua: &Lua, st: &Shared) -> mlua::Result<Table> {
+/// Where a `g` draws: the screen, or a layer's own canvas.
+#[derive(Clone)]
+pub(crate) enum Target {
+    Screen,
+    Layer(Rc<RefCell<Canvas>>),
+}
+
+/// Runs `f` on the target canvas. The borrow ends when `f` returns: never call into Lua inside `f`.
+fn on_canvas<R>(st: &Shared, t: &Target, f: impl FnOnce(&mut Canvas) -> R) -> R {
+    match t {
+        Target::Screen => with(st, |s| f(&mut s.canvas)),
+        Target::Layer(c) => f(&mut c.borrow_mut()),
+    }
+}
+
+/// The `g` passed to `on_draw` (Screen) or to a `layer:draw` callback.
+pub(crate) fn new_g(lua: &Lua, st: &Shared, target: Target) -> mlua::Result<Table> {
     let mut methods: Vec<(&str, Method)> = vec![];
     for (name, spec) in SPECS {
-        let st = st.clone();
+        let (st, target) = (st.clone(), target.clone());
         methods.push((
             name,
             method(move |lua, args| {
                 let a = args.into_vec();
                 check(name, spec, &a)?;
-                let cmd = command(lua, name, &a);
-                with(&st, |s| s.canvas.record(cmd));
+                let cmd = if name == "image" {
+                    image_command(&st, &a)
+                } else {
+                    command(lua, name, &a)
+                };
+                on_canvas(&st, &target, |c| c.record(cmd));
                 Ok(MultiValue::new())
             }),
         ));
     }
     let size = {
-        let st = st.clone();
-        method(move |lua, _| with(&st, |s| (s.canvas.w, s.canvas.h)).into_lua_multi(lua))
+        let (st, target) = (st.clone(), target.clone());
+        method(move |lua, _| on_canvas(&st, &target, |c| (c.w, c.h)).into_lua_multi(lua))
     };
     let measure = {
-        let st = st.clone();
+        let (st, target) = (st.clone(), target);
         method(move |lua, args| {
             let a = args.into_vec();
             let s = match a.first() {
@@ -101,7 +124,7 @@ pub(crate) fn new_g(lua: &Lua, st: &Shared) -> mlua::Result<Table> {
                 None => "nil".into(),
             };
             let font = font_of(&opts_at(&a, 1));
-            let fonts = with(&st, |s| s.canvas.fonts());
+            let fonts = on_canvas(&st, &target, |c| c.fonts());
             fonts.measure(font, &s).into_lua_multi(lua)
         })
     };
@@ -424,6 +447,54 @@ fn command(lua: &Lua, op: &str, a: &[Value]) -> Result<Cmd, String> {
             let [x, y, w, h] = [x, y, w, h].map(|v| v.trunc() as i32);
             Cmd::Pattern { x, y, w, h }
         }
-        _ => Cmd::Image,
+        _ => Cmd::Skip,
     })
+}
+
+/// 0.1 `g:image`: an image or layer made by ctx, resolved now (later changes do not alter this frame); anything
+/// else draws nothing.
+fn image_command(st: &Shared, a: &[Value]) -> Result<Cmd, String> {
+    let id = match a.first() {
+        Some(Value::Table(t)) => t.raw_get::<Value>("_id").unwrap_or(Value::Nil),
+        _ => Value::Nil,
+    };
+    let id = match id {
+        Value::Nil => return Ok(Cmd::Skip),
+        Value::Integer(i) => Some(i64::from(i)),
+        Value::Number(n) if n.fract() == 0.0 => Some(n as i64),
+        _ => None,
+    };
+    let img = id.and_then(|id| with(st, |s| s.images.get(&id).cloned()));
+    let img = img.ok_or("g:image: the image or layer was released")?;
+    let [x, y] = nums("image", &a[1..], ["x", "y"])?;
+    let o = opts_at(a, 3);
+    let w = side("w", &get(&o, "w"), img.w)?;
+    let h = side("h", &get(&o, "h"), img.h)?;
+    Ok(Cmd::Image {
+        img,
+        x: x.trunc() as i64,
+        y: y.trunc() as i64,
+        w,
+        h,
+    })
+}
+
+/// `w`/`h` as Python `int()`; Pillow cannot scale to 0 or less, and dithering a huge image costs whole rows.
+fn side(key: &str, v: &Value, native: u32) -> Result<u32, String> {
+    let n = match v {
+        Value::Nil => Some(i64::from(native)),
+        Value::Boolean(b) => Some(i64::from(*b)),
+        Value::String(s) => s.to_string_lossy().trim().parse::<i64>().ok(),
+        v => as_num(v)
+            .filter(|n| n.is_finite())
+            .map(|n| n.trunc() as i64),
+    };
+    let max = image::MAX_DRAW_SIDE.max(i64::from(native));
+    match n {
+        Some(n) if (1..=max).contains(&n) => Ok(n as u32),
+        _ => Err(format!(
+            "image: {key} must be a whole number from 1 to {max}, got {}",
+            show(v)
+        )),
+    }
 }

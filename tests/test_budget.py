@@ -73,7 +73,6 @@ def test_app_cannot_swallow_the_abort(make_app, emu_factory, code):
 
 
 @pytest.mark.allow_errors
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_nested_callback_abort_is_reported_once(make_app, emu_factory):
     emu = emu_factory(
         make_app(

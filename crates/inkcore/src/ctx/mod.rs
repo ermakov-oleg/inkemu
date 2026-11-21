@@ -3,8 +3,13 @@ mod basic;
 mod clock;
 pub(crate) mod convert;
 mod device;
+pub(crate) mod files;
 mod fonts;
+mod image;
+mod layers;
 pub(crate) mod object;
+mod package;
+mod reader;
 mod screen;
 mod stubs;
 mod ui;
@@ -16,12 +21,18 @@ use std::rc::Rc;
 
 use mlua::{IntoLuaMulti, Lua, MultiValue, Table, Value};
 
+use crate::app::AppFiles;
 use crate::emu::{with, Host, Shared};
 use crate::log::{py_float, widen};
 use object::{method, new_object};
 
 /// The global `ctx` with its own methods; the sub-objects are added by their own modules.
-pub(crate) fn new_ctx(lua: &Lua, st: &Shared) -> mlua::Result<Table> {
+pub(crate) fn new_ctx(
+    lua: &Lua,
+    st: &Shared,
+    app: &Rc<AppFiles>,
+    reader: bool,
+) -> mlua::Result<Table> {
     let invalidate = {
         let st = st.clone();
         method(move |_, _| {
@@ -107,10 +118,17 @@ pub(crate) fn new_ctx(lua: &Lua, st: &Shared) -> mlua::Result<Table> {
     clock::install(lua, &ctx, st)?;
     device::install(lua, &ctx, st)?;
     fonts::install(lua, &ctx)?;
+    files::install(lua, &ctx, st)?;
+    package::install(lua, &ctx, st, app)?;
     utils::install(lua, &ctx, st)?;
     screen::install(lua, &ctx, st)?;
     stubs::install(lua, &ctx, st)?;
+    if reader {
+        reader::install(lua, &ctx, st)?;
+    }
     ui::install(lua, &ctx, st)?;
+    image::install(lua, &ctx, st)?;
+    layers::install(lua, &ctx, st)?;
     Ok(ctx)
 }
 
@@ -192,15 +210,27 @@ fn opt_str(opts: &Table, key: &str) -> mlua::Result<String> {
         Value::String(s) => s.to_string_lossy(),
         Value::Boolean(b) => if b { "True" } else { "False" }.into(),
         Value::Integer(i) => i.to_string(),
-        Value::Number(n) => {
-            let n = f64::from(n);
-            if n.fract() == 0.0 && n.abs() < 1e16 {
-                format!("{n:.1}")
-            } else {
-                n.to_string()
-            }
-        }
+        Value::Number(n) => py_float(widen(n)),
         other => format!("<Lua {}>", type_name(&other)),
+    })
+}
+
+/// 0.1 `raw`: a string's bytes; a number as `ctx:log` prints it; anything else None.
+fn raw(v: &Value) -> Option<Vec<u8>> {
+    match v {
+        Value::String(s) => Some(s.as_bytes().to_vec()),
+        Value::Integer(_) | Value::Number(_) => Some(fmt(v).into_bytes()),
+        _ => None,
+    }
+}
+
+/// 0.1 `_bytes_arg`: [`raw`], or an error naming the argument.
+fn bytes_arg(f: &str, i: usize, v: &Value) -> mlua::Result<Vec<u8>> {
+    raw(v).ok_or_else(|| {
+        mlua::Error::runtime(format!(
+            "bad argument #{i} to '{f}' (string expected, got {})",
+            type_name(v)
+        ))
     })
 }
 

@@ -1,7 +1,8 @@
 import json
 
 import pytest
-from conftest import IMPL
+
+from inkemu import Emu
 
 DRAW_MSG = "msg = 'none'\nfunction on_draw(c, g) g:clear(0); g:text(0, 0, 'msg ' .. tostring(msg)) end\n"
 
@@ -11,7 +12,6 @@ def run(make_app, emu_factory, body, **kw):
     return emu_factory(make_app(DRAW_MSG + "function on_load(c)\n" + body + "\nend\n", **kw.pop("app", {})), **kw)
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_storage_roundtrip_utf8(make_app, emu_factory, tmp_path):
     emu = run(
         make_app,
@@ -23,7 +23,6 @@ def test_storage_roundtrip_utf8(make_app, emu_factory, tmp_path):
     assert (tmp_path / "state" / "files" / "n.txt").read_text(encoding="utf-8") == "Привет •"
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_storage_binary_data(make_app, emu_factory, tmp_path):
     emu = run(
         make_app,
@@ -36,7 +35,6 @@ def test_storage_binary_data(make_app, emu_factory, tmp_path):
 
 
 @pytest.mark.parametrize("name", ["a/b", "a b", "", "..", "/etc/x", "a\\b"])
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_storage_rejects_bad_names(make_app, emu_factory, name):
     lua_name = json.dumps(name)
     emu = run(
@@ -48,7 +46,6 @@ def test_storage_rejects_bad_names(make_app, emu_factory, name):
     assert emu.has_text("msg nilinvalid_argumentnilinvalid_argument")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_storage_missing_is_not_found(make_app, emu_factory):
     emu = run(
         make_app,
@@ -60,7 +57,6 @@ def test_storage_missing_is_not_found(make_app, emu_factory):
     assert emu.has_text("msg nilnot_foundnilnot_foundnot_foundfalse")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_storage_list_usage_remove(make_app, emu_factory):
     emu = run(
         make_app,
@@ -74,7 +70,6 @@ def test_storage_list_usage_remove(make_app, emu_factory):
     assert emu.has_text("msg a.txt,b.txt 512 134217728 2 5 false1")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_files_path_and_shared_dir(make_app, emu_factory):
     emu = run(
         make_app,
@@ -84,19 +79,14 @@ def test_files_path_and_shared_dir(make_app, emu_factory):
     assert emu.has_text("msg /AppFiles/testapp shared")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_storage_read_offset_warns(make_app, emu_factory):
     emu = run(make_app, emu_factory, "ctx.storage:write('n.txt', 'abcdef')\nmsg = ctx.storage:read('n.txt', 0, 2)")
     assert emu.has_text("msg abcdef")
     assert any("whole file" in w for w in emu.warnings)
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_storage_quota(make_app, emu_factory, monkeypatch):
-    from inkemu import ctx_basic
-
-    monkeypatch.setattr(ctx_basic, "MAX_FILES", 2)
-    monkeypatch.setattr(ctx_basic, "MAX_BYTES", 10)
+    monkeypatch.setattr(Emu, "storage_quota", (10, 2))
     emu = run(
         make_app,
         emu_factory,
@@ -108,7 +98,6 @@ def test_storage_quota(make_app, emu_factory, monkeypatch):
     assert emu.has_text("msg truetruenilnil")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_storage_survives_restart(make_app, emu_factory):
     app = make_app(
         DRAW_MSG + "function on_load(c)\n  msg = tostring(c.storage:read('k'))\n  c.storage:write('k', 'v')\nend\n"
@@ -277,7 +266,6 @@ def test_zlib_decompress_gzip_and_raw_deflate(make_app, emu_factory):
     assert emu.has_text("msg Приветмирnilinvalid_argument")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_utility_methods_need_a_colon(make_app, emu_factory):
     emu = run(
         make_app,
@@ -294,7 +282,6 @@ def test_binary_shim_keeps_app_line_in_errors(make_app, emu_factory):
     assert "index.lua:2:" in emu.errors[0] and "colon" in emu.errors[0]
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_seed_files_from_fixtures(make_app, emu_factory, tmp_path):
     fx = tmp_path / "fixtures" / "files"
     fx.mkdir(parents=True)
@@ -304,7 +291,6 @@ def test_seed_files_from_fixtures(make_app, emu_factory, tmp_path):
     assert emu.has_text("msg Событие1")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_seed_does_not_overwrite_and_follows_fresh(make_app, emu_factory, tmp_path):
     fx = tmp_path / "fixtures" / "files"
     fx.mkdir(parents=True)
@@ -318,7 +304,6 @@ def test_seed_does_not_overwrite_and_follows_fresh(make_app, emu_factory, tmp_pa
     assert emu_factory(app, fresh=True).has_text("msg seed")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_package_reads_data_folder(make_app, emu_factory):
     emu = run(
         make_app,
@@ -333,7 +318,6 @@ def test_package_reads_data_folder(make_app, emu_factory):
     assert emu.has_text("msg один|9|три|один|nil|16|16|true|false|nil|not_found|not_found")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_package_cannot_escape_data_folder(make_app, emu_factory):
     emu = run(
         make_app,
@@ -349,7 +333,6 @@ def test_reader_absent_without_permission(make_app, emu_factory):
     assert emu.has_text("msg nil")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
 def test_reader_defaults_and_fixture(make_app, emu_factory, tmp_path):
     body = (
         "local cur = ctx.reader:current()\nlocal s = ctx.reader:summary()\n"

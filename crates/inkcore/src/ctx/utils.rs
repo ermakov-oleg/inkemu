@@ -9,7 +9,7 @@ use sha2::{Digest, Sha256};
 
 use super::convert::{big_int_warning, dump, json_to_lua, lua_to_json};
 use super::object::{method, new_object, Method};
-use super::{fmt, soft_fail, type_name};
+use super::{bytes_arg, soft_fail};
 use crate::emu::{with, Shared};
 use crate::lua::first_in_callback;
 
@@ -18,18 +18,6 @@ const NULL: &str =
 
 /// What a codec returns: a Lua string, or `(nil, "invalid_argument")` on Err.
 type Codec = fn(&[u8]) -> Result<Vec<u8>, ()>;
-
-/// 0.1 `_bytes_arg`: a string's bytes; a number as `ctx:log` prints it; anything else is an error.
-fn bytes_arg(f: &str, i: usize, v: &Value) -> mlua::Result<Vec<u8>> {
-    match v {
-        Value::String(s) => Ok(s.as_bytes().to_vec()),
-        Value::Integer(_) | Value::Number(_) => Ok(fmt(v).into_bytes()),
-        other => Err(mlua::Error::runtime(format!(
-            "bad argument #{i} to '{f}' (string expected, got {})",
-            type_name(other)
-        ))),
-    }
-}
 
 fn codec(name: &'static str, f: Codec) -> (&'static str, Method) {
     let m = method(move |lua, args| {

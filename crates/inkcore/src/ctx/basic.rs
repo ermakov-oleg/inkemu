@@ -35,11 +35,12 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
             ("save_state", save_state),
         ],
     )?;
-    let ((major, minor), saved, label) = with(st, |s| {
+    let ((major, minor), saved, label, read_error) = with(st, |s| {
         (
             s.cfg.firmware_api,
             s.persisted.state_json.clone(),
             s.cfg.state_label.clone(),
+            s.cfg.state_read_error.clone(),
         )
     });
     let api = lua.create_table()?;
@@ -47,6 +48,11 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
     api.raw_set("minor", minor)?;
     ctx.raw_set("api", api)?;
     let mut warnings = vec![];
+    if let (None, Some(e)) = (&saved, read_error) {
+        warnings.push(format!(
+            "{label}: unreadable state ({e}), starting with an empty ctx.state"
+        ));
+    }
     let state = load_state(lua, saved.as_deref(), &label, &mut warnings)?;
     with(st, |s| warnings.iter().for_each(|w| s.warn(w)));
     ctx.raw_set("state", state)
