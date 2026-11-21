@@ -1,8 +1,5 @@
 import json
 
-import pytest
-from conftest import IMPL
-
 BLOCK = {"enabled": True, "entry": "lockscreen.lua", "interval_sec": 60, "net": True}
 APP = """
 loaded = false
@@ -30,7 +27,6 @@ def make(make_app, extra="", block=BLOCK, lock=None, **kw):
     return make_app(APP, manifest=manifest, files={"lockscreen.lua": (lock or LOCK) % extra})
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 9")
 def test_lock_draws_lockscreen(make_app, emu_factory, tmp_path):
     emu = emu_factory(make(make_app))
     emu.lock()
@@ -40,7 +36,6 @@ def test_lock_draws_lockscreen(make_app, emu_factory, tmp_path):
     assert emu.lock_wakes == 0
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 9")
 def test_lock_wakes_on_interval(make_app, emu_factory):
     emu = emu_factory(make(make_app))
     emu.lock()
@@ -49,7 +44,6 @@ def test_lock_wakes_on_interval(make_app, emu_factory):
     assert emu.has_text("reason timer") and emu.has_text("n 4 ") and emu.has_text("el 60")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 9")
 def test_set_interval_changes_next_wake(make_app, emu_factory):
     emu = emu_factory(make(make_app, "c.lock:set_interval(120)"))
     emu.lock()
@@ -58,7 +52,6 @@ def test_set_interval_changes_next_wake(make_app, emu_factory):
     assert emu.has_text("iv 120")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 9")
 def test_lock_net_follows_manifest(make_app, emu_factory):
     emu = emu_factory(make(make_app))
     emu.lock()
@@ -69,7 +62,6 @@ def test_lock_net_follows_manifest(make_app, emu_factory):
     assert emu.has_text("net false")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 9")
 def test_unlock_restarts_app(make_app, emu_factory, tmp_path):
     emu = emu_factory(make(make_app))
     emu.lock()
@@ -90,7 +82,6 @@ def test_lockscreen_api_absent_without_block(make_app, emu_factory):
     assert emu_factory(app).has_text("has false")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 9")
 def test_lockscreen_api_default_persists(make_app, emu_factory, tmp_path):
     app = make_app(
         "function on_load(c) c.state.before = c.lockscreen:is_default(); c.lockscreen:set_default() end\n"
@@ -104,7 +95,6 @@ def test_lockscreen_api_default_persists(make_app, emu_factory, tmp_path):
     assert emu.has_text("b true a true")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 9")
 def test_input_ignored_while_locked(make_app, emu_factory, tmp_path):
     emu = emu_factory(make(make_app))
     emu.lock()
@@ -114,7 +104,6 @@ def test_input_ignored_while_locked(make_app, emu_factory, tmp_path):
     assert any("input ignored" in ln for ln in emu.log)
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 9")
 def test_wake_waits_for_net(make_app, emu_factory, tmp_path):
     d = tmp_path / "fixtures" / "net"
     d.mkdir(parents=True)
@@ -155,7 +144,6 @@ def slow_net(tmp_path):
 REQ = "c.net:request({url = 'http://x.test/z'}, function() end)"
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 9")
 def test_wake_done_draws_before_net(make_app, emu_factory, tmp_path):
     slow_net(tmp_path)
     emu = emu_factory(
@@ -168,7 +156,6 @@ def test_wake_done_draws_before_net(make_app, emu_factory, tmp_path):
     assert emu.has_text("reason timer")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 9")
 def test_wake_waits_at_most_30s(make_app, emu_factory, tmp_path):
     slow_net(tmp_path)
     emu = emu_factory(make(make_app, REQ, manifest={"permissions": ["net"]}))
@@ -179,7 +166,6 @@ def test_wake_waits_at_most_30s(make_app, emu_factory, tmp_path):
     assert emu.has_text("reason timer")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 9")
 def test_lock_without_block_is_blank(make_app, emu_factory, tmp_path):
     emu = emu_factory(make(make_app, block=None))
     emu.lock()
@@ -191,9 +177,32 @@ def test_lock_without_block_is_blank(make_app, emu_factory, tmp_path):
     assert emu.has_text("app screen")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 9")
 def test_lock_state_does_not_overwrite_app_state(make_app, emu_factory):
     emu = emu_factory(make(make_app, "c.state.x = 1; c:save_state()"))
     emu.lock()
     emu.unlock()
     assert emu.has_text("app screen 2")
+
+
+def test_wake_reads_secrets_again(make_app, emu_factory, tmp_path):
+    d = tmp_path / "fixtures" / "net"
+    d.mkdir(parents=True)
+    (d / "p.json").write_text(
+        json.dumps(
+            {
+                "request": {"method": "GET", "url": "http://x.test/{{pin}}"},
+                "match": "exact",
+                "response": {"status": 200, "headers": {}, "body": "ok"},
+            }
+        )
+    )
+    secrets = tmp_path / "secrets.json"
+    secrets.write_text("{}")
+    req = "c.net:request({url = 'http://x.test/abcdef'}, function(c, r) seen.reason = 'got ' .. r.status end)"
+    emu = emu_factory(make(make_app, req), secrets_file=secrets)
+    emu.lock()
+    emu.wait("1s")
+    assert emu.has_text("reason lock")
+    secrets.write_text(json.dumps({"pin": "abcdef"}))
+    emu.wait("60s")
+    assert emu.lock_wakes == 1 and emu.has_text("reason got 200")

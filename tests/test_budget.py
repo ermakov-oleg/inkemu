@@ -1,5 +1,4 @@
 import pytest
-from conftest import IMPL
 
 from inkemu import Emu, daemon
 
@@ -41,7 +40,6 @@ def test_runaway_callback_is_an_app_error(make_app, emu_factory, where, code, ac
 
 
 @pytest.mark.allow_errors
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 9")
 def test_runaway_lock_screen(make_app, emu_factory):
     app = make_app(
         "function on_draw(c, g) g:text(0, 0, 'app') end\n",

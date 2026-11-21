@@ -7,6 +7,7 @@ pub(crate) mod files;
 mod fonts;
 mod image;
 mod layers;
+mod lock;
 pub(crate) mod net;
 pub(crate) mod object;
 mod package;
@@ -34,6 +35,7 @@ pub(crate) fn new_ctx(
     app: &Rc<AppFiles>,
     reader: bool,
     net: bool,
+    lockscreen_api: bool,
 ) -> mlua::Result<Table> {
     let invalidate = {
         let st = st.clone();
@@ -134,6 +136,7 @@ pub(crate) fn new_ctx(
     ui::install(lua, &ctx, st)?;
     image::install(lua, &ctx, st)?;
     layers::install(lua, &ctx, st)?;
+    lock::install(lua, &ctx, st, lockscreen_api)?;
     Ok(ctx)
 }
 

@@ -485,14 +485,38 @@ def test_secrets_are_read_again_on_reload_and_restart(make_app, emu_factory, tmp
     secrets.write_text('{"bad name": "x"}')
     emu.restart()
     assert any("'bad name'" in w for w in emu.warnings)
+    secrets.write_text("{}")
     emu3 = emu_factory(
         app_with(make_app, "{url = 'http://x.test/a'}", "msg = resp.err"), net="record", secrets_file=secrets
     )
+    assert not emu3.errors
     secrets.write_text('{"bad name": "x"}')
     emu3.reload()
     emu3.wait(300)
     assert emu3.has_text("msg secrets_invalid")
     assert any("recording refused" in e for e in emu3.errors)
+
+
+def test_secret_added_before_reload_is_not_recorded(make_app, emu_factory, tmp_path, server):
+    secrets = tmp_path / "secrets.json"
+    secrets.write_text("{}")
+    emu = emu_factory(
+        app_with(make_app, "{url = '%s/echo/tok-98765'}" % server.base, "msg = resp.status"),
+        net="record",
+        secrets_file=secrets,
+    )
+    emu.wait(300)
+    d = tmp_path / "fixtures" / "net"
+    assert any("tok-98765" in p.read_text() for p in d.iterdir())
+    for p in d.iterdir():
+        p.unlink()
+    secrets.write_text(json.dumps({"tok": "tok-98765"}))
+    emu.reload()
+    emu.wait(300)
+    assert emu.has_text("msg 200") and len(list(d.glob("*.json"))) == 1
+    for p in d.iterdir():
+        assert "tok-98765" not in p.read_text(), p
+    assert "{{tok}}" in next(d.glob("*.json")).read_text()
 
 
 def test_big_integer_secret_is_redacted_by_its_digits(make_app, emu_factory, tmp_path):

@@ -7,6 +7,7 @@ pub mod draw;
 mod emu;
 pub mod fixtures;
 pub mod input;
+mod lockscreen;
 pub mod log;
 pub mod lua;
 
@@ -15,6 +16,6 @@ pub use crate::config::{Battery, Config, NetMode, Persisted, STORAGE_QUOTA};
 pub use crate::ctx::files::valid_name;
 pub use crate::ctx::net::{NetResult, OutRequest, DEFAULT_DELAY_MS};
 pub use crate::draw::{Frame, TextItem};
-pub use crate::emu::{Core, Pending, Status, ERROR_TITLE, NOT_YET};
+pub use crate::emu::{Core, Pending, Status, ERROR_TITLE};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

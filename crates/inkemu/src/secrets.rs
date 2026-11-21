@@ -73,7 +73,10 @@ pub fn load(path: &Path) -> Secrets {
             problems: vec![format!("{f} must be a JSON object; no secrets are applied")],
         };
     };
-    let map: BTreeMap<String, Box<RawValue>> = serde_json::from_str(&text).unwrap_or_default();
+    // fail closed: an unreadable map must refuse `record`, never pass as "no secrets"
+    let Ok(map) = serde_json::from_str::<BTreeMap<String, Box<RawValue>>>(&text) else {
+        return unreadable("JSONDecodeError");
+    };
     let mut out = Secrets::default();
     for (k, raw) in map {
         let v = match serde_json::from_str::<J>(raw.get()) {

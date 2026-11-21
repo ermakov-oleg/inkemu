@@ -29,8 +29,3 @@ def test_clock_now_is_the_start_time(emu):
 def test_log_line_is_stamped(emu):
     emu.log_line("marker")
     assert re.fullmatch(r"\d\d:\d\d:\d\d\.\d{3} marker", emu.log[-1]), emu.log[-1]
-
-
-def test_not_yet_implemented_method_raises(emu):
-    with pytest.raises(NotImplementedError):
-        emu.lock()

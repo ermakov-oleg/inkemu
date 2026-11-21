@@ -63,10 +63,14 @@ pub struct Session {
     net: Net,
 }
 
-/// Runs a mutating `Core` method, performs the requests it queued, then writes the app data it changed.
+/// Runs a mutating `Core` method, performs the requests it queued, then writes the app data it changed. While
+/// locked, the secrets are read first: a lock screen wake inside the call boots a new Lua state.
 macro_rules! mutating {
     ($($(#[$doc:meta])* fn $name:ident(&mut self $(, $arg:ident: $ty:ty)*) $(-> $ret:ty)?;)*) => {
         $($(#[$doc])* pub fn $name(&mut self $(, $arg: $ty)*) $(-> $ret)? {
+            if self.core.status().locked {
+                self.read_secrets();
+            }
             let r = self.core.$name($($arg),*);
             self.pump_net();
             self.flush();
@@ -209,6 +213,22 @@ impl Session {
         self.flush();
     }
 
+    /// Leaves the app and runs its lock screen, with the secrets file read anew.
+    pub fn lock(&mut self) {
+        self.read_secrets();
+        self.core.lock();
+        self.pump_net();
+        self.flush();
+    }
+
+    /// Starts the app again after the lock screen, with the secrets file read anew.
+    pub fn unlock(&mut self) {
+        self.read_secrets();
+        self.core.unlock();
+        self.pump_net();
+        self.flush();
+    }
+
     /// Performs the `live`/`record` requests the core queued and hands back their answers; an answer whose
     /// callback queues another request is followed up in the same call.
     pub fn pump_net(&mut self) {
@@ -256,8 +276,6 @@ impl Session {
         fn answer(&mut self, ok: bool) -> Result<(), String>;
         fn wait(&mut self, ms: i64) -> Result<(), String>;
         fn leave(&mut self);
-        fn lock(&mut self) -> Result<(), String>;
-        fn unlock(&mut self) -> Result<(), String>;
         fn resume(&mut self);
         fn set_paused(&mut self, paused: bool);
         fn set_locale(&mut self, locale: &str);

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use inkemu::{Session as Native, SessionOptions};
-use pyo3::exceptions::{PyLookupError, PyNotImplementedError, PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyLookupError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 
@@ -24,18 +24,6 @@ type Status = (
     bool,
 );
 type Text = (String, i32, i32, i32, i32, &'static str);
-
-fn value_err(e: String) -> PyErr {
-    err(e, PyValueError::new_err)
-}
-
-fn err(e: String, make: fn(String) -> PyErr) -> PyErr {
-    if e == inkcore::NOT_YET {
-        PyNotImplementedError::new_err(e)
-    } else {
-        make(e)
-    }
-}
 
 /// (width, height, rows packed 8 pixels per byte, MSB first, set bit = white): PIL's raw mode "1".
 fn pack(f: inkcore::Frame) -> (u32, u32, Vec<u8>) {
@@ -105,7 +93,7 @@ impl Session {
         };
         let s = py
             .detach(|| Native::open(&app_dir, opts).map(SessionCell))
-            .map_err(value_err)?;
+            .map_err(PyValueError::new_err)?;
         Ok(Session {
             cell: Mutex::new(s),
         })
@@ -113,24 +101,27 @@ impl Session {
 
     fn pointer(&self, py: Python<'_>, phase: String, x: i32, y: i32) -> PyResult<()> {
         self.with(py, |s| s.pointer(&phase, x, y))
-            .map_err(value_err)
+            .map_err(PyValueError::new_err)
     }
 
     fn tap(&self, py: Python<'_>, x: i32, y: i32) -> PyResult<()> {
-        self.with(py, |s| s.tap(x, y)).map_err(value_err)
+        self.with(py, |s| s.tap(x, y))
+            .map_err(PyValueError::new_err)
     }
 
     fn double_tap(&self, py: Python<'_>, x: i32, y: i32) -> PyResult<()> {
-        self.with(py, |s| s.double_tap(x, y)).map_err(value_err)
+        self.with(py, |s| s.double_tap(x, y))
+            .map_err(PyValueError::new_err)
     }
 
     fn hold(&self, py: Python<'_>, x: i32, y: i32, ms: i64) -> PyResult<()> {
-        self.with(py, |s| s.hold(x, y, ms)).map_err(value_err)
+        self.with(py, |s| s.hold(x, y, ms))
+            .map_err(PyValueError::new_err)
     }
 
     fn drag(&self, py: Python<'_>, points: Vec<(i32, i32)>, duration_ms: i64) -> PyResult<()> {
         self.with(py, |s| s.drag(&points, duration_ms))
-            .map_err(value_err)
+            .map_err(PyValueError::new_err)
     }
 
     fn swipe(
@@ -141,30 +132,31 @@ impl Session {
         distance: i32,
     ) -> PyResult<()> {
         self.with(py, |s| s.swipe(&direction, at, distance))
-            .map_err(value_err)
+            .map_err(PyValueError::new_err)
     }
 
     fn tap_text(&self, py: Python<'_>, text: String) -> PyResult<()> {
         self.with(py, |s| s.tap_text(&text))
-            .map_err(|e| err(e, PyLookupError::new_err))
+            .map_err(PyLookupError::new_err)
     }
 
     fn key(&self, py: Python<'_>, name: String) -> PyResult<()> {
-        self.with(py, |s| s.key(&name)).map_err(value_err)
+        self.with(py, |s| s.key(&name))
+            .map_err(PyValueError::new_err)
     }
 
     fn type_text(&self, py: Python<'_>, text: String) -> PyResult<()> {
         self.with(py, |s| s.type_text(&text))
-            .map_err(|e| err(e, PyRuntimeError::new_err))
+            .map_err(PyRuntimeError::new_err)
     }
 
     fn answer(&self, py: Python<'_>, ok: bool) -> PyResult<()> {
         self.with(py, |s| s.answer(ok))
-            .map_err(|e| err(e, PyRuntimeError::new_err))
+            .map_err(PyRuntimeError::new_err)
     }
 
     fn wait(&self, py: Python<'_>, ms: i64) -> PyResult<()> {
-        self.with(py, |s| s.wait(ms)).map_err(value_err)
+        self.with(py, |s| s.wait(ms)).map_err(PyValueError::new_err)
     }
 
     fn leave(&self, py: Python<'_>) {
@@ -179,12 +171,12 @@ impl Session {
         self.with(py, |s| s.reload());
     }
 
-    fn lock(&self, py: Python<'_>) -> PyResult<()> {
-        self.with(py, |s| s.lock()).map_err(value_err)
+    fn lock(&self, py: Python<'_>) {
+        self.with(py, |s| s.lock())
     }
 
-    fn unlock(&self, py: Python<'_>) -> PyResult<()> {
-        self.with(py, |s| s.unlock()).map_err(value_err)
+    fn unlock(&self, py: Python<'_>) {
+        self.with(py, |s| s.unlock())
     }
 
     fn resume(&self, py: Python<'_>) {
@@ -205,13 +197,13 @@ impl Session {
 
     fn lua_exec(&self, py: Python<'_>, code: String) -> PyResult<()> {
         self.with(py, |s| s.lua_exec(&code))
-            .map_err(|e| err(e, PyRuntimeError::new_err))
+            .map_err(PyRuntimeError::new_err)
     }
 
     /// The first result as JSON text.
     fn lua_eval(&self, py: Python<'_>, code: String) -> PyResult<String> {
         self.with(py, |s| s.lua_eval(&code).map(|v| v.to_string()))
-            .map_err(|e| err(e, PyRuntimeError::new_err))
+            .map_err(PyRuntimeError::new_err)
     }
 
     fn status(&self, py: Python<'_>) -> Status {

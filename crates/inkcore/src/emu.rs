@@ -16,13 +16,12 @@ use crate::draw::image::Gray;
 use crate::draw::plates::{self, Overlays, Plate};
 use crate::draw::{Canvas, Frame, Target, TextItem};
 use crate::fixtures::{FixtureSet, Redactor};
+use crate::lockscreen::{self, Lock};
 use crate::log::{py_repr, Log};
 use crate::lua;
 
 pub const ERROR_TITLE: &str = "App error, closed";
 const INSTALL_FAILED: &str = "Install failed";
-/// What the not-yet-ported lock methods return; the Python binding maps it to NotImplementedError.
-pub const NOT_YET: &str = "not implemented yet";
 
 /// A dialog waiting for the user.
 #[derive(Clone, Debug, PartialEq)]
@@ -51,6 +50,9 @@ pub(crate) type TimerFn = Rc<dyn Fn(&Host)>;
 
 /// Core state shared with the Rust functions the app calls through Lua.
 pub(crate) struct State {
+    /// The running Lua state; replaced at every boot, also by a lock screen wake inside `wait`.
+    pub(crate) lua: Option<Lua>,
+    pub(crate) app: Rc<AppFiles>,
     pub(crate) cfg: Config,
     pub(crate) log: Log,
     pub(crate) sched: Scheduler<TimerFn>,
@@ -83,6 +85,7 @@ pub(crate) struct State {
     pub(crate) frame_commands: usize,
     pub(crate) locked: bool,
     pub(crate) lock_wakes: u32,
+    pub(crate) lock: Lock,
     pub(crate) refresh_counts: (u32, u32),
     pub(crate) frontlight: i64,
     pub(crate) full_refresh_deferred: i64,
@@ -163,6 +166,11 @@ impl State {
 }
 
 pub(crate) type Shared = Rc<RefCell<State>>;
+
+/// The current Lua state.
+pub(crate) fn current_lua(st: &Shared) -> Lua {
+    with(st, |s| s.lua.clone()).expect("the core has no Lua state")
+}
 
 /// Runs `f` on the shared state. The borrow ends when `f` returns: never call into Lua inside `f`.
 pub(crate) fn with<R>(st: &Shared, f: impl FnOnce(&mut State) -> R) -> R {
@@ -270,18 +278,32 @@ impl Host<'_> {
                     if !periodic {
                         with(self.st, |s| s.timers.remove(&id));
                     }
-                    payload(self);
-                    self.settle();
+                    // a lock screen wake boots a new Lua state: every step runs in the current one
+                    Host::with_current(self.st, |h| payload(h));
+                    Host::with_current(self.st, |h| h.settle());
                     with(self.st, |s| s.sched.rearm(id));
                 }
             }
         }
         with(self.st, |s| s.sched.advance_to(target));
-        self.settle();
+        Host::with_current(self.st, |h| h.settle());
         Ok(())
     }
 
+    /// Runs `f` with a host over the current Lua state.
+    pub fn with_current<R>(st: &Shared, f: impl FnOnce(&Host) -> R) -> R {
+        let lua = current_lua(st);
+        f(&Host { lua: &lua, st })
+    }
+
     pub fn leave(&self) {
+        if with(self.st, |s| s.locked) {
+            lockscreen::end_lock(self.st);
+            with(self.st, |s| {
+                s.log_line("left while locked: the lock screen was dropped")
+            });
+            return;
+        }
         let go = with(self.st, |s| {
             let go = s.running && !s.leaving;
             s.leaving |= go;
@@ -308,6 +330,14 @@ impl Host<'_> {
     }
 
     pub fn settle(&self) {
+        if let Some(ready) = with(self.st, |s| {
+            s.lock.waiting.then(|| s.lock.ready(s.net.inflight))
+        }) {
+            if ready {
+                lockscreen::present(self);
+            }
+            return;
+        }
         let draw = with(self.st, |s| std::mem::take(&mut s.invalid) && s.running);
         if draw {
             self.draw();
@@ -339,8 +369,147 @@ impl Host<'_> {
 /// One emulated InkApp.
 pub struct Core {
     st: Shared,
-    lua: Lua,
-    app: Rc<AppFiles>,
+}
+
+impl Drop for Core {
+    fn drop(&mut self) {
+        // the Lua state's functions hold the shared state: break the cycle, dropping it outside any borrow
+        let lua = with(&self.st, |s| s.lua.take());
+        drop(lua);
+    }
+}
+
+/// How [`boot`] starts the Lua state.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) enum BootMode {
+    App,
+    /// The app after the lock screen: `on_load`, then `on_resume`.
+    Resume,
+    /// The manifest's lock screen entry.
+    Lock,
+}
+
+/// 0.1 `_boot`: a fresh Lua state for the app or its lock screen: manifest, ctx, entry chunk, `on_load`
+/// (+ `on_resume`), first frame. Never called with a borrow held.
+pub(crate) fn boot(st: &Shared, mode: BootMode) {
+    let (fw, label, budget, app) = with(st, |s| {
+        s.stop();
+        (s.overlay, s.ctx, s.g, s.quit, s.toast) = (None, None, None, false, None);
+        (s.images, s.next_image) = (HashMap::new(), 0);
+        s.net.inflight = 0;
+        s.lock.waiting = false;
+        if mode != BootMode::Lock {
+            s.lock.ctx = None;
+        }
+        (
+            s.cfg.firmware_api,
+            s.cfg.app_dir_label.clone(),
+            s.cfg.instruction_budget,
+            s.app.clone(),
+        )
+    });
+    let (manifest, problem) = read_manifest(&app, fw, &label);
+    let landscape = manifest
+        .get("display")
+        .and_then(|d| d.get("orientation"))
+        .is_some_and(|o| o == "landscape");
+    let new = lua::new_lua();
+    lua::set_budget(&new, budget);
+    // the state keeps the original handle: dropping that one runs a full collection, a clone does not
+    let lua = new.clone();
+    let old = with(st, |s| {
+        // a timer wake keeps showing the previous frame until the new state draws (e-ink keeps its image)
+        s.lock.stale =
+            mode == BootMode::Lock && s.lock.ctx.as_ref().is_some_and(|c| c.reason == "timer");
+        if !s.lock.stale {
+            s.canvas = if landscape {
+                Canvas::new(800, 480)
+            } else {
+                Canvas::new(480, 800)
+            };
+        }
+        s.frame_commands = 0;
+        s.lua.replace(new)
+    });
+    drop(old);
+    if let Some(p) = problem {
+        with(st, |s| s.fail(&p, INSTALL_FAILED));
+        return;
+    }
+    let entry = if mode == BootMode::Lock {
+        let Some(block) = lockscreen::block(&manifest) else {
+            return;
+        };
+        match block.get("entry") {
+            Some(e) if lockscreen::truthy(e) => e.clone(),
+            _ => "lockscreen.lua".into(),
+        }
+    } else {
+        manifest
+            .get("entry")
+            .cloned()
+            .unwrap_or_else(|| "index.lua".into())
+    };
+    let Some((found, src)) = entry.as_str().and_then(|e| app.find(e)) else {
+        let msg = format!(
+            "manifest.json: entry {} not found in the app folder",
+            py_repr(&entry)
+        );
+        with(st, |s| s.fail(&msg, INSTALL_FAILED));
+        return;
+    };
+    let permitted = |name: &str| {
+        manifest
+            .get("permissions")
+            .and_then(|p| p.as_array())
+            .is_some_and(|p| p.iter().any(|v| v == name))
+    };
+    // 0.1 `_net_enabled`: the lock screen has net when its manifest block says so
+    let net = with(st, |s| s.lock.ctx.as_ref().map(|c| c.net)).unwrap_or_else(|| permitted("net"));
+    let lockscreen_api = manifest.get("lockscreen").is_some_and(|b| b.is_object());
+    let (ctx, g) = install(&lua, st, &app, permitted("reader"), net, lockscreen_api)
+        .expect("cannot set up the app's Lua state");
+    with(st, |s| (s.ctx, s.g) = (Some(ctx.clone()), Some(g)));
+    let f = match lua::load_chunk(&lua, src, &format!("@{found}")) {
+        Ok(f) => f,
+        Err(e) => {
+            with(st, |s| s.fail(&format!("{found}: {e}"), ERROR_TITLE));
+            return;
+        }
+    };
+    with(st, |s| {
+        s.running = true;
+        s.invalid = true;
+        let msg = format!("app {} started", s.app_id);
+        s.log_line(&msg);
+    });
+    let h = Host { lua: &lua, st };
+    h.protected(&f, (), &found);
+    h.call("on_load", ctx.clone());
+    if mode == BootMode::Resume {
+        h.call("on_resume", ctx);
+    }
+    if mode == BootMode::Lock {
+        lockscreen::after_load(&h);
+    } else {
+        h.settle();
+    }
+}
+
+/// `require`, the global `ctx` and the `g` passed to `on_draw`.
+fn install(
+    lua: &Lua,
+    st: &Shared,
+    app: &Rc<AppFiles>,
+    reader: bool,
+    net: bool,
+    lockscreen_api: bool,
+) -> mlua::Result<(Table, Table)> {
+    lua::install_require(lua, app.clone())?;
+    let ctx = crate::ctx::new_ctx(lua, st, app, reader, net, lockscreen_api)?;
+    lua.globals().set("ctx", &ctx)?;
+    let g = crate::draw::new_g(lua, st, Target::Screen)?;
+    Ok((ctx, g))
 }
 
 impl Core {
@@ -364,6 +533,8 @@ impl Core {
             }
         };
         let st = Rc::new(RefCell::new(State {
+            lua: None,
+            app: Rc::new(app),
             cfg,
             log: Log::default(),
             sched: Scheduler::new(clock),
@@ -391,6 +562,7 @@ impl Core {
             frame_commands: 0,
             locked: false,
             lock_wakes: 0,
+            lock: Lock::default(),
             refresh_counts: (0, 0),
             frontlight: 0,
             full_refresh_deferred: 0,
@@ -399,149 +571,59 @@ impl Core {
             persist_changed: false,
             net,
         }));
-        let mut core = Core {
-            st,
-            lua: lua::new_lua(),
-            app: Rc::new(app),
-        };
-        core.boot();
-        core
+        boot(&st, BootMode::App);
+        Core { st }
     }
 
-    fn host(&self) -> Host<'_> {
-        Host {
-            lua: &self.lua,
-            st: &self.st,
-        }
-    }
-
-    fn boot(&mut self) {
-        let (fw, label, budget) = with(&self.st, |s| {
-            s.stop();
-            (s.overlay, s.ctx, s.g, s.quit, s.toast) = (None, None, None, false, None);
-            (s.images, s.next_image) = (HashMap::new(), 0);
-            s.net.inflight = 0;
-            (
-                s.cfg.firmware_api,
-                s.cfg.app_dir_label.clone(),
-                s.cfg.instruction_budget,
-            )
-        });
-        let (manifest, problem) = read_manifest(&self.app, fw, &label);
-        let landscape = manifest
-            .get("display")
-            .and_then(|d| d.get("orientation"))
-            .is_some_and(|o| o == "landscape");
-        self.lua = lua::new_lua();
-        lua::set_budget(&self.lua, budget);
-        with(&self.st, |s| {
-            s.canvas = if landscape {
-                Canvas::new(800, 480)
-            } else {
-                Canvas::new(480, 800)
-            };
-            s.frame_commands = 0;
-        });
-        if let Some(p) = problem {
-            with(&self.st, |s| s.fail(&p, INSTALL_FAILED));
-            return;
-        }
-        let entry = manifest
-            .get("entry")
-            .cloned()
-            .unwrap_or_else(|| "index.lua".into());
-        let app = self.app.clone();
-        let Some((found, src)) = entry.as_str().and_then(|e| app.find(e)) else {
-            let msg = format!(
-                "manifest.json: entry {} not found in the app folder",
-                py_repr(&entry)
-            );
-            with(&self.st, |s| s.fail(&msg, INSTALL_FAILED));
-            return;
-        };
-        let permitted = |name: &str| {
-            manifest
-                .get("permissions")
-                .and_then(|p| p.as_array())
-                .is_some_and(|p| p.iter().any(|v| v == name))
-        };
-        let (ctx, g) = self
-            .install(permitted("reader"), permitted("net"))
-            .expect("cannot set up the app's Lua state");
-        with(&self.st, |s| (s.ctx, s.g) = (Some(ctx.clone()), Some(g)));
-        let f = match lua::load_chunk(&self.lua, src, &format!("@{found}")) {
-            Ok(f) => f,
-            Err(e) => {
-                with(&self.st, |s| s.fail(&format!("{found}: {e}"), ERROR_TITLE));
-                return;
-            }
-        };
-        with(&self.st, |s| {
-            s.running = true;
-            s.invalid = true;
-            let msg = format!("app {} started", s.app_id);
-            s.log_line(&msg);
-        });
-        let h = self.host();
-        h.protected(&f, (), &found);
-        h.call("on_load", ctx);
-        h.settle();
-    }
-
-    /// `require`, the global `ctx` and the `g` passed to `on_draw`.
-    fn install(&self, reader: bool, net: bool) -> mlua::Result<(Table, Table)> {
-        let lua = &self.lua;
-        lua::install_require(lua, self.app.clone())?;
-        let ctx = crate::ctx::new_ctx(lua, &self.st, &self.app, reader, net)?;
-        lua.globals().set("ctx", &ctx)?;
-        let g = crate::draw::new_g(lua, &self.st, Target::Screen)?;
-        Ok((ctx, g))
+    /// Runs `f` with a host over the current Lua state.
+    fn run<R>(&self, f: impl FnOnce(&Host) -> R) -> R {
+        Host::with_current(&self.st, f)
     }
 
     // ---- input --------------------------------------------------------------------------------
 
     /// Low-level pointer event; `up` classifies the gesture and advances 350 ms.
     pub fn pointer(&mut self, phase: &str, x: i32, y: i32) -> Result<(), String> {
-        self.host().pointer(phase, x, y)
+        self.run(|h| h.pointer(phase, x, y))
     }
 
     pub fn tap(&mut self, x: i32, y: i32) -> Result<(), String> {
-        self.host().tap(x, y)
+        self.run(|h| h.tap(x, y))
     }
 
     pub fn double_tap(&mut self, x: i32, y: i32) -> Result<(), String> {
-        self.host().double_tap(x, y)
+        self.run(|h| h.double_tap(x, y))
     }
 
     pub fn hold(&mut self, x: i32, y: i32, ms: i64) -> Result<(), String> {
-        self.host().hold(x, y, ms)
+        self.run(|h| h.hold(x, y, ms))
     }
 
     pub fn drag(&mut self, points: &[(i32, i32)], duration_ms: i64) -> Result<(), String> {
-        self.host().drag(points, duration_ms)
+        self.run(|h| h.drag(points, duration_ms))
     }
 
     pub fn swipe(&mut self, dir: &str, at: (i32, i32), distance: i32) -> Result<(), String> {
-        self.host().swipe(dir, at, distance)
+        self.run(|h| h.swipe(dir, at, distance))
     }
 
     /// Taps the last drawn text equal to `text`, else the last containing it.
     pub fn tap_text(&mut self, text: &str) -> Result<(), String> {
-        self.host().tap_text(text)
+        self.run(|h| h.tap_text(text))
     }
 
     pub fn key(&mut self, name: &str) -> Result<(), String> {
-        self.host().key(name)
+        self.run(|h| h.key(name))
     }
 
     /// Answers a pending `input:text` with OK, or types into a pending `input:edit` and presses enter.
     pub fn type_text(&mut self, text: &str) -> Result<(), String> {
-        self.host().type_text(text)
+        self.run(|h| h.type_text(text))
     }
 
     /// Answers the pending dialog: confirm yes/no, leave yes/no, text OK/cancel.
     pub fn answer(&mut self, ok: bool) -> Result<(), String> {
-        self.host().answer(ok)
+        self.run(|h| h.answer(ok))
     }
 
     // ---- network ------------------------------------------------------------------------------
@@ -554,7 +636,7 @@ impl Core {
     /// The host's answer to an outgoing request; the callback fires at request time + delay, at once if that
     /// has passed.
     pub fn deliver(&mut self, id: u64, result: NetResult) {
-        net::deliver(&self.host(), id, result);
+        self.run(|h| net::deliver(h, id, result));
     }
 
     /// Requests the app still waits for.
@@ -583,36 +665,41 @@ impl Core {
 
     /// Runs virtual time forward, firing due timers and redrawing as needed.
     pub fn wait(&mut self, ms: i64) -> Result<(), String> {
-        self.host().wait(ms)
+        self.run(|h| h.wait(ms))
     }
 
     pub fn leave(&mut self) {
-        self.host().leave();
+        self.run(|h| h.leave());
     }
 
     pub fn restart(&mut self) {
         self.leave();
-        self.boot();
+        boot(&self.st, BootMode::App);
     }
 
     pub fn reload(&mut self) {
-        if with(&self.st, |s| s.running) {
-            self.host().save_state();
+        if with(&self.st, |s| s.locked) {
+            lockscreen::end_lock(&self.st);
         }
-        self.boot();
+        if with(&self.st, |s| s.running) {
+            self.run(|h| h.save_state());
+        }
+        boot(&self.st, BootMode::App);
     }
 
     /// Replaces the app folder's contents; `reload()` then runs the new code.
     pub fn set_app(&mut self, app: AppFiles) {
-        self.app = Rc::new(app);
+        with(&self.st, |s| s.app = Rc::new(app));
     }
 
-    pub fn lock(&mut self) -> Result<(), String> {
-        Err(NOT_YET.into())
+    /// Leaves the app, then runs the manifest's lock screen (a blank screen without one).
+    pub fn lock(&mut self) {
+        self.run(lockscreen::lock);
     }
 
-    pub fn unlock(&mut self) -> Result<(), String> {
-        Err(NOT_YET.into())
+    /// Drops the lock screen state and starts the app again (`on_load` + `on_resume`, saved state kept).
+    pub fn unlock(&mut self) {
+        lockscreen::unlock(&self.st);
     }
 
     pub fn resume(&mut self) {
@@ -693,14 +780,16 @@ impl Core {
 
     /// Runs Lua code in the app's state under the budget (test helper).
     pub fn lua_exec(&mut self, code: &str) -> Result<(), String> {
-        let f = lua::load_chunk(&self.lua, code.as_bytes(), "=lua_exec")?;
-        lua::call_guarded(&self.lua, &f, ()).map(|_| ())
+        let lua = current_lua(&self.st);
+        let f = lua::load_chunk(&lua, code.as_bytes(), "=lua_exec")?;
+        lua::call_guarded(&lua, &f, ()).map(|_| ())
     }
 
     /// Runs Lua code in the app's state under the budget and returns its first result as JSON (test helper).
     pub fn lua_eval(&mut self, code: &str) -> Result<serde_json::Value, String> {
-        let f = lua::load_chunk(&self.lua, code.as_bytes(), "=lua_eval")?;
-        let r = lua::call_guarded(&self.lua, &f, ())?;
+        let lua = current_lua(&self.st);
+        let f = lua::load_chunk(&lua, code.as_bytes(), "=lua_eval")?;
+        let r = lua::call_guarded(&lua, &f, ())?;
         let first = r.iter().next().unwrap_or(&Value::Nil);
         Ok(
             crate::ctx::convert::lua_to_json(first, "lua_eval", None, &mut |_| {})
@@ -769,13 +858,13 @@ mod tests {
         );
         let mut core = Core::new(files, Config::default(), Persisted::default());
         let st = core.st.clone();
-        let host_wait = core
-            .lua
+        let lua = current_lua(&core.st);
+        let host_wait = lua
             .create_function(move |lua, ms: i64| {
                 Host { lua, st: &st }.wait(ms).map_err(mlua::Error::runtime)
             })
             .unwrap();
-        core.lua.globals().set("host_wait", host_wait).unwrap();
+        lua.globals().set("host_wait", host_wait).unwrap();
         core.key("ok").unwrap();
         let errors = core.errors().to_vec();
         assert_eq!(errors.len(), 1, "{errors:?}");
