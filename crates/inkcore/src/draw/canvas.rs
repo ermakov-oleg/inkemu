@@ -96,9 +96,14 @@ pub struct Canvas {
     pub w: u32,
     pub h: u32,
     fonts: Fonts,
+    /// What the last finished frame drew and showed.
     ops: Vec<Op>,
-    n: usize,
     texts: Vec<TextItem>,
+    /// The frame being recorded: a `g` kept by the app and called outside `on_draw` lands here and is dropped by
+    /// the next `begin_frame`, as in 0.1.
+    rec_ops: Vec<Op>,
+    rec_texts: Vec<TextItem>,
+    n: usize,
     warnings: Vec<String>,
     bad: Option<String>,
 }
@@ -115,8 +120,10 @@ impl Canvas {
             h,
             fonts: Fonts::new(),
             ops: vec![],
-            n: 0,
             texts: vec![],
+            rec_ops: vec![],
+            rec_texts: vec![],
+            n: 0,
             warnings: vec![],
             bad: None,
         }
@@ -133,6 +140,8 @@ impl Canvas {
     pub fn begin_frame(&mut self) {
         self.ops.clear();
         self.texts.clear();
+        self.rec_ops.clear();
+        self.rec_texts.clear();
         self.warnings.clear();
         self.n = 0;
         self.bad = None;
@@ -159,11 +168,13 @@ impl Canvas {
             },
             c => Op::Draw(c),
         };
-        self.ops.push(op);
+        self.rec_ops.push(op);
     }
 
-    /// The number of commands recorded this frame, kept or not.
+    /// Shows the recorded frame; the number of commands recorded, kept or not.
     pub fn end_frame(&mut self) -> usize {
+        self.ops = std::mem::take(&mut self.rec_ops);
+        self.texts = std::mem::take(&mut self.rec_texts);
         if self.n > CAP {
             let msg = format!(
                 "{} draw commands in one frame; the device drops everything after {CAP}",
@@ -220,7 +231,10 @@ impl Canvas {
             }
             Cmd::TextBox { x, y, w, h, .. } => {
                 let mut lines = self.wrap(font, s, w);
-                lines.truncate(((h / lh).floor() as i64).max(1) as usize);
+                let keep = (h / lh).floor().max(1.0);
+                if lines.len() as f64 > keep {
+                    lines.truncate(keep as usize);
+                }
                 let bh = lines.len() as f64 * lh;
                 let by = py_round(place(y, bh, h, opts.valign));
                 let lines = lines
@@ -228,7 +242,7 @@ impl Canvas {
                     .enumerate()
                     .map(|(i, line)| {
                         let lx = place(x, f64::from(f.measure(font, &line)), w, opts.align);
-                        (py_round(lx), by + i as i32 * lh as i32, line)
+                        (py_round(lx), by.saturating_add(i as i32 * lh as i32), line)
                     })
                     .collect();
                 ((py_round(x), by, py_round(w), bh as i32), lines)
@@ -236,7 +250,7 @@ impl Canvas {
             _ => return None,
         };
         let (x, y, w, h) = item;
-        self.texts.push(TextItem {
+        self.rec_texts.push(TextItem {
             text: s.clone(),
             x,
             y,

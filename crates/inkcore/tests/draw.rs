@@ -140,9 +140,26 @@ fn huge_values_are_clipped_not_looped() {
     let core = draw(
         "g:rect(-1e9, -1e9, 2e9, 2e9); g:circle(240, 400, 1e9, {fill=true}); g:line(-1e9, 0, 1e9, 799, {width=3})
          g:arc(0, 0, 1e9, 0, 90); g:round_rect(0, 0, 1e9, 1e9, 1e9, {fill=true}); g:pattern_rect(-1e9, -1e9, 2e9, 2e9)
-         g:polygon({-1e9, 0, 1e9, 0, 0, 1e9}, {fill=true})",
+         g:polygon({-1e9, 0, 1e9, 0, 0, 1e9}, {fill=true}); g:text(1e30, 0, 'ab'); g:text(0, math.maxinteger, 'a')
+         g:text_box(0, 1e30, 100, 100, 'a b'); g:text(-1e30, -1e30, 'ab', {align='right', valign='bottom'})",
     );
     assert!(black(&core.raw_frame()) > 0);
+}
+
+#[test]
+fn g_outside_on_draw_changes_nothing_until_the_next_frame() {
+    let mut core = draw("G = g; g:text(0, 0, msg or 'a')");
+    core.lua_exec("G:text(0, 40, 'late'); G:rect(0, 100, 50, 50, {fill=true})")
+        .unwrap();
+    assert_eq!(core.texts().len(), 1);
+    assert_eq!(
+        black(&core.raw_frame()),
+        black(&draw("g:text(0, 0, 'a')").raw_frame())
+    );
+    core.lua_exec("msg = 'b'; ctx:invalidate()").unwrap();
+    core.wait(0).unwrap();
+    let words: Vec<String> = core.texts().into_iter().map(|t| t.text).collect();
+    assert_eq!(words, ["b"]);
 }
 
 #[test]

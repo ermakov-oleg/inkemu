@@ -129,6 +129,13 @@ def test_begin_frame_resets(draw):
     assert [t["text"] for t in emu.texts()] == ["b"]
 
 
+def test_g_outside_on_draw_changes_nothing(draw):
+    emu = draw("g:text(1, 1, 'a')")
+    before = emu.raw_frame().tobytes()
+    emu.lua_exec("G:text(0, 40, 'late'); G:rect(0, 100, 50, 50, {fill=true})")
+    assert [t["text"] for t in emu.texts()] == ["a"] and emu.raw_frame().tobytes() == before
+
+
 @pytest.mark.allow_errors
 @pytest.mark.parametrize(
     "call, pattern",

@@ -68,7 +68,8 @@ impl Fonts {
     /// draws nothing but advances.
     pub fn draw(&self, frame: &mut Frame, font: &str, x: i32, top: i32, s: &str) {
         let (px, ascent) = (self.px(font), self.ascent(font));
-        let base = top + (self.line_height(font) - ascent) / 2 + ascent;
+        // i64: a far-off text position from the app must not overflow
+        let base = i64::from(top) + i64::from((self.line_height(font) - ascent) / 2 + ascent);
         let mut pen = x as f32;
         for c in s.chars() {
             let index = self.font.lookup_glyph_index(c);
@@ -77,11 +78,12 @@ impl Fonts {
                 continue;
             }
             let (m, bitmap) = self.font.rasterize_indexed(index, px);
-            let gx = (pen + m.xmin as f32).round() as i32;
-            let gy = base - m.ymin - m.height as i32;
+            let gx = (pen + m.xmin as f32).round() as i64;
+            let gy = base - i64::from(m.ymin) - m.height as i64;
             for (i, &cov) in bitmap.iter().enumerate() {
-                if cov >= 128 {
-                    frame.set(gx + (i % m.width) as i32, gy + (i / m.width) as i32, 1);
+                let (x, y) = (gx + (i % m.width) as i64, gy + (i / m.width) as i64);
+                if let (true, Ok(x), Ok(y)) = (cov >= 128, i32::try_from(x), i32::try_from(y)) {
+                    frame.set(x, y, 1);
                 }
             }
             pen += m.advance_width;
