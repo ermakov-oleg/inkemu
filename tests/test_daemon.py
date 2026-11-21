@@ -200,7 +200,6 @@ def raw(port, method="POST", path="/cmd", headers=None, body=b'{"cmd": "tap-text
         {"Origin": "http://evil.example"},
     ],
 )
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 4")
 def test_browser_style_requests_are_rejected(emu_factory, headers):
     emu = emu_factory(HELLO)
     d = Daemon(emu, port=0)

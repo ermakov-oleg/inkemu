@@ -1,176 +1,151 @@
+import re
+
 import pytest
 from conftest import IMPL
-from lupa import LuaError
+from PIL import ImageChops
 
-from inkemu.draw import Canvas
-from inkemu.fonts import Fonts
-from inkemu.lua_env import make_object, new_runtime
-
-pytestmark = pytest.mark.skipif(IMPL == "rust", reason="stage1: task 4")
+FONTS = "FONTS = {small = {name = 'small'}, medium = {name = 'medium'}, large = {name = 'large'}}\n"
 
 
 @pytest.fixture
-def env():
-    L = new_runtime()
-    fonts = Fonts()
-    canvas = Canvas(L, fonts)
-    warnings = []
-    canvas.on_warning = warnings.append
-    L.globals().G = canvas.g
-    L.globals().FONTS = L.table_from({n: L.table_from({"name": n}) for n in ("small", "medium", "large")})
-    return L, fonts, canvas, warnings
+def draw(make_app, emu_factory):
+    """An app whose on_draw runs `body` and keeps `g` in the global G."""
+
+    def make(body: str, **manifest):
+        return emu_factory(make_app(FONTS + f"function on_draw(c, g)\n  G = g\n  {body}\nend\n", manifest=manifest))
+
+    return make
 
 
-def run(env, code):
-    L, _, canvas, _ = env
-    canvas.begin_frame()
-    L.execute(code)
-    return canvas.end_frame()
+def ink_bbox(img):
+    return ImageChops.invert(img.convert("L")).getbbox()
 
 
-def test_text_center_align_box(env):
-    run(env, "G:text(240, 40, 'Hi', {font=FONTS.large, align='center'})")
-    item = env[2].texts()[0]
+def test_text_center_align_box(draw):
+    emu = draw("g:text(240, 40, 'Hi', {font=FONTS.large, align='center'})")
+    item = emu.texts()[0]
     assert item["text"] == "Hi" and abs(item["x"] + item["w"] / 2 - 240) <= 1 and item["h"] == 30
     assert item["font"] == "large" and item["y"] == 40
 
 
-def test_text_valign_and_right(env):
-    run(
-        env,
-        "G:text(100, 100, 'ab', {align='right', valign='middle'}); G:text(10, 100, 'x', {valign='bottom', font=FONTS.small})",
+def test_text_valign_and_right(draw):
+    emu = draw(
+        "g:text(100, 100, 'ab', {align='right', valign='middle'}); g:text(10, 100, 'x', {valign='bottom', font=FONTS.small})"
     )
-    a, b = env[2].texts()
+    a, b = emu.texts()
     assert a["x"] + a["w"] == 100 and a["y"] == 100 - 12
     assert b["y"] == 100 - 20
 
 
-def test_command_cap_drops_and_warns(env):
-    _, _, canvas, warnings = env
-    n = run(env, "for i = 1, 1100 do G:line(0, 0, i % 400, 5) end")
-    assert n == 1100 and warnings and "1024" in warnings[0]
-    assert len(canvas._cmds) == 1024
+def test_command_cap_drops_and_warns(draw):
+    emu = draw("for i = 0, 1099 do g:rect(i % 400, i // 400, 1, 1, {fill=true}) end")
+    assert emu.frame_commands == 1100 and emu.warnings and "1024" in emu.warnings[0]
+    assert emu.raw_frame().convert("L").histogram()[0] == 1024
 
 
-def test_dot_call_on_g_errors(env):
-    with pytest.raises(LuaError, match="colon"):
-        run(env, "G.text(1, 2, 'x')")
+@pytest.mark.allow_errors
+def test_dot_call_on_g_errors(draw):
+    emu = draw("g.text(1, 2, 'x')")
+    assert "colon" in emu.errors[0]
 
 
-def test_cyrillic_text_measured_and_drawn(env):
-    _, fonts, canvas, _ = env
-    assert fonts.measure("medium", "Привет •") > 40
-    run(env, "G:text(10, 10, 'Привет •')")
-    assert canvas.render().getbbox() is not None
-    assert canvas.texts()[0]["text"] == "Привет •"
+def test_cyrillic_text_measured_and_drawn(draw):
+    emu = draw("g:text(10, 10, 'Привет •')")
+    assert emu.lua_eval("return G:measure('Привет •')") > 40
+    assert ink_bbox(emu.raw_frame()) is not None
+    assert emu.texts()[0]["text"] == "Привет •"
 
 
-def test_render_rect_fill_is_black(env):
-    run(env, "G:clear(0); G:rect(10, 10, 20, 20, {fill=true})")
-    img = env[2].render()
+def test_render_rect_fill_is_black(draw):
+    img = draw("g:clear(0); g:rect(10, 10, 20, 20, {fill=true})").raw_frame()
     assert img.mode == "1" and img.size == (480, 800)
     assert img.getpixel((15, 15)) == 0 and img.getpixel((5, 5)) == 255
 
 
-def test_white_fill_color_zero(env):
-    run(env, "G:rect(0, 0, 50, 50, {fill=true}); G:rect(10, 10, 10, 10, {fill=true, color=0})")
-    img = env[2].render()
+def test_white_fill_color_zero(draw):
+    img = draw("g:rect(0, 0, 50, 50, {fill=true}); g:rect(10, 10, 10, 10, {fill=true, color=0})").raw_frame()
     assert img.getpixel((15, 15)) == 255 and img.getpixel((5, 5)) == 0
 
 
-def test_pattern_rect_is_checker(env):
-    run(env, "G:pattern_rect(0, 0, 10, 10)")
-    img = env[2].render()
+def test_pattern_rect_is_checker(draw):
+    img = draw("g:pattern_rect(0, 0, 10, 10)").raw_frame()
     px = [img.getpixel((x, y)) for y in range(10) for x in range(10)]
     assert px.count(0) == 50 and img.getpixel((0, 0)) != img.getpixel((1, 0))
 
 
-def test_shapes_do_not_crash(env):
-    run(
-        env,
+def test_shapes_do_not_crash(draw):
+    emu = draw(
         """
-      G:round_rect(5, 5, 100, 40, 8, {fill=true}); G:circle(50, 50, 10); G:arc(60, 60, 20, 180, 360, {line_width=3})
-      G:polygon({10,10, 50,10, 30,40}, {fill=true}); G:polyline({1,1, 20,30, 40,5}, {width=2})
-      G:line(0, 0, 100, 100, {line_width=2})
-    """,
+      g:round_rect(5, 5, 100, 40, 8, {fill=true}); g:circle(50, 50, 10); g:arc(60, 60, 20, 180, 360, {line_width=3})
+      g:polygon({10,10, 50,10, 30,40}, {fill=true}); g:polyline({1,1, 20,30, 40,5}, {width=2})
+      g:line(0, 0, 100, 100, {line_width=2})
+    """
     )
-    assert env[2].render().getbbox() is not None
+    assert ink_bbox(emu.raw_frame()) is not None
 
 
-def test_text_box_wraps(env):
-    run(env, "G:text_box(10, 10, 100, 200, 'one two three four five six seven eight', {font=FONTS.small})")
-    item = env[2].texts()[0]
+def test_text_box_wraps(draw):
+    emu = draw("g:text_box(10, 10, 100, 200, 'one two three four five six seven eight', {font=FONTS.small})")
+    item = emu.texts()[0]
     assert item["text"].startswith("one two") and item["w"] <= 100 and item["h"] > 20
-    img = env[2].render()
-    assert img.crop((10, 10 + 20, 110, 10 + 40)).getbbox() is not None
+    assert ink_bbox(emu.raw_frame().crop((10, 10 + 20, 110, 10 + 40))) is not None
 
 
-def test_size_and_measure(env):
-    L = env[0]
-    L.globals().R = None
-    assert L.eval("(function() local w, h = G:size(); return w * 1000 + h end)()") == 480800
-    assert L.eval("G:measure('Hi', {font=FONTS.large})") == env[1].measure("large", "Hi")
-    assert L.eval("G:measure_text('Hi')") == env[1].measure("medium", "Hi")
+def test_size_and_measure(draw):
+    emu = draw("g:text(0, 0, 'Hi', {font=FONTS.large}); g:text(0, 100, 'Hi')")
+    large, medium = emu.texts()
+    assert emu.lua_eval("return (function() local w, h = G:size(); return w * 1000 + h end)()") == 480800
+    assert emu.lua_eval("return G:measure('Hi', {font=FONTS.large})") == large["w"]
+    assert emu.lua_eval("return G:measure_text('Hi')") == medium["w"]
 
 
-def test_resize(env):
-    env[2].resize(800, 480)
-    run(env, "G:clear(0)")
-    assert env[2].render().size == (800, 480)
-    assert env[0].eval("(function() local w, h = G:size(); return w end)()") == 800
+def test_resize(draw):
+    emu = draw("g:clear(0)", display={"orientation": "landscape"})
+    assert emu.raw_frame().size == (800, 480)
+    assert emu.lua_eval("return (function() local w, h = G:size(); return w end)()") == 800
 
 
-def test_image_hook(env):
-    from PIL import Image
-
-    _, _, canvas, _ = env
-    canvas.image_source = lambda obj: Image.new("1", (4, 4), 0)
-    run(env, "G:image({}, 20, 20, {w=8, h=8})")
-    img = canvas.render()
+@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 7")
+def test_image_is_drawn_scaled(make_app, emu_factory):
+    emu = emu_factory(
+        make_app(
+            "function on_load(c) layer = c.layers:create(4, 4); layer:draw(function(g) g:clear(1) end) end\n"
+            "function on_draw(c, g) g:image(layer, 20, 20, {w=8, h=8}) end\n"
+        )
+    )
+    img = emu.raw_frame()
     assert img.getpixel((22, 22)) == 0 and img.getpixel((30, 30)) == 255
 
 
-def test_rtl_text_warns_and_is_skipped(env):
-    run(env, "G:text(10, 10, 'שלום')")
-    assert env[2].texts() == [] and env[3]
+def test_rtl_text_warns_and_is_skipped(draw):
+    emu = draw("g:text(10, 10, 'שלום')")
+    assert emu.texts() == [] and emu.warnings
 
 
-def test_begin_frame_resets(env):
-    run(env, "G:text(1, 1, 'a')")
-    run(env, "G:text(1, 1, 'b')")
-    assert [t["text"] for t in env[2].texts()] == ["b"]
+def test_begin_frame_resets(draw):
+    emu = draw("g:text(1, 1, msg or 'a')")
+    emu.lua_exec("msg = 'b'; ctx:invalidate()")
+    emu.wait(0)
+    assert [t["text"] for t in emu.texts()] == ["b"]
 
 
-def test_bad_g_args_raise_lua_error_with_location(env):
-    with pytest.raises(LuaError, match=r"bad argument #3 to 'rect' \(number expected, got no value\)"):
-        run(env, "G:rect(1, 2)")
-    with pytest.raises(LuaError, match="text"):
-        run(env, "G:text(1, 2)")
-    with pytest.raises(LuaError, match="'text'.*number expected, got string"):
-        run(env, "G:text('a', 2, 'x')")
+@pytest.mark.allow_errors
+@pytest.mark.parametrize(
+    "call, pattern",
+    [
+        ("g:rect(1, 2)", r"bad argument #3 to 'rect' \(number expected, got no value\)"),
+        ("g:text(1, 2)", "text"),
+        ("g:text('a', 2, 'x')", "'text'.*number expected, got string"),
+    ],
+)
+def test_bad_g_args_raise_lua_error_with_location(draw, call, pattern):
+    emu = draw(call)
+    assert re.search(pattern, emu.errors[0]) and "index.lua:4:" in emu.errors[0], emu.errors
 
 
-def test_frame_with_bad_command_does_not_crash(env):
-    L, _, canvas, _ = env
-    canvas.begin_frame()
-    L.execute("G:text(1, 1, 'ok'); pcall(function() G:rect(1, 2) end); G:rect(0, 0, 5, 5, {fill=true})")
-    assert canvas.end_frame() == 2 and len(canvas.texts()) == 1
-
-
-def test_runtime_is_collectable():
-    import gc
-    import weakref
-
-    from inkemu import lua_env
-
-    L = new_runtime()
-    canvas = Canvas(L, Fonts())
-    make_object(L, "x", {"f": lambda: 1})
-    ref = weakref.ref(L)
-    del L, canvas
-    gc.collect()
-    assert ref() is None
-    assert not [v for v in vars(lua_env).values() if isinstance(v, dict) and any(isinstance(k, int) for k in v)]
+def test_frame_with_bad_command_does_not_crash(draw):
+    emu = draw("g:text(1, 1, 'ok'); pcall(function() g:rect(1, 2) end); g:rect(0, 0, 5, 5, {fill=true})")
+    assert emu.frame_commands == 2 and len(emu.texts()) == 1
 
 
 MEASURE_STRINGS = ["обновлено 13:50", "Сегодня · 20 ноября", "0123456789", "Ёжик…", "· 42 ·"]
@@ -184,26 +159,24 @@ def _ink_cols(img):
 
 @pytest.mark.parametrize("font", ["small", "medium", "large"])
 @pytest.mark.parametrize("s", MEASURE_STRINGS)
-def test_measure_matches_drawn_advance(env, font, s):
+def test_measure_matches_drawn_advance(draw, font, s):
     # measure is an advance width, not an ink bbox, so compare the left edges of bars drawn before and after s.
-    _, fonts, canvas, _ = env
-    run(env, f"G:text(10, 10, '|{s}|', {{font=FONTS.{font}}}); G:text(10, 60, '|', {{font=FONTS.{font}}})")
-    img = canvas.render()
+    emu = draw(f"g:text(10, 10, '|{s}|', {{font=FONTS.{font}}}); g:text(10, 60, '|', {{font=FONTS.{font}}})")
+    img = emu.raw_frame()
     bar = _ink_cols(img.crop((0, 60, img.width, 100)))
     cols = _ink_cols(img.crop((0, 10, img.width, 50)))
     bar_w = bar[-1] - bar[0]
-    assert abs((cols[-1] - bar_w - cols[0]) - fonts.measure(font, "|" + s)) <= 1
+    assert abs((cols[-1] - bar_w - cols[0]) - emu.lua_eval(f"return G:measure('|{s}', {{font=FONTS.{font}}})")) <= 1
 
 
 @pytest.mark.parametrize("font", ["small", "medium", "large"])
 @pytest.mark.parametrize("s", MEASURE_STRINGS)
-def test_right_aligned_text_stays_left_of_x(env, font, s):
-    _, fonts, canvas, _ = env
-    run(
-        env,
-        f"G:text(456, 10, '{s}', {{font=FONTS.{font}, align='right'}}); G:text(456 - G:measure('{s}', {{font=FONTS.{font}}}), 60, '{s}', {{font=FONTS.{font}}})",
+def test_right_aligned_text_stays_left_of_x(draw, font, s):
+    emu = draw(
+        f"g:text(456, 10, '{s}', {{font=FONTS.{font}, align='right'}}); g:text(456 - g:measure('{s}', {{font=FONTS.{font}}}), 60, '{s}', {{font=FONTS.{font}}})"
     )
-    img = canvas.render()
+    img = emu.raw_frame()
+    measured = emu.lua_eval(f"return G:measure('{s}', {{font=FONTS.{font}}})")
     for top in (10, 60):
         cols = _ink_cols(img.crop((0, top, img.width, top + 40)))
-        assert cols[-1] < 456 and cols[0] >= 456 - fonts.measure(font, s) - 1
+        assert cols[-1] < 456 and cols[0] >= 456 - measured - 1

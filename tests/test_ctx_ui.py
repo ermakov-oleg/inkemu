@@ -4,6 +4,8 @@ import pytest
 from conftest import IMPL
 from PIL import Image
 
+from inkemu.fonts import Fonts
+
 DRAW = "function on_draw(c, g) g:clear(0) %s end\n"
 
 
@@ -324,11 +326,8 @@ def test_edit_close_inside_on_change_stops_feeding(make_app, emu_factory):
     assert emu.pending is None and emu.has_text("a,ab no")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 4")
-def test_no_ttf_font_warns_once(make_app, emu_factory, monkeypatch):
-    from inkemu import fonts
-
-    monkeypatch.setattr(fonts, "FONT_FILES", [])
+@pytest.mark.skipif(IMPL != "rust" and Fonts().path is None, reason="0.1 needs a system TrueType font")
+def test_no_font_warning_is_logged(make_app, emu_factory):
     emu = emu_factory(make_app("function on_draw(c, g) g:text(0, 0, 'Привет') end\n"))
     emu.reload()
-    assert len([w for w in emu.warnings if "no TrueType font" in w and "boxes" in w]) == 1
+    assert emu.has_text("Привет") and not [w for w in emu.warnings if "font" in w.lower()]

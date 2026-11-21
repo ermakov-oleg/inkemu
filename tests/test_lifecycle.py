@@ -65,7 +65,6 @@ def test_app_pcall_sees_string_error(make_app, emu_factory):
 
 
 @pytest.mark.allow_errors
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 4")
 def test_syntax_error_reported(make_app, emu_factory):
     emu = emu_factory(make_app("function ("))
     assert emu.errors and "index.lua:1:" in emu.errors[0]
@@ -163,7 +162,6 @@ def test_set_tick_zero_stops(make_app, emu_factory):
 
 @pytest.mark.allow_errors
 @pytest.mark.parametrize("draw", ["g:text(1/0, 0, 'x')", "g:line(0, 0, 5, 5, {width = 'abc'})"])
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 4")
 def test_bad_draw_values_fail_the_app_not_the_host(make_app, emu_factory, draw):
     emu = emu_factory(make_app(f"function on_draw(c, g) {draw} end"))
     emu.shot()

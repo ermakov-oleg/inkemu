@@ -1,5 +1,4 @@
 import pytest
-from conftest import IMPL
 
 
 @pytest.fixture
@@ -67,7 +66,6 @@ def test_colon_check_cannot_be_spoofed(emu):
         ),
     ],
 )
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 4")
 def test_app_cannot_reach_python_or_os(make_app, emu_factory, code, expected):
     emu = emu_factory(make_app(f"function on_load(c) {code} end\n"))
     assert len(emu.errors) == 1 and emu.errors[0].startswith("Lua error in on_load"), emu.errors

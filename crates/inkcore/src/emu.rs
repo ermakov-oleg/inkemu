@@ -3,11 +3,13 @@ use std::cell::{Ref, RefCell};
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
-use mlua::{Function, IntoLuaMulti, Lua, LuaString, MultiValue, Table, Value};
+use mlua::{Function, IntoLuaMulti, Lua, MultiValue, Table, Value};
 
 use crate::app::{app_id_of, read_manifest, AppFiles};
 use crate::clock::{iso, DateTime, Due, Run, Scheduler, TimerId, VirtualClock};
 use crate::config::{Config, Persisted};
+use crate::draw::plates::{self, Overlays, Plate};
+use crate::draw::{Canvas, Frame, TextItem};
 use crate::log::{py_repr, Log};
 use crate::lua;
 
@@ -15,24 +17,6 @@ pub const ERROR_TITLE: &str = "App error, closed";
 const INSTALL_FAILED: &str = "Install failed";
 /// What the not-yet-ported input and lock methods return; the Python binding maps it to NotImplementedError.
 pub const NOT_YET: &str = "not implemented yet";
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct TextItem {
-    pub text: String,
-    pub x: i32,
-    pub y: i32,
-    pub w: i32,
-    pub h: i32,
-    pub font: &'static str,
-}
-
-/// One byte per pixel, row by row: 0 white, 1 black.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Frame {
-    pub w: u32,
-    pub h: u32,
-    pub px: Vec<u8>,
-}
 
 /// A dialog waiting for the user.
 #[derive(Clone, Debug, PartialEq)]
@@ -59,33 +43,6 @@ pub struct Status {
 /// What a timer does when it fires.
 pub(crate) type TimerFn = Rc<dyn Fn(&Host)>;
 
-pub(crate) struct Canvas {
-    pub(crate) w: u32,
-    pub(crate) h: u32,
-    pub(crate) texts: Vec<TextItem>,
-    pub(crate) commands: usize,
-}
-
-impl Canvas {
-    fn new(w: u32, h: u32) -> Self {
-        Canvas {
-            w,
-            h,
-            texts: vec![],
-            commands: 0,
-        }
-    }
-
-    fn begin_frame(&mut self) {
-        self.texts.clear();
-        self.commands = 0;
-    }
-
-    fn end_frame(&mut self) -> usize {
-        self.commands
-    }
-}
-
 /// Core state shared with the Rust functions the app calls through Lua.
 pub(crate) struct State {
     pub(crate) cfg: Config,
@@ -105,6 +62,8 @@ pub(crate) struct State {
     pub(crate) overlay: Option<(String, String)>,
     pub(crate) pending: Option<Pending>,
     pub(crate) pending_id: u64,
+    /// Text and the clock ms it stays up to.
+    pub(crate) toast: Option<(String, i64)>,
     pub(crate) canvas: Canvas,
     pub(crate) frame_commands: usize,
     pub(crate) locked: bool,
@@ -140,6 +99,20 @@ impl State {
         let first = message.split('\n').next().unwrap_or_default();
         self.overlay = Some((title.to_string(), first.to_string()));
         self.stop();
+    }
+
+    pub(crate) fn plates(&self, dialog: bool) -> Vec<Plate> {
+        let now = self.sched.clock.ms;
+        let o = Overlays {
+            error: self.overlay.as_ref(),
+            pending: self.pending.as_ref(),
+            toast: self
+                .toast
+                .as_ref()
+                .filter(|t| now < t.1)
+                .map(|t| t.0.as_str()),
+        };
+        plates::plates(&self.canvas, &o, dialog)
     }
 }
 
@@ -269,7 +242,19 @@ impl Host<'_> {
             (s.ctx.clone(), s.g.clone())
         });
         self.call("on_draw", (ctx, g));
-        with(self.st, |s| s.frame_commands = s.canvas.end_frame());
+        with(self.st, |s| {
+            let n = s.canvas.end_frame();
+            for w in s.canvas.take_warnings() {
+                s.warn(&w);
+            }
+            match s.canvas.take_bad() {
+                Some(bad) => {
+                    s.fail(&format!("g: bad values in on_draw: {bad}"), ERROR_TITLE);
+                    s.canvas.begin_frame();
+                }
+                None => s.frame_commands = n,
+            }
+        });
     }
 }
 
@@ -305,6 +290,7 @@ impl Core {
             overlay: None,
             pending: None,
             pending_id: 0,
+            toast: None,
             canvas: Canvas::new(480, 800),
             frame_commands: 0,
             locked: false,
@@ -332,7 +318,7 @@ impl Core {
     fn boot(&mut self) {
         let (fw, label) = with(&self.st, |s| {
             s.stop();
-            (s.overlay, s.ctx, s.g, s.quit) = (None, None, None, false);
+            (s.overlay, s.ctx, s.g, s.quit, s.toast) = (None, None, None, false, None);
             (s.cfg.firmware_api, s.cfg.app_dir_label.clone())
         });
         let (manifest, problem) = read_manifest(&self.app, fw, &label);
@@ -395,37 +381,7 @@ impl Core {
         lua.globals().set("ctx", &ctx)?;
         let saved = with(&self.st, |s| s.persisted.state_json.clone());
         ctx.set("state", load_state(lua, saved.as_deref())?)?;
-        let g = lua.create_table()?;
-        let st = self.st.clone();
-        g.set(
-            "clear",
-            lua.create_function(move |_, _: MultiValue| {
-                with(&st, |s| {
-                    s.canvas.texts.clear();
-                    s.canvas.commands += 1;
-                });
-                Ok(())
-            })?,
-        )?;
-        let st = self.st.clone();
-        g.set(
-            "text",
-            lua.create_function(move |_, (_g, x, y, text): (Value, i32, i32, LuaString)| {
-                let text = text.to_string_lossy();
-                with(&st, |s| {
-                    s.canvas.commands += 1;
-                    s.canvas.texts.push(TextItem {
-                        text,
-                        x,
-                        y,
-                        w: 0,
-                        h: 24,
-                        font: "medium",
-                    });
-                });
-                Ok(())
-            })?,
-        )?;
+        let g = crate::draw::new_g(lua, &self.st)?;
         Ok((ctx, g))
     }
 
@@ -553,24 +509,25 @@ impl Core {
         }
     }
 
+    /// The app's text items, then the plates' (error overlay, dialog, toast).
     pub fn texts(&self) -> Vec<TextItem> {
-        self.st.borrow().canvas.texts.clone()
+        let s = self.st.borrow();
+        let mut out = s.canvas.texts();
+        out.extend(s.plates(true).into_iter().flat_map(|p| p.items));
+        out
     }
 
     /// The screen with the error, toast and (if `dialog`) dialog plates.
-    pub fn frame(&self, _dialog: bool) -> Frame {
-        self.raw_frame()
+    pub fn frame(&self, dialog: bool) -> Frame {
+        let s = self.st.borrow();
+        let mut f = s.canvas.render();
+        plates::draw(&s.canvas, &mut f, &s.plates(dialog));
+        f
     }
 
     /// The app's own frame, without plates.
     pub fn raw_frame(&self) -> Frame {
-        let s = self.st.borrow();
-        let (w, h) = (s.canvas.w, s.canvas.h);
-        Frame {
-            w,
-            h,
-            px: vec![0; w as usize * h as usize],
-        }
+        self.st.borrow().canvas.render()
     }
 
     pub fn log(&self) -> Ref<'_, [String]> {

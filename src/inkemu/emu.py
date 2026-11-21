@@ -341,6 +341,10 @@ class Emu:
                 d.text((it["x"], it["y"] + (it["h"] - f.size) / 2), it["text"], font=f, fill=0)
         return img
 
+    def raw_frame(self) -> Image.Image:
+        """The app's own frame, without plates."""
+        return self.canvas.render()
+
     def save_shot(self, path: str | Path) -> Path:
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
