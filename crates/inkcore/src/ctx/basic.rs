@@ -9,16 +9,12 @@ use super::{arg, check_arg, nil, py_int, type_name};
 use crate::emu::{with, Host, Shared};
 
 pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
-    let defer_full_refresh = {
-        let st = st.clone();
-        method(move |_, args| {
-            let a = args.into_vec();
-            check_arg("defer_full_refresh", 1, arg(&a, 0), "number")?;
-            let n = py_int(arg(&a, 0))?;
-            with(&st, |s| s.full_refresh_deferred = n);
-            Ok(nil())
-        })
-    };
+    let defer_full_refresh = method(move |_, args| {
+        let a = args.into_vec();
+        check_arg("defer_full_refresh", 1, arg(&a, 0), "number")?;
+        py_int(arg(&a, 0))?;
+        Ok(nil())
+    });
     let save_state = {
         let st = st.clone();
         method(move |lua, _| {

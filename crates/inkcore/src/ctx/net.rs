@@ -144,7 +144,7 @@ pub(crate) fn deliver(h: &Host, id: u64, resp: NetResult) {
         return;
     };
     let remaining = job.t0.saturating_add(delay_of(&resp)).saturating_sub(now);
-    if remaining < 0 {
+    if remaining <= 0 {
         fire(h, &job, &resp);
         h.settle();
     } else {

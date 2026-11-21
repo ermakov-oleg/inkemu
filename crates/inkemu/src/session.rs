@@ -6,9 +6,7 @@ use std::path::{Path, PathBuf};
 use inkcore::app::read_manifest;
 use inkcore::clock::local_ms;
 use inkcore::log::py_repr_str;
-use inkcore::{
-    AppFiles, Battery, Config, Core, Fetcher, Frame, NetMode, Pending, Persisted, Status,
-};
+use inkcore::{AppFiles, Battery, Config, Core, Fetcher, Frame, NetMode, Persisted, Status};
 
 use crate::net_live::Net;
 use crate::paths;
@@ -174,11 +172,6 @@ impl Session {
         &self.core
     }
 
-    /// For Lua helpers and inspection; call [`Session::flush`] after anything that may change app data.
-    pub fn core_mut(&mut self) -> &mut Core {
-        &mut self.core
-    }
-
     pub fn app_dir(&self) -> &Path {
         &self.app_dir
     }
@@ -281,10 +274,6 @@ impl Session {
 
     pub fn frame(&self, dialog: bool) -> Frame {
         self.core.frame(dialog)
-    }
-
-    pub fn pending(&self) -> Option<Pending> {
-        self.core.status().pending
     }
 }
 

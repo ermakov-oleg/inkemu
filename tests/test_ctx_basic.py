@@ -411,7 +411,6 @@ def test_capabilities_i18n_and_stubs(make_app, emu_factory):
     )
     inventory = "firmware 26112001 inventory: ctx has no display"
     assert emu.has_text("msg true|false|false|en|nil|false|false|table|number|nil|true|0|nil|7"), inventory
-    assert emu.refresh_counts == {"request": 0, "full": 0}, inventory
     assert any("http://x" in line for line in emu.log)
 
 

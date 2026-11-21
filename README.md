@@ -65,7 +65,8 @@ def test_weather(tmp_path):
 
 Other members: `emu.tap(x, y)`, `emu.double_tap()`, `emu.hold()`, `emu.swipe(direction)`, `emu.key(name)`,
 `emu.type_text()`, `emu.answer(ok)`, `emu.lock()`, `emu.unlock()`, `emu.restart()`, `emu.texts()`, `emu.status()`,
-`emu.log`, `emu.warnings`, `emu.shot()` (a Pillow image), `emu.save_shot(path)`.
+`emu.log`, `emu.warnings`, `emu.shot()` (a Pillow image), `emu.save_shot(path)`, `emu.advance(ms)` (moves time
+without bumping `clock:now().revision`; the window uses it).
 
 ## Commands
 
@@ -130,6 +131,8 @@ non-JSON content type.
 - `record`: makes the real request and saves it as a fixture.
 - `live`: real requests, nothing saved.
 
+`live` and `record` do not use the system CA stores or `HTTP(S)_PROXY`.
+
 Fixtures live in `<fixtures dir>/net/` (default `tests/fixtures/<app_id>/net/`, relative to the working directory),
 one `METHOD_host_hash.json` (request key, response status/headers/`body_file`/`delay_ms`) plus a `.body` file.
 POST bodies are matched by SHA-256. A fixture can be written by hand; a malformed one is ignored with a warning.
@@ -151,7 +154,8 @@ included, then seeds `files/` from `<fixtures dir>/files/`.
 ## Supported API
 
 inkemu emulates firmware API 2.33, build 26112001 (`ctx.device.firmware` is `XT Licorice 26112001`, `model`
-`x4_pro`, `name` `book`), as inventoried on a reader. A manifest asking for a higher `api` is refused.
+`x4_pro`, `name` `book`), as inventoried on a reader. A manifest asking for a higher `api` is refused. `Emu(firmware_api=...)` only affects that manifest check and
+`ctx.api`; the API surface is always 2.33.
 
 Callbacks: `on_load`, `on_resume`, `on_draw(ctx, g)`, `on_input(ctx, ev)` (pointer taps, double taps, swipes and
 holds; side-button keys), `on_tick`, `on_leave`. A `lockscreen` block in the manifest runs its own entry file on
@@ -203,7 +207,7 @@ the start with an error. From each file inkemu takes:
 - `package` (`read`, `open_text`, `image`, `exists`, `size`, `cache_stats` = `{}`).
 - `net` (`request`; GET and POST), `dialog` (`confirm`, `toast`), `input` (`text`, `edit`, `keyboard_h` = 436,
   `pointer` = true).
-- `image`, `qr`, `json`, `hex`, `url` (`encode`, `decode`), `zlib`, `random` (`uuid`, `bytes`).
+- `image`, `qr`, `json`, `base64` (`encode`, `decode`), `hex`, `url` (`encode`, `decode`), `zlib`, `random` (`uuid`, `bytes`).
 - `hash`: `sha256`, `md5` and `hmac_sha256` return the raw digest bytes (use `ctx.hex:encode` for text); `crc32`
   returns the CRC as a 32-bit float, so its low bits are rounded away as on the device; `sha1` returns hex.
 - `screen` (`width`, `height`, `orientation`, `set_orientation`, `gray_levels` = 2, `gray_still` = 4),
@@ -220,7 +224,7 @@ offset_minutes revision valid`.
 - Lua is 5.5 with 32-bit integers and 32-bit floats, like the device (`math.maxinteger` is 2147483647,
   `16777217.0 == 16777216.0`).
 - The app sees no `io`, `os`, `debug`, `package`, `load`, `loadstring`, `dofile`, `loadfile`, `collectgarbage` or
-  `print`, as on the device; `require` searches only the app folder.
+  `print`, as on the device; `require` searches only the app folder. Lua 5.5's global `warn` is visible to the app.
 - Not emulated, so nil: `ctx.crypto`, `ctx.nn`, `ctx.ui`, `ctx.widget`, `dialog:choose`, `i18n:t`, `url:query`,
   `input.keys`, `input.listen`, `input.gamepad`, `device.display`, `device.keep_awake`, `device.radios`,
   `screen.occlusion`, and the fields of `perf:info()` (`asset_hit asset_miss cmd_count draw_frame draw_us image_count
@@ -246,10 +250,12 @@ offset_minutes revision valid`.
   - `g:pattern` with a `density` that is not a number (inkemu: the frame fails with "g: bad values in on_draw");
   - the colour threshold in `arc`, `polyline` and `text_box` (the probe tried `rect`, `circle`, `line` and text);
   - `color` outside 0–15: inkemu applies the same threshold (below 8 is white);
-  - `g:clear(color)`, which keeps the 0.1 rule (0 white, any other number black).
+  - `g:clear(color)`, which keeps the 0.1 rule (0 white, any other number black);
+  - the `fill` option of shapes, which uses Python-style truthiness in inkemu (0, `""` and `{}` are false).
 - `g:round_rect`, `g:measure`, `g:measure_text`, `g:fill_pattern` and `g:pattern_rect` are not in the device's `g`
   metatable listing and were not verified by a call; inkemu keeps them (`round_rect` as before; the device's way
   is `g:rect` with `radius`).
+- `g:image` resolves the image when the command is recorded, not at the end of `on_draw`.
 - Layer semantics and error codes are guesses based on the notes.
 - Remote commands (daemon verbs, MCP) freeze the window clock, read-only ones included, so a screenshot is stable;
   `resume`, or `P` in the window, lets time run again.

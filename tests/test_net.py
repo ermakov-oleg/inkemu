@@ -399,6 +399,17 @@ def test_userinfo_password_not_in_log_or_warnings(make_app, emu_factory, server)
     assert not any("hunter2" in ln for ln in emu.log + emu.warnings)
 
 
+def test_record_userinfo_password_and_its_base64_are_never_written(make_app, emu_factory, tmp_path, server):
+    url = server.base.replace("http://", "http://bob:hunter2@") + "/x"
+    emu = emu_factory(app_with(make_app, "{url = '%s'}" % url, "msg = resp.status"), net="record")
+    emu.wait(300)
+    files = [p for p in (tmp_path / "fixtures" / "net").rglob("*") if p.is_file()]
+    assert files
+    for p in files:
+        data = p.read_bytes().decode("latin-1") + p.name
+        assert "hunter2" not in data and "Ym9iOmh1bnRlcjI=" not in data, p.name
+
+
 @pytest.mark.parametrize(
     "bad",
     [

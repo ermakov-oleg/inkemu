@@ -151,7 +151,7 @@ class Emu:
         self._run(self._s.unlock)
 
     def resume(self) -> None:
-        self._s.resume()
+        self._run(self._s.resume)
 
     # ---- screen -----------------------------------------------------------------------------
 
@@ -254,11 +254,6 @@ class Emu:
     @property
     def lock_wakes(self) -> int:
         return self._s.lock_wakes()
-
-    @property
-    def refresh_counts(self) -> dict:
-        request, full = self._s.refresh_counts()
-        return {"request": request, "full": full}
 
     def log_line(self, msg: str) -> None:
         self._s.log_line(msg)

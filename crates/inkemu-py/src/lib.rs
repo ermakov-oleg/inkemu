@@ -272,11 +272,6 @@ impl Session {
         self.with(py, |s| s.core().pending_id())
     }
 
-    /// (requested, full) screen refreshes; always zero since firmware 2.33 dropped `ctx.display`.
-    fn refresh_counts(&self, py: Python<'_>) -> (u32, u32) {
-        self.with(py, |s| s.core().refresh_counts())
-    }
-
     fn lock_wakes(&self, py: Python<'_>) -> u32 {
         self.with(py, |s| s.core().lock_wakes())
     }

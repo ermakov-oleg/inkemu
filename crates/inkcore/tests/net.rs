@@ -193,6 +193,28 @@ fn a_late_answer_fires_at_once_and_a_cancelled_one_never() {
 }
 
 #[test]
+fn an_answer_due_exactly_now_fires_in_the_same_call() {
+    let cfg = Config {
+        net_mode: NetMode::Live,
+        ..Config::default()
+    };
+    let mut core = boot(app("{url = 'http://x.test/a'}", "msg = resp.status"), cfg);
+    let id = core.take_outgoing()[0].id;
+    core.wait(100).unwrap();
+    core.deliver(
+        id,
+        NetResult::Response {
+            status: 200,
+            headers: vec![],
+            body: b"ok".to_vec(),
+            delay_ms: 100,
+        },
+    );
+    assert_eq!(core.net_inflight(), 0);
+    assert_eq!(msg(&mut core), json!(200));
+}
+
+#[test]
 fn replay_matches_the_redacted_url_and_never_logs_the_secret() {
     let cfg = Config {
         secrets: vec![("cal".into(), "private-abc123".into())],
