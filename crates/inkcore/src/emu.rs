@@ -4,6 +4,8 @@ use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use mlua::{Function, IntoLuaMulti, Lua, MultiValue, Table, Value};
+use rand_chacha::rand_core::SeedableRng;
+use rand_chacha::ChaCha20Rng;
 
 use crate::app::{app_id_of, read_manifest, AppFiles};
 use crate::clock::{iso, DateTime, Due, Run, Scheduler, TimerId, VirtualClock};
@@ -76,6 +78,10 @@ pub(crate) struct State {
     pub(crate) locked: bool,
     pub(crate) lock_wakes: u32,
     pub(crate) refresh_counts: (u32, u32),
+    pub(crate) frontlight: i64,
+    pub(crate) full_refresh_deferred: i64,
+    /// For `ctx.random`; lives as long as the core, so uuids never repeat across restarts.
+    pub(crate) rng: ChaCha20Rng,
     pub(crate) persisted: Persisted,
     pub(crate) persist_changed: bool,
 }
@@ -290,30 +296,7 @@ impl Host<'_> {
 
     /// Serialises `ctx.state` into the persisted data (0.1 `save_state`); the lock screen never overwrites it.
     pub fn save_state(&self) {
-        let Some(ctx) = self.ctx() else { return };
-        if with(self.st, |s| s.locked) {
-            return;
-        }
-        let state = ctx.raw_get::<Value>("state").unwrap_or(Value::Nil);
-        let data = match state {
-            Value::Nil => serde_json::json!({}),
-            Value::Table(_) => to_json(&state, 0),
-            other => {
-                let msg = format!(
-                    "ctx.state is a {}, not a table: not saved",
-                    other.type_name()
-                );
-                with(self.st, |s| s.warn(&msg));
-                return;
-            }
-        };
-        let bytes = serde_json::to_vec(&data).unwrap_or_default();
-        with(self.st, |s| {
-            if s.persisted.state_json.as_deref() != Some(bytes.as_slice()) {
-                s.persisted.state_json = Some(bytes);
-                s.persist_changed = true;
-            }
-        });
+        crate::ctx::save_state(self);
     }
 
     pub fn settle(&self) {
@@ -360,6 +343,14 @@ impl Core {
             &cfg.fallback_app_id,
         );
         let clock = VirtualClock::new(cfg.start_local_ms);
+        let rng = match cfg.random_seed {
+            Some(seed) => ChaCha20Rng::seed_from_u64(seed),
+            None => {
+                let mut seed = [0u8; 32];
+                getrandom::fill(&mut seed).expect("no OS entropy for ctx.random");
+                ChaCha20Rng::from_seed(seed)
+            }
+        };
         let st = Rc::new(RefCell::new(State {
             cfg,
             log: Log::default(),
@@ -387,6 +378,9 @@ impl Core {
             locked: false,
             lock_wakes: 0,
             refresh_counts: (0, 0),
+            frontlight: 0,
+            full_refresh_deferred: 0,
+            rng,
             persisted,
             persist_changed: false,
         }));
@@ -475,8 +469,6 @@ impl Core {
         lua::install_require(lua, self.app.clone())?;
         let ctx = crate::ctx::new_ctx(lua, &self.st)?;
         lua.globals().set("ctx", &ctx)?;
-        let saved = with(&self.st, |s| s.persisted.state_json.clone());
-        ctx.set("state", load_state(lua, saved.as_deref())?)?;
         let g = crate::draw::new_g(lua, &self.st)?;
         Ok((ctx, g))
     }
@@ -644,7 +636,11 @@ impl Core {
     pub fn lua_eval(&mut self, code: &str) -> Result<serde_json::Value, String> {
         let f = lua::load_chunk(&self.lua, code.as_bytes(), "=lua_eval")?;
         let r = lua::call_guarded(&self.lua, &f, ())?;
-        Ok(to_json(r.iter().next().unwrap_or(&Value::Nil), 0))
+        let first = r.iter().next().unwrap_or(&Value::Nil);
+        Ok(
+            crate::ctx::convert::lua_to_json(first, "lua_eval", None, &mut |_| {})
+                .unwrap_or(serde_json::Value::Null),
+        )
     }
 
     /// Milliseconds of virtual time since start.
@@ -677,76 +673,6 @@ impl Core {
     /// Changes whenever a new dialog becomes pending.
     pub fn pending_id(&self) -> u64 {
         self.st.borrow().pending_id
-    }
-}
-
-/// `ctx.state` from the saved JSON; an unreadable or non-table file starts empty (0.1 also logs a warning).
-fn load_state(lua: &Lua, saved: Option<&[u8]>) -> mlua::Result<Value> {
-    match saved.and_then(|b| serde_json::from_slice::<serde_json::Value>(b).ok()) {
-        Some(v @ (serde_json::Value::Object(_) | serde_json::Value::Array(_))) => {
-            from_json(lua, &v)
-        }
-        _ => Ok(Value::Table(lua.create_table()?)),
-    }
-}
-
-fn from_json(lua: &Lua, v: &serde_json::Value) -> mlua::Result<Value> {
-    use serde_json::Value as J;
-    Ok(match v {
-        J::Null => Value::Nil,
-        J::Bool(b) => Value::Boolean(*b),
-        J::Number(n) => match n.as_i64().and_then(|i| i32::try_from(i).ok()) {
-            Some(i) => Value::Integer(i),
-            None => Value::Number(n.as_f64().unwrap_or(0.0) as _),
-        },
-        J::String(s) => Value::String(lua.create_string(s)?),
-        J::Array(a) => {
-            let t = lua.create_table()?;
-            for (i, x) in a.iter().enumerate() {
-                t.raw_set(i + 1, from_json(lua, x)?)?;
-            }
-            Value::Table(t)
-        }
-        J::Object(o) => {
-            let t = lua.create_table()?;
-            for (k, x) in o {
-                t.raw_set(k.as_str(), from_json(lua, x)?)?;
-            }
-            Value::Table(t)
-        }
-    })
-}
-
-/// Plain Lua values as JSON for the test helpers; tables become arrays when they have a sequence part.
-fn to_json(v: &Value, depth: u32) -> serde_json::Value {
-    use serde_json::Value as J;
-    match v {
-        Value::Nil => J::Null,
-        Value::Boolean(b) => J::Bool(*b),
-        Value::Integer(i) => J::from(*i),
-        Value::Number(n) => serde_json::Number::from_f64(f64::from(*n)).map_or(J::Null, J::Number),
-        Value::String(s) => J::String(s.to_string_lossy()),
-        Value::Table(t) if depth < 32 => {
-            let n = t.raw_len();
-            if n > 0 {
-                (1..=n)
-                    .map(|i| to_json(&t.raw_get::<Value>(i).unwrap_or(Value::Nil), depth + 1))
-                    .collect()
-            } else {
-                t.pairs::<Value, Value>()
-                    .flatten()
-                    .map(|(k, v)| {
-                        let k = match k {
-                            Value::String(s) => s.to_string_lossy(),
-                            k => k.to_string().unwrap_or_default(),
-                        };
-                        (k, to_json(&v, depth + 1))
-                    })
-                    .collect::<serde_json::Map<_, _>>()
-                    .into()
-            }
-        }
-        other => J::String(other.type_name().to_string()),
     }
 }
 

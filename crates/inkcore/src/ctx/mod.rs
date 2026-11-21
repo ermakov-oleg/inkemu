@@ -1,12 +1,23 @@
 //! The tables the app sees as `ctx` and its members.
+mod basic;
+mod clock;
+pub(crate) mod convert;
+mod device;
+mod fonts;
 pub(crate) mod object;
+mod screen;
+mod stubs;
 mod ui;
+mod utils;
+
+pub(crate) use basic::save_state;
 
 use std::rc::Rc;
 
 use mlua::{IntoLuaMulti, Lua, MultiValue, Table, Value};
 
 use crate::emu::{with, Host, Shared};
+use crate::log::{py_float, widen};
 use object::{method, new_object};
 
 /// The global `ctx` with its own methods; the sub-objects are added by their own modules.
@@ -92,6 +103,13 @@ pub(crate) fn new_ctx(lua: &Lua, st: &Shared) -> mlua::Result<Table> {
             ("quit", quit),
         ],
     )?;
+    basic::install(lua, &ctx, st)?;
+    clock::install(lua, &ctx, st)?;
+    device::install(lua, &ctx, st)?;
+    fonts::install(lua, &ctx)?;
+    utils::install(lua, &ctx, st)?;
+    screen::install(lua, &ctx, st)?;
+    stubs::install(lua, &ctx, st)?;
     ui::install(lua, &ctx, st)?;
     Ok(ctx)
 }
@@ -127,6 +145,15 @@ fn check_arg(f: &str, i: usize, v: &Value, expected: &str) -> mlua::Result<()> {
 
 /// Python `round()` of a Lua number (checked by the caller) to whole milliseconds.
 fn round_ms(v: &Value) -> mlua::Result<i64> {
+    py_integral(v, f64::round_ties_even)
+}
+
+/// Python `int()` of a Lua number (checked by the caller).
+fn py_int(v: &Value) -> mlua::Result<i64> {
+    py_integral(v, f64::trunc)
+}
+
+fn py_integral(v: &Value, f: fn(f64) -> f64) -> mlua::Result<i64> {
     let n = match v {
         Value::Integer(i) => return Ok(i64::from(*i)),
         Value::Number(n) => f64::from(*n),
@@ -140,7 +167,22 @@ fn round_ms(v: &Value) -> mlua::Result<i64> {
             "cannot convert float infinity to integer",
         ));
     }
-    Ok(n.round_ties_even() as i64)
+    Ok(f(n) as i64)
+}
+
+/// A Lua integer when it fits the device's 32 bits, else a float.
+fn int_value(n: i64) -> Value {
+    i32::try_from(n).map_or(Value::Number(n as f32), Value::Integer)
+}
+
+/// What a 0.1 method returning Python `None` gave Lua: one nil.
+fn nil() -> MultiValue {
+    MultiValue::from_vec(vec![Value::Nil])
+}
+
+/// `(nil, reason)`, the device's soft failure.
+fn soft_fail(lua: &Lua, reason: &str) -> mlua::Result<MultiValue> {
+    (Value::Nil, reason).into_lua_multi(lua)
 }
 
 /// 0.1 `_opt_str`: Python `str(opts[key])`, "" for nil.
@@ -162,14 +204,14 @@ fn opt_str(opts: &Table, key: &str) -> mlua::Result<String> {
     })
 }
 
-/// 0.1 `_fmt`: how `ctx:log` prints one value.
+/// 0.1 `_fmt`: how `ctx:log` prints one value. A float prints as Python's `repr` of its shortest f32 digits.
 fn fmt(v: &Value) -> String {
     match v {
         Value::Nil => "nil".into(),
         Value::Boolean(b) => b.to_string(),
         Value::String(s) => s.to_string_lossy(),
         Value::Integer(i) => i.to_string(),
-        Value::Number(n) => n.to_string(),
-        other => other.type_name().to_string(),
+        Value::Number(n) => py_float(widen(*n)),
+        other => type_name(other).to_string(),
     }
 }

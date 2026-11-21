@@ -94,7 +94,7 @@ fn leave_and_reload_hand_out_the_state_to_persist() {
     assert!(core.take_persist().is_none());
     core.leave();
     let saved = core.take_persist().expect("state saved on leave");
-    assert_eq!(saved.state_json.as_deref(), Some(br#"{"n":5}"#.as_slice()));
+    assert_eq!(saved.state_json.as_deref(), Some(br#"{"n": 5}"#.as_slice()));
     assert!(core.take_persist().is_none());
 
     core.set_app(app(

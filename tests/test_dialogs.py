@@ -88,6 +88,12 @@ def test_leave_dialog_is_drawn(make_app, emu_factory):
     assert emu.pending is None and emu.status()["running"]
 
 
+def test_any_table_from_on_input_handles_back(make_app, emu_factory):
+    emu = emu_factory(make_app("function on_input(c, ev) return {} end"))
+    emu.key("back")
+    assert emu.pending is None and emu.status()["running"]
+
+
 def test_daemon_texts_show_the_dialog(make_app, emu_factory):
     emu = emu_factory(make_app(CONFIRM))
     r = daemon.execute(emu, "tap-text", {"text": "taps 0 res none"})

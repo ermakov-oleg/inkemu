@@ -1,13 +1,11 @@
 import json
 
 import pytest
-from conftest import IMPL
 
 DRAW_MSG = "msg = 'none'\nfunction on_draw(c, g) g:clear(0); g:text(0, 0, 'msg ' .. tostring(msg)) end\n"
 
 
 @pytest.mark.allow_errors
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 6")
 def test_dot_call_on_ctx_is_error(make_app, emu_factory):
     emu = emu_factory(make_app("function on_load(c) ctx.clock.now() end"))
     assert "colon" in emu.errors[0] and "index.lua:1:" in emu.errors[0]
@@ -83,7 +81,6 @@ def test_manifest_api_above_firmware_refused(make_app, emu_factory):
     assert emu.status()["running"] is False and not any("ran" in line for line in emu.log)
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 6")
 def test_manifest_api_equal_to_firmware_runs(make_app, emu_factory):
     emu = emu_factory(make_app("ctx:log('ran')", manifest={"api": "2.26"}))
     assert emu.status()["running"] is True and any("ran" in line for line in emu.log)
@@ -253,7 +250,6 @@ def test_sandbox_has_no_io_os(make_app, emu_factory):
     assert emu_factory(app).status()["running"] is True
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 6")
 def test_state_saved_and_restored(make_app, emu_factory, tmp_path):
     app = make_app(
         DRAW_MSG + "function on_load(c)\n  msg = tostring(c.state.n)\n"
@@ -292,7 +288,6 @@ def test_quit_leaves_after_callback(make_app, emu_factory, tmp_path):
     assert json.loads((tmp_path / "state" / "state.json").read_text()) == {"after_quit": 1, "left": 1}
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 6")
 def test_log_and_ctx_values(make_app, emu_factory):
     app = make_app(
         "local t = ctx.clock:now()\n"

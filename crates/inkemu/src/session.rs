@@ -121,6 +121,7 @@ impl Session {
             battery: Battery::default(),
             app_dir_label: app_dir.display().to_string(),
             fallback_app_id: paths::fallback_app_id(&app_dir),
+            state_label: state_dir.join("state.json").display().to_string(),
             instruction_budget: opts
                 .instruction_budget
                 .unwrap_or(inkcore::lua::INSTRUCTION_BUDGET),

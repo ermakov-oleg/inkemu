@@ -4,7 +4,6 @@ use std::rc::Rc;
 use mlua::{Lua, Table, Value};
 
 use crate::dialog::Handler;
-use crate::draw::truthy;
 use crate::emu::{with, Host};
 use crate::log::py_repr_str;
 
@@ -136,7 +135,7 @@ impl Host<'_> {
         let Ok(t) = ev.table(self.lua) else { return };
         let handled = self
             .call("on_input", (self.ctx(), t))
-            .is_some_and(|v| truthy(&v));
+            .is_some_and(|v| crate::lua::truthy(&v));
         let offer = ev.key == Some("back")
             && !handled
             && with(self.st, |s| s.running && s.pending.is_none());

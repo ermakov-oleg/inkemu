@@ -8,7 +8,7 @@ from typing import Any
 
 from PIL import Image
 
-from ._core import Session, parse_duration
+from ._core import INSTRUCTION_BUDGET, Session, parse_duration
 
 
 class Clock:
@@ -34,7 +34,7 @@ def _image(frame: tuple[int, int, bytes]) -> Image.Image:
 class Emu:
     """One emulated InkApp: Lua state, ctx, virtual time, screen and lifecycle."""
 
-    instruction_budget = 200_000_000  # per outermost callback; tests lower it on the class
+    instruction_budget = INSTRUCTION_BUDGET  # per outermost callback; tests lower it on the class
 
     def __init__(
         self,

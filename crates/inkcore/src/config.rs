@@ -52,6 +52,8 @@ pub struct Config {
     pub app_dir_label: String,
     /// The app id when the manifest has none: the letters of the folder name.
     pub fallback_app_id: String,
+    /// `state.json` as the host names it, for the unreadable-state warnings.
+    pub state_label: String,
     pub reader_json: Option<Vec<u8>>,
     /// Recorded network fixtures by file name.
     pub fixtures: BTreeMap<String, Vec<u8>>,
@@ -71,6 +73,7 @@ impl Default for Config {
             battery: Battery::default(),
             app_dir_label: "the app folder".into(),
             fallback_app_id: "app".into(),
+            state_label: "state.json".into(),
             reader_json: None,
             fixtures: BTreeMap::new(),
             instruction_budget: crate::lua::INSTRUCTION_BUDGET,

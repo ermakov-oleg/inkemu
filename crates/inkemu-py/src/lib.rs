@@ -315,6 +315,7 @@ fn parse_duration(s: &str) -> PyResult<i64> {
 #[pymodule]
 fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", inkcore::VERSION)?;
+    m.add("INSTRUCTION_BUDGET", inkcore::lua::INSTRUCTION_BUDGET)?;
     m.add_class::<Session>()?;
     m.add_function(wrap_pyfunction!(parse_duration, m)?)?;
     Ok(())

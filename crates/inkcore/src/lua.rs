@@ -1,5 +1,5 @@
 //! The app's Lua state: sandbox, `require` from the app folder, instruction budget and protected calls.
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use mlua::chunk::ChunkMode;
@@ -65,6 +65,8 @@ struct Budget {
     left: Cell<i64>,
     exhausted: Cell<bool>,
     depth: Cell<u32>,
+    /// Keys of [`first_in_callback`] already asked for in the current outermost callback.
+    once: RefCell<Vec<&'static str>>,
 }
 
 impl Budget {
@@ -115,6 +117,7 @@ pub fn new_lua() -> Lua {
         left: Cell::new(0),
         exhausted: Cell::new(false),
         depth: Cell::new(0),
+        once: RefCell::new(Vec::new()),
     }));
     set_budget(&lua, INSTRUCTION_BUDGET);
     lua
@@ -131,6 +134,22 @@ fn budget(lua: &Lua) -> Rc<Budget> {
     lua.app_data_ref::<Rc<Budget>>()
         .expect("not a Lua state from new_lua")
         .clone()
+}
+
+/// True the first time `key` is asked for during the current outermost callback (for once-per-callback warnings).
+pub fn first_in_callback(lua: &Lua, key: &'static str) -> bool {
+    let b = budget(lua);
+    let mut once = b.once.borrow_mut();
+    let first = !once.contains(&key);
+    if first {
+        once.push(key);
+    }
+    first
+}
+
+/// Lua truthiness: only nil and false are false.
+pub fn truthy(v: &mlua::Value) -> bool {
+    !matches!(v, mlua::Value::Nil | mlua::Value::Boolean(false))
 }
 
 /// Makes `require` load modules from the app folder.
@@ -202,6 +221,7 @@ pub fn call_guarded(
     }
     b.left.set(b.units.get());
     b.exhausted.set(false);
+    b.once.borrow_mut().clear();
     b.depth.set(1);
     // restores the depth and the hook even when a Rust panic unwinds through the Lua call
     let _unwind = Unwind {

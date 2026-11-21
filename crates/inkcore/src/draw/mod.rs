@@ -193,7 +193,7 @@ fn get(o: &Option<Table>, key: &str) -> Value {
 }
 
 /// Python truthiness of the value 0.1 saw: nil, false, 0, "" and {} are false.
-pub(crate) fn truthy(v: &Value) -> bool {
+fn truthy(v: &Value) -> bool {
     match v {
         Value::Nil | Value::Boolean(false) | Value::Integer(0) => false,
         Value::Number(n) => *n != 0.0,

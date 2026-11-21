@@ -1,8 +1,5 @@
 from pathlib import Path
 
-import pytest
-from conftest import IMPL
-
 ROOT = Path(__file__).resolve().parent.parent
 HELLO = ROOT / "examples" / "hello"
 
@@ -21,7 +18,6 @@ def test_hello_state_survives_restart(emu_factory):
     assert emu.has_text("Taps: 1")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 6")
 def test_hello_clock_redraws_after_minute(emu_factory):
     emu = emu_factory(HELLO)
     assert emu.has_text("09:00")
@@ -29,7 +25,6 @@ def test_hello_clock_redraws_after_minute(emu_factory):
     assert emu.has_text("09:01")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 6")
 def test_hello_shows_battery(emu_factory):
     emu = emu_factory(HELLO)
     assert emu.has_text("Battery 87%")
