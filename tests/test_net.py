@@ -467,3 +467,42 @@ def test_truncated_response_is_no_network(make_app, emu_factory, server):
     emu = emu_factory(app_with(make_app, "{url = '%s/short'}" % server.base, "msg = tostring(resp.err)"), net="live")
     emu.wait(300)
     assert emu.has_text("msg no_network")
+
+
+@pytest.mark.allow_errors
+def test_secrets_are_read_again_on_reload_and_restart(make_app, emu_factory, tmp_path):
+    secrets = tmp_path / "secrets.json"
+    secrets.write_text("{}")
+    write_fixture(tmp_path, "pin", {"method": "GET", "url": "http://x.test/{{pin}}"}, {"status": 200})
+    emu = emu_factory(app_with(make_app, "{url = 'http://x.test/abcdef'}", "msg = resp.status"), secrets_file=secrets)
+    emu.wait(300)
+    assert emu.has_text("msg 0")
+    secrets.write_text(json.dumps({"pin": "abcdef"}))
+    emu.reload()
+    emu.wait(300)
+    assert emu.has_text("msg 200")
+    assert any("GET http://x.test/{{pin}} -> 200 (fixture)" in ln for ln in emu.log)
+    secrets.write_text('{"bad name": "x"}')
+    emu.restart()
+    assert any("'bad name'" in w for w in emu.warnings)
+    emu3 = emu_factory(
+        app_with(make_app, "{url = 'http://x.test/a'}", "msg = resp.err"), net="record", secrets_file=secrets
+    )
+    secrets.write_text('{"bad name": "x"}')
+    emu3.reload()
+    emu3.wait(300)
+    assert emu3.has_text("msg secrets_invalid")
+    assert any("recording refused" in e for e in emu3.errors)
+
+
+def test_big_integer_secret_is_redacted_by_its_digits(make_app, emu_factory, tmp_path):
+    secrets = tmp_path / "secrets.json"
+    secrets.write_text('{"pin": 123456789012345678901234}')
+    write_fixture(tmp_path, "pin", {"method": "GET", "url": "http://x.test/{{pin}}"}, {"status": 200})
+    emu = emu_factory(
+        app_with(make_app, "{url = 'http://x.test/123456789012345678901234'}", "msg = resp.status"),
+        secrets_file=secrets,
+    )
+    emu.wait(300)
+    assert emu.has_text("msg 200")
+    assert not any("123456789012345678901234" in ln for ln in emu.log)

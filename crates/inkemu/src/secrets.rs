@@ -1,10 +1,12 @@
 //! The secrets file and `{{name}}` placeholders (0.1 `net._load_secrets`, `Net.expand`,
 //! `Net._warn_unknown_secrets`). Redaction itself lives in `inkcore::fixtures`, which `replay` needs too.
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
 
 use inkcore::log::{py_float, py_repr_str};
+use serde_json::value::RawValue;
 use serde_json::Value as J;
 
 #[derive(Debug, Default, PartialEq)]
@@ -31,6 +33,17 @@ fn os_error_name(kind: ErrorKind) -> &'static str {
     }
 }
 
+/// Python `str()` of a JSON number: an integer keeps all its digits (`-0` is `0`), a float prints as `repr`.
+fn number_text(literal: &str, value: Option<f64>) -> String {
+    if literal.bytes().any(|b| matches!(b, b'.' | b'e' | b'E')) {
+        return py_float(value.unwrap_or(f64::NAN));
+    }
+    if literal.trim_start_matches('-').bytes().all(|b| b == b'0') {
+        return "0".into();
+    }
+    literal.to_string()
+}
+
 /// 0.1 `_load_secrets`: a missing file is no secrets and no problem.
 pub fn load(path: &Path) -> Secrets {
     let f = path
@@ -54,21 +67,18 @@ pub fn load(path: &Path) -> Secrets {
     let Ok(doc) = serde_json::from_str::<J>(&text) else {
         return unreadable("JSONDecodeError");
     };
-    let J::Object(map) = doc else {
+    let J::Object(_) = doc else {
         return Secrets {
             values: Vec::new(),
             problems: vec![format!("{f} must be a JSON object; no secrets are applied")],
         };
     };
+    let map: BTreeMap<String, Box<RawValue>> = serde_json::from_str(&text).unwrap_or_default();
     let mut out = Secrets::default();
-    for (k, v) in map {
-        let v = match v {
-            J::Number(n) => Some(match (n.as_i64(), n.as_u64()) {
-                (Some(i), _) => i.to_string(),
-                (_, Some(u)) => u.to_string(),
-                _ => py_float(n.as_f64().unwrap_or(f64::NAN)),
-            }),
-            J::String(s) => Some(s),
+    for (k, raw) in map {
+        let v = match serde_json::from_str::<J>(raw.get()) {
+            Ok(J::Number(n)) => Some(number_text(raw.get(), n.as_f64())),
+            Ok(J::String(s)) => Some(s),
             _ => None,
         };
         let key = py_repr_str(&k);
@@ -175,6 +185,29 @@ mod tests {
     fn placeholders_expand_and_unknown_ones_stay() {
         let s = vec![("cal".to_string(), "abc".to_string())];
         assert_eq!(expand(b"/{{cal}}/{{x}}/{{{cal}}}", &s), b"/abc/{{x}}/{abc}");
+    }
+
+    #[test]
+    fn numbers_keep_python_str() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("secrets.json");
+        fs::write(
+            &path,
+            r#"{"big": 123456789012345678901234, "neg": -0, "f": 1.5, "i": 987654}"#,
+        )
+        .unwrap();
+        let s = load(&path);
+        assert_eq!(s.problems, Vec::<String>::new());
+        assert_eq!(
+            s.values,
+            [
+                ("big", "123456789012345678901234"),
+                ("f", "1.5"),
+                ("i", "987654"),
+                ("neg", "0")
+            ]
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+        );
     }
 
     #[test]

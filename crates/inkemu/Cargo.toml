@@ -7,7 +7,8 @@ publish.workspace = true
 
 [dependencies]
 inkcore = { path = "../inkcore" }
-serde_json = "1"
+# raw_value: a big integer secret keeps its digits (only this crate; arbitrary_precision would change ctx.json)
+serde_json = { version = "1", features = ["raw_value"] }
 # no gzip: urllib in 0.1 neither asked for nor decoded compressed bodies
 ureq = { version = "2.12", default-features = false, features = ["tls"] }
 

@@ -201,6 +201,14 @@ impl Session {
         }
     }
 
+    /// Leaves and starts the app again with the secrets file read anew.
+    pub fn restart(&mut self) {
+        self.read_secrets();
+        self.core.restart();
+        self.pump_net();
+        self.flush();
+    }
+
     /// Performs the `live`/`record` requests the core queued and hands back their answers; an answer whose
     /// callback queues another request is followed up in the same call.
     pub fn pump_net(&mut self) {
@@ -216,11 +224,20 @@ impl Session {
         }
     }
 
-    /// Re-reads the app folder and the fixtures, then reloads: edited code takes effect.
+    /// Re-reads the secrets file for the core and the shell together, as 0.1 did at every start: a secret added
+    /// after a warning is redacted from the next recording on, and a broken file refuses `record` again.
+    fn read_secrets(&mut self) {
+        let secrets = secrets::load(&self.secrets_file);
+        self.net = self.net.with_secrets(secrets.values.clone());
+        self.core.set_secrets(secrets.values, secrets.problems);
+    }
+
+    /// Re-reads the app folder, the fixtures and the secrets, then reloads: edited code takes effect.
     pub fn reload(&mut self) {
         self.core.set_app(read_app_files(&self.app_dir));
         self.core
             .set_fixtures(read_fixtures(&self.fixtures_dir.join("net")));
+        self.read_secrets();
         self.core.reload();
         self.pump_net();
         self.flush();
@@ -239,7 +256,6 @@ impl Session {
         fn answer(&mut self, ok: bool) -> Result<(), String>;
         fn wait(&mut self, ms: i64) -> Result<(), String>;
         fn leave(&mut self);
-        fn restart(&mut self);
         fn lock(&mut self) -> Result<(), String>;
         fn unlock(&mut self) -> Result<(), String>;
         fn resume(&mut self);

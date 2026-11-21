@@ -76,6 +76,11 @@ impl Net {
         }
     }
 
+    /// The same mode and folder with other secrets.
+    pub fn with_secrets(&self, secrets: Vec<(String, String)>) -> Net {
+        Net::new(self.mode, secrets, self.dir.clone())
+    }
+
     /// Performs one outgoing request: warnings and log lines go to `core`, the answer is returned for
     /// `Core::deliver`.
     pub fn perform(&self, core: &mut Core, r: &OutRequest) -> NetResult {

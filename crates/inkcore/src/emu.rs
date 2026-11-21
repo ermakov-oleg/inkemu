@@ -562,6 +562,16 @@ impl Core {
         self.st.borrow().net.inflight
     }
 
+    /// Replaces the secrets (as `Config.secrets` and `Config.secret_problems`); the next start warns about the
+    /// problems, and the redaction applies to every request from now on.
+    pub fn set_secrets(&mut self, secrets: Vec<(String, String)>, problems: Vec<String>) {
+        with(&self.st, |s| {
+            s.net.redactor = Rc::new(Redactor::new(&secrets));
+            s.cfg.secrets = secrets;
+            s.cfg.secret_problems = problems;
+        });
+    }
+
     /// Replaces the `<fixtures>/net/` files `replay` answers from.
     pub fn set_fixtures(&mut self, files: std::collections::BTreeMap<String, Vec<u8>>) {
         with(&self.st, |s| {

@@ -215,3 +215,32 @@ fn replay_matches_the_redacted_url_and_never_logs_the_secret() {
     assert_eq!(msg(&mut core), "200:cal");
     assert!(!core.log().iter().any(|l| l.contains("abc123")));
 }
+
+#[test]
+fn new_secrets_apply_from_the_next_start() {
+    let cfg = with_fixtures(&[(
+        "pin.json",
+        fixture(
+            json!({"method": "GET", "url": "http://x.test/{{pin}}"}),
+            json!({"status": 200, "body": "ok"}),
+        ),
+    )]);
+    let mut core = boot(app("{url = 'http://x.test/abcdef'}", STATUS_BODY), cfg);
+    core.wait(300).unwrap();
+    assert_eq!(msg(&mut core), "0:nil");
+    core.set_secrets(
+        vec![("pin".into(), "abcdef".into())],
+        vec!["secrets.json: key 'bad name' is not a valid name".into()],
+    );
+    core.restart();
+    core.wait(300).unwrap();
+    assert_eq!(msg(&mut core), "200:ok");
+    assert!(core
+        .warnings()
+        .iter()
+        .any(|w| w == "net: secrets.json: key 'bad name' is not a valid name"));
+    assert!(core
+        .log()
+        .iter()
+        .any(|l| l.ends_with("net: GET http://x.test/{{pin}} -> 200 (fixture)")));
+}
