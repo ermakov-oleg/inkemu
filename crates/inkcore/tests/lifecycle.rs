@@ -107,3 +107,27 @@ fn leave_and_reload_hand_out_the_state_to_persist() {
         serde_json::json!(6)
     );
 }
+
+#[test]
+fn instruction_budget_survives_a_reload() {
+    let cfg = Config {
+        instruction_budget: 1_000_000,
+        ..Config::default()
+    };
+    let mut core = Core::new(
+        app("function on_load(c) while true do end end\n", "2.2"),
+        cfg,
+        Persisted::default(),
+    );
+    core.reload();
+    let errors = core.errors().to_vec();
+    assert_eq!(errors.len(), 2, "{errors:?}");
+    for e in &errors {
+        assert!(
+            e.contains(
+                "index.lua:1: callback exceeded the instruction budget (1000000 instructions)"
+            ),
+            "{e}"
+        );
+    }
+}

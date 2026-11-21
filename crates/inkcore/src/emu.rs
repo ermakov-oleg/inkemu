@@ -8,6 +8,7 @@ use mlua::{Function, IntoLuaMulti, Lua, MultiValue, Table, Value};
 use crate::app::{app_id_of, read_manifest, AppFiles};
 use crate::clock::{iso, DateTime, Due, Run, Scheduler, TimerId, VirtualClock};
 use crate::config::{Config, Persisted};
+use crate::dialog::Handler;
 use crate::draw::plates::{self, Overlays, Plate};
 use crate::draw::{Canvas, Frame, TextItem};
 use crate::log::{py_repr, Log};
@@ -15,7 +16,7 @@ use crate::lua;
 
 pub const ERROR_TITLE: &str = "App error, closed";
 const INSTALL_FAILED: &str = "Install failed";
-/// What the not-yet-ported input and lock methods return; the Python binding maps it to NotImplementedError.
+/// What the not-yet-ported lock methods return; the Python binding maps it to NotImplementedError.
 pub const NOT_YET: &str = "not implemented yet";
 
 /// A dialog waiting for the user.
@@ -61,7 +62,13 @@ pub(crate) struct State {
     pub(crate) depth: u32,
     pub(crate) overlay: Option<(String, String)>,
     pub(crate) pending: Option<Pending>,
+    /// What answering or typing into `pending` does; set and cleared with it.
+    pub(crate) pending_h: Option<Handler>,
     pub(crate) pending_id: u64,
+    pub(crate) tick: Option<TimerId>,
+    /// Pointer down position and clock ms, until the matching up.
+    pub(crate) down: Option<(i32, i32, i64)>,
+    pub(crate) hold_sent: bool,
     /// Text and the clock ms it stays up to.
     pub(crate) toast: Option<(String, i64)>,
     pub(crate) canvas: Canvas,
@@ -86,11 +93,36 @@ impl State {
 
     pub(crate) fn stop(&mut self) {
         self.running = false;
-        self.pending = None;
+        self.clear_pending();
         self.invalid = false;
         for t in std::mem::take(&mut self.timers) {
             self.sched.cancel(t);
         }
+        self.tick = None;
+    }
+
+    pub(crate) fn clear_pending(&mut self) {
+        self.pending = None;
+        self.pending_h = None;
+    }
+
+    /// An app timer: cancelled when the app stops.
+    pub(crate) fn add_timer(&mut self, delay_ms: i64, f: TimerFn, period_ms: i64) -> TimerId {
+        let id = self.sched.add(delay_ms, f, period_ms);
+        self.timers.insert(id);
+        id
+    }
+
+    pub(crate) fn cancel_timer(&mut self, id: TimerId) {
+        self.sched.cancel(id);
+        self.timers.remove(&id);
+    }
+
+    /// The app's text items, then the plates' (error overlay, dialog, toast).
+    pub(crate) fn texts(&self) -> Vec<TextItem> {
+        let mut out = self.canvas.texts();
+        out.extend(self.plates(true).into_iter().flat_map(|p| p.items));
+        out
     }
 
     pub(crate) fn fail(&mut self, message: &str, title: &str) {
@@ -176,8 +208,63 @@ impl Host<'_> {
         self.protected(&f, args, name)?.into_iter().next()
     }
 
-    fn ctx(&self) -> Option<Table> {
+    /// Like [`Host::protected`] for a value the app gave as a callback; calling a non-function fails the app.
+    pub fn protected_value(
+        &self,
+        f: &Value,
+        args: impl IntoLuaMulti,
+        where_: &str,
+    ) -> Option<MultiValue> {
+        match f {
+            Value::Function(f) => self.protected(f, args, where_),
+            other => {
+                let ty = match other {
+                    Value::Integer(_) | Value::Number(_) => "number",
+                    v => v.type_name(),
+                };
+                with(self.st, |s| {
+                    if s.running {
+                        let msg = format!("Lua error in {where_}: attempt to call a {ty} value");
+                        s.fail(&msg, ERROR_TITLE);
+                    }
+                });
+                None
+            }
+        }
+    }
+
+    pub fn ctx(&self) -> Option<Table> {
         with(self.st, |s| s.ctx.clone())
+    }
+
+    /// Runs virtual time forward, firing due timers and redrawing as needed. Safe to nest: each run keeps its
+    /// own per-instant counter.
+    pub fn wait(&self, ms: i64) -> Result<(), String> {
+        if ms < 0 {
+            return Err("wait() needs a non-negative duration".into());
+        }
+        let target = with(self.st, |s| s.sched.clock.ms.saturating_add(ms));
+        let mut run = Run::default();
+        while let Some(due) = with(self.st, |s| s.sched.pop_due(target, &mut run)) {
+            match due {
+                Due::Overflow(msg) => with(self.st, |s| s.fail(&msg, ERROR_TITLE)),
+                Due::Fire {
+                    id,
+                    payload,
+                    periodic,
+                } => {
+                    if !periodic {
+                        with(self.st, |s| s.timers.remove(&id));
+                    }
+                    payload(self);
+                    self.settle();
+                    with(self.st, |s| s.sched.rearm(id));
+                }
+            }
+        }
+        with(self.st, |s| s.sched.advance_to(target));
+        self.settle();
+        Ok(())
     }
 
     pub fn leave(&self) {
@@ -289,7 +376,11 @@ impl Core {
             depth: 0,
             overlay: None,
             pending: None,
+            pending_h: None,
             pending_id: 0,
+            tick: None,
+            down: None,
+            hold_sent: false,
             toast: None,
             canvas: Canvas::new(480, 800),
             frame_commands: 0,
@@ -316,10 +407,14 @@ impl Core {
     }
 
     fn boot(&mut self) {
-        let (fw, label) = with(&self.st, |s| {
+        let (fw, label, budget) = with(&self.st, |s| {
             s.stop();
             (s.overlay, s.ctx, s.g, s.quit, s.toast) = (None, None, None, false, None);
-            (s.cfg.firmware_api, s.cfg.app_dir_label.clone())
+            (
+                s.cfg.firmware_api,
+                s.cfg.app_dir_label.clone(),
+                s.cfg.instruction_budget,
+            )
         });
         let (manifest, problem) = read_manifest(&self.app, fw, &label);
         let landscape = manifest
@@ -327,6 +422,7 @@ impl Core {
             .and_then(|d| d.get("orientation"))
             .is_some_and(|o| o == "landscape");
         self.lua = lua::new_lua();
+        lua::set_budget(&self.lua, budget);
         with(&self.st, |s| {
             s.canvas = if landscape {
                 Canvas::new(800, 480)
@@ -387,75 +483,55 @@ impl Core {
 
     // ---- input --------------------------------------------------------------------------------
 
-    pub fn pointer(&mut self, _phase: &str, _x: i32, _y: i32) -> Result<(), String> {
-        Err(NOT_YET.into())
+    /// Low-level pointer event; `up` classifies the gesture and advances 350 ms.
+    pub fn pointer(&mut self, phase: &str, x: i32, y: i32) -> Result<(), String> {
+        self.host().pointer(phase, x, y)
     }
 
-    pub fn tap(&mut self, _x: i32, _y: i32) -> Result<(), String> {
-        Err(NOT_YET.into())
+    pub fn tap(&mut self, x: i32, y: i32) -> Result<(), String> {
+        self.host().tap(x, y)
     }
 
-    pub fn double_tap(&mut self, _x: i32, _y: i32) -> Result<(), String> {
-        Err(NOT_YET.into())
+    pub fn double_tap(&mut self, x: i32, y: i32) -> Result<(), String> {
+        self.host().double_tap(x, y)
     }
 
-    pub fn hold(&mut self, _x: i32, _y: i32, _ms: i64) -> Result<(), String> {
-        Err(NOT_YET.into())
+    pub fn hold(&mut self, x: i32, y: i32, ms: i64) -> Result<(), String> {
+        self.host().hold(x, y, ms)
     }
 
-    pub fn drag(&mut self, _points: &[(i32, i32)], _duration_ms: i64) -> Result<(), String> {
-        Err(NOT_YET.into())
+    pub fn drag(&mut self, points: &[(i32, i32)], duration_ms: i64) -> Result<(), String> {
+        self.host().drag(points, duration_ms)
     }
 
-    pub fn swipe(&mut self, _dir: &str, _at: (i32, i32), _distance: i32) -> Result<(), String> {
-        Err(NOT_YET.into())
+    pub fn swipe(&mut self, dir: &str, at: (i32, i32), distance: i32) -> Result<(), String> {
+        self.host().swipe(dir, at, distance)
     }
 
-    pub fn tap_text(&mut self, _text: &str) -> Result<(), String> {
-        Err(NOT_YET.into())
+    /// Taps the last drawn text equal to `text`, else the last containing it.
+    pub fn tap_text(&mut self, text: &str) -> Result<(), String> {
+        self.host().tap_text(text)
     }
 
-    pub fn key(&mut self, _name: &str) -> Result<(), String> {
-        Err(NOT_YET.into())
+    pub fn key(&mut self, name: &str) -> Result<(), String> {
+        self.host().key(name)
     }
 
-    pub fn type_text(&mut self, _text: &str) -> Result<(), String> {
-        Err(NOT_YET.into())
+    /// Answers a pending `input:text` with OK, or types into a pending `input:edit` and presses enter.
+    pub fn type_text(&mut self, text: &str) -> Result<(), String> {
+        self.host().type_text(text)
     }
 
-    pub fn answer(&mut self, _ok: bool) -> Result<(), String> {
-        Err(NOT_YET.into())
+    /// Answers the pending dialog: confirm yes/no, leave yes/no, text OK/cancel.
+    pub fn answer(&mut self, ok: bool) -> Result<(), String> {
+        self.host().answer(ok)
     }
 
     // ---- time and lifecycle --------------------------------------------------------------------
 
     /// Runs virtual time forward, firing due timers and redrawing as needed.
     pub fn wait(&mut self, ms: i64) -> Result<(), String> {
-        if ms < 0 {
-            return Err("wait() needs a non-negative duration".into());
-        }
-        let target = with(&self.st, |s| s.sched.clock.ms + ms);
-        let mut run = Run::default();
-        while let Some(due) = with(&self.st, |s| s.sched.pop_due(target, &mut run)) {
-            match due {
-                Due::Overflow(msg) => with(&self.st, |s| s.fail(&msg, ERROR_TITLE)),
-                Due::Fire {
-                    id,
-                    payload,
-                    periodic,
-                } => {
-                    if !periodic {
-                        with(&self.st, |s| s.timers.remove(&id));
-                    }
-                    payload(&self.host());
-                    self.host().settle();
-                    with(&self.st, |s| s.sched.rearm(id));
-                }
-            }
-        }
-        with(&self.st, |s| s.sched.advance_to(target));
-        self.host().settle();
-        Ok(())
+        self.host().wait(ms)
     }
 
     pub fn leave(&mut self) {
@@ -479,9 +555,13 @@ impl Core {
         self.app = Rc::new(app);
     }
 
-    pub fn lock(&mut self) {}
+    pub fn lock(&mut self) -> Result<(), String> {
+        Err(NOT_YET.into())
+    }
 
-    pub fn unlock(&mut self) {}
+    pub fn unlock(&mut self) -> Result<(), String> {
+        Err(NOT_YET.into())
+    }
 
     pub fn resume(&mut self) {
         with(&self.st, |s| s.paused = false);
@@ -511,10 +591,7 @@ impl Core {
 
     /// The app's text items, then the plates' (error overlay, dialog, toast).
     pub fn texts(&self) -> Vec<TextItem> {
-        let s = self.st.borrow();
-        let mut out = s.canvas.texts();
-        out.extend(s.plates(true).into_iter().flat_map(|p| p.items));
-        out
+        self.st.borrow().texts()
     }
 
     /// The screen with the error, toast and (if `dialog`) dialog plates.
@@ -670,5 +747,55 @@ fn to_json(v: &Value, depth: u32) -> serde_json::Value {
             }
         }
         other => J::String(other.type_name().to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 0.1's host could call `wait()` from its `on_pending` hook while the app callback that opened the dialog was
+    /// still running; the Rust API cannot, so a test-only global stands in for that host.
+    #[test]
+    fn timer_error_in_a_wait_nested_inside_a_callback() {
+        let manifest = br#"{"app_id": "testapp", "entry": "index.lua", "api": "2.2"}"#;
+        let index = b"msg = 'none'\n\
+            function on_load(c)\n\
+              c:after(100, function() error('late') end)\n\
+              c:after(300, function() msg = 'second' end)\n\
+            end\n\
+            function on_input(c, ev)\n\
+              if ev.phase == 'up' then c.dialog:confirm({title = 'Sure?'}, function() end) host_wait(500) after = 'resumed' end\n\
+              return true\n\
+            end\n\
+            function on_draw(c, g) g:text(0, 0, 'msg ' .. msg) end\n";
+        let files = AppFiles(
+            [
+                ("manifest.json".to_string(), manifest.to_vec()),
+                ("index.lua".to_string(), index.to_vec()),
+            ]
+            .into(),
+        );
+        let mut core = Core::new(files, Config::default(), Persisted::default());
+        let st = core.st.clone();
+        let host_wait = core
+            .lua
+            .create_function(move |lua, ms: i64| {
+                Host { lua, st: &st }.wait(ms).map_err(mlua::Error::runtime)
+            })
+            .unwrap();
+        core.lua.globals().set("host_wait", host_wait).unwrap();
+        core.key("ok").unwrap();
+        let errors = core.errors().to_vec();
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert!(
+            errors[0].starts_with("Lua error in ctx:after callback: index.lua:3: late"),
+            "{errors:?}"
+        );
+        let st = core.status();
+        assert!(!st.running && st.pending.is_none());
+        assert_eq!(core.lua_eval("return after").unwrap(), "resumed");
+        assert_eq!(core.lua_eval("return msg").unwrap(), "none");
+        assert_eq!(core.clock_ms(), 500 + 350);
     }
 }

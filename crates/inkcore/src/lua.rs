@@ -354,6 +354,67 @@ mod tests {
     }
 
     #[test]
+    fn no_coroutine_carries_the_exhausted_hook_into_the_next_call() {
+        let lua = new_lua();
+        set_budget(&lua, 1_000_000);
+        let run = |code: &str| {
+            let f = load_chunk(&lua, code.as_bytes(), "@index.lua").unwrap();
+            call_guarded(&lua, &f, ())
+        };
+        // 600 000 instructions per resume: an every-instruction hook would count them 10 000 times over
+        let spin = "for i = 1, 300000 do end";
+        run(&format!(
+            "kept = coroutine.wrap(function() while true do {spin} coroutine.yield() end end) kept()"
+        ))
+        .unwrap();
+        // a coroutine trips the budget itself and swallows the abort; it cannot survive that
+        let err = run(&format!(
+            "tripped = coroutine.create(function() while true do pcall(function() {LOOP} end) coroutine.yield() end end) \
+             coroutine.resume(tripped)"
+        ))
+        .unwrap_err();
+        assert!(
+            err.contains("callback exceeded the instruction budget"),
+            "{err}"
+        );
+        // the main thread itself switched to the every-instruction hook
+        run(LOOP).unwrap_err();
+        for _ in 0..3 {
+            run("kept()").unwrap();
+            let dead = run("return coroutine.status(tripped)").unwrap();
+            assert_eq!(
+                dead.into_iter().next().unwrap().to_string().unwrap(),
+                "dead"
+            );
+        }
+    }
+
+    #[test]
+    fn exhaustion_in_a_host_function_calling_back_into_lua_still_aborts() {
+        // a Rust method that calls a Lua callback flattens its error to text; the exhausted budget must survive that
+        let lua = new_lua();
+        set_budget(&lua, 1_000_000);
+        let host = lua
+            .create_function(|lua, f: Function| {
+                let r = call_guarded(lua, &f, ());
+                Ok(r.err())
+            })
+            .unwrap();
+        lua.globals().set("host", host).unwrap();
+        for code in [
+            format!("pcall(host, function() {LOOP} end) return 'swallowed'"),
+            format!("host(function() {LOOP} end) for i = 1, 10 do end return 'continued'"),
+        ] {
+            let f = load_chunk(&lua, code.as_bytes(), "@index.lua").unwrap();
+            let err = call_guarded(&lua, &f, ()).unwrap_err();
+            assert!(
+                err.contains("callback exceeded the instruction budget"),
+                "{code}: {err}"
+            );
+        }
+    }
+
+    #[test]
     fn budget_resets_per_call() {
         let lua = new_lua();
         set_budget(&lua, 1_000_000);

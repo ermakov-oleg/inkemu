@@ -164,7 +164,7 @@ impl<T: Clone> Scheduler<T> {
     pub fn add(&mut self, delay_ms: i64, payload: T, period_ms: i64) -> TimerId {
         self.seq += 1;
         let id = self.seq;
-        let due = self.clock.ms + delay_ms.max(0);
+        let due = self.clock.ms.saturating_add(delay_ms.max(0));
         self.timers.insert(
             id,
             Entry {
@@ -234,7 +234,7 @@ impl<T: Clone> Scheduler<T> {
     /// Re-queues a fired periodic timer unless it was cancelled meanwhile; a no-op for one-shot timers.
     pub fn rearm(&mut self, id: TimerId) {
         if let Some(e) = self.timers.get_mut(&id.0) {
-            e.due += e.period_ms;
+            e.due = e.due.saturating_add(e.period_ms);
             let due = e.due;
             self.push(id.0, due);
         }

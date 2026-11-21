@@ -16,7 +16,7 @@ from . import net as net_mod
 from .clock import Scheduler, Timer, VirtualClock, parse_duration
 from .draw import Canvas
 from .fonts import Fonts
-from .lua_env import load_chunk, make_object, new_runtime, protected_call
+from .lua_env import INSTRUCTION_BUDGET, load_chunk, make_object, new_runtime, protected_call
 from .paths import app_id_of, state_root
 
 NET_MODES = ("replay", "record", "live")
@@ -64,6 +64,8 @@ def _classify(dx: int, dy: int, held_ms: int) -> str | None:
 
 class Emu:
     """One emulated InkApp: Lua state, ctx, virtual time, screen and lifecycle."""
+
+    instruction_budget = INSTRUCTION_BUDGET  # per outermost callback; tests lower it on the class
 
     def __init__(
         self,
@@ -384,7 +386,7 @@ class Emu:
             self._lock_ctx = None
         self.manifest, problem = self._read_manifest()
         landscape = (self.manifest.get("display") or {}).get("orientation") == "landscape"
-        self.L = new_runtime()
+        self.L = new_runtime(self.instruction_budget)
         # a timer wake keeps showing the previous frame until the new state draws (e-ink keeps its image)
         self._canvas_stale = bool(lock and self._lock_ctx["reason"] == "timer" and self.canvas is not None)
         if not self._canvas_stale:

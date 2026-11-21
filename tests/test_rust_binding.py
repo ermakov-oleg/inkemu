@@ -33,4 +33,4 @@ def test_log_line_is_stamped(emu):
 
 def test_not_yet_implemented_method_raises(emu):
     with pytest.raises(NotImplementedError):
-        emu.tap(1, 1)
+        emu.lock()

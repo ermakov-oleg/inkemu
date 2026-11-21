@@ -2,8 +2,10 @@ pub mod app;
 pub mod clock;
 pub mod config;
 pub(crate) mod ctx;
+mod dialog;
 pub mod draw;
 mod emu;
+pub mod input;
 pub mod log;
 pub mod lua;
 

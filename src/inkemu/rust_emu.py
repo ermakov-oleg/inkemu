@@ -34,6 +34,8 @@ def _image(frame: tuple[int, int, bytes]) -> Image.Image:
 class Emu:
     """One emulated InkApp: Lua state, ctx, virtual time, screen and lifecycle."""
 
+    instruction_budget = 200_000_000  # per outermost callback; tests lower it on the class
+
     def __init__(
         self,
         app_dir: str | Path,
@@ -59,6 +61,7 @@ class Emu:
             secrets_file=Path(secrets_file) if secrets_file else None,
             seed_files=seed_files,
             random_seed=None if random_seed is None else str(random_seed),
+            instruction_budget=self.instruction_budget,
         )
         self.net_mode = net
         self.firmware_api = tuple(firmware_api)

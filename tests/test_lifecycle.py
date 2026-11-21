@@ -21,7 +21,6 @@ def test_dot_call_on_ctx_level_method_is_error(make_app, emu_factory):
 
 
 @pytest.mark.allow_errors
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_lua_error_is_captured(make_app, emu_factory):
     app = make_app(
         "local function boom() error('kaput') end\n"
@@ -31,7 +30,7 @@ def test_lua_error_is_captured(make_app, emu_factory):
     assert "index.lua:1: kaput" in emu.errors[0] and "stack traceback" in emu.errors[0]
     assert "index.lua:2: in function 'on_draw'" in emu.errors[0] and "<python>" not in emu.errors[0]
     assert emu.has_text("App error")
-    assert emu.shot().tobytes() != emu.canvas.render().tobytes()
+    assert emu.shot().tobytes() != emu.raw_frame().tobytes()
     emu.tap(10, 10)
     emu.key("back")
     emu.wait("1s")
@@ -39,7 +38,6 @@ def test_lua_error_is_captured(make_app, emu_factory):
 
 
 @pytest.mark.allow_errors
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_timer_error_stops_app_and_cancels_timers(make_app, emu_factory):
     app = make_app(
         DRAW_MSG + "function on_load(c)\n  c:after(100, function() error('late') end)\n"
@@ -52,13 +50,11 @@ def test_timer_error_stops_app_and_cancels_timers(make_app, emu_factory):
 
 
 @pytest.mark.allow_errors
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_python_side_error_has_lua_position(make_app, emu_factory):
     emu = emu_factory(make_app("function on_load(c)\n  c:after('soon', function() end)\nend"))
     assert "index.lua:2:" in emu.errors[0] and "after" in emu.errors[0]
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_app_pcall_sees_string_error(make_app, emu_factory):
     app = make_app(DRAW_MSG + "local ok, e = pcall(function() ctx:after('x') end)\nmsg = type(e)\n")
     assert emu_factory(app).has_text("msg string")
@@ -136,7 +132,6 @@ def test_landscape_manifest_canvas(make_app, emu_factory):
     assert emu.status()["screen"] == [800, 480]
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_set_tick_calls_on_tick(make_app, emu_factory):
     app = make_app(
         DRAW_MSG + "n = 0\nfunction on_load(c) c:set_tick(100) end\n"
@@ -149,7 +144,6 @@ def test_set_tick_calls_on_tick(make_app, emu_factory):
     assert emu.texts()[0]["text"] == "msg 15"
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_set_tick_zero_stops(make_app, emu_factory):
     app = make_app(
         DRAW_MSG + "n = 0\nfunction on_load(c) c:set_tick(100) end\n"
@@ -168,7 +162,6 @@ def test_bad_draw_values_fail_the_app_not_the_host(make_app, emu_factory, draw):
     assert emu.errors and emu.status()["running"] is False and emu.has_text("App error")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_reload_saves_state_of_running_app(make_app, emu_factory):
     app = make_app(DRAW_MSG + "msg = tostring(ctx.state.n)\nfunction on_input(c) c.state.n = 42; return true end\n")
     emu = emu_factory(app)
@@ -177,7 +170,6 @@ def test_reload_saves_state_of_running_app(make_app, emu_factory):
     assert emu.has_text("msg 42")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_after_cancel(make_app, emu_factory):
     app = make_app(
         DRAW_MSG + "function on_load(c)\n  local h = c:after(500, function() msg = 'fired'; c:invalidate() end)\n"
@@ -188,7 +180,6 @@ def test_after_cancel(make_app, emu_factory):
     assert emu.has_text("msg none")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_after_fires_with_ctx_in_virtual_time(make_app, emu_factory):
     app = make_app(
         DRAW_MSG
@@ -201,7 +192,6 @@ def test_after_fires_with_ctx_in_virtual_time(make_app, emu_factory):
     assert emu.has_text("msg true")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_back_false_offers_leave(make_app, emu_factory):
     emu = emu_factory(make_app("function on_input(c, ev) return false end"))
     assert emu.status()["pending"] is None
@@ -209,14 +199,12 @@ def test_back_false_offers_leave(make_app, emu_factory):
     assert emu.status()["pending"]["kind"] == "leave" and emu.status()["running"] is True
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_back_handled_does_not_offer_leave(make_app, emu_factory):
     emu = emu_factory(make_app("function on_input(c, ev) return true end"))
     emu.key("back")
     assert emu.status()["pending"] is None
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_events_reach_on_input(make_app, emu_factory):
     app = make_app(
         DRAW_MSG + "seen = {}\nfunction on_input(c, ev)\n"
@@ -229,7 +217,6 @@ def test_events_reach_on_input(make_app, emu_factory):
     assert emu.has_text("msg pointer:down:nil,pointer:up:tap,key:down:up,key:up:up")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_input_advances_time(make_app, emu_factory):
     emu = emu_factory(make_app(""))
     emu.tap(1, 1)
@@ -294,7 +281,6 @@ def test_fresh_starts_empty(make_app, emu_factory, tmp_path):
     assert emu.has_text("msg nil")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_quit_leaves_after_callback(make_app, emu_factory, tmp_path):
     app = make_app(
         "function on_input(c, ev) c:quit(); c.state.after_quit = 1; return true end\n"
@@ -340,7 +326,6 @@ def test_save_shot_writes_png(make_app, emu_factory, tmp_path):
 
 
 @pytest.mark.allow_errors
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_zero_delay_rearm_does_not_hang_wait(emu_factory, make_app):
     app = make_app("function on_load(c) c:after(0, function() end) local f; f = function() c:after(0, f) end; f() end")
     emu = emu_factory(app)

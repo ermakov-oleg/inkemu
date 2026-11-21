@@ -98,7 +98,6 @@ def test_client_without_daemon_is_exit_2(tmp_path, monkeypatch, capsys):
     assert main(["tap", "1"]) == 2
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_client_verbs_against_daemon(tmp_path, monkeypatch, capsys, emu_factory):
     import threading
     import time

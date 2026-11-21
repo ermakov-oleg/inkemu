@@ -117,17 +117,18 @@ def _no_attributes(obj, name, is_setting):
     raise AttributeError(f"access to Python attribute {name!r} is not allowed")
 
 
-def new_runtime() -> Runtime:
+def new_runtime(budget: int = INSTRUCTION_BUDGET) -> Runtime:
     L = Runtime(
         unpack_returned_tuples=True, register_eval=False, register_builtins=False, attribute_filter=_no_attributes
     )
     L._method, L._register, L._xpcall, L._load, L._rawget = L.execute(_SANDBOX, HOOK_STEP)
+    L._budget = budget
     return L
 
 
 def protected_call(L: Runtime, fn, *args) -> tuple[bool, tuple]:
     """Call a Lua function like xpcall: (True, results) or (False, (message_with_traceback,))."""
-    r = L._xpcall(max(INSTRUCTION_BUDGET // HOOK_STEP, 1), fn, *args)
+    r = L._xpcall(max(L._budget // HOOK_STEP, 1), fn, *args)
     if not isinstance(r, tuple):
         r = (r,)
     if r[0]:

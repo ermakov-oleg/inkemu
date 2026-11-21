@@ -25,6 +25,8 @@ pub struct SessionOptions {
     /// None: seed when `fresh`.
     pub seed_files: Option<bool>,
     pub random_seed: Option<String>,
+    /// Lua instructions one callback may run; None: the default.
+    pub instruction_budget: Option<i64>,
 }
 
 impl Default for SessionOptions {
@@ -39,6 +41,7 @@ impl Default for SessionOptions {
             secrets_file: None,
             seed_files: None,
             random_seed: None,
+            instruction_budget: None,
         }
     }
 }
@@ -118,6 +121,9 @@ impl Session {
             battery: Battery::default(),
             app_dir_label: app_dir.display().to_string(),
             fallback_app_id: paths::fallback_app_id(&app_dir),
+            instruction_budget: opts
+                .instruction_budget
+                .unwrap_or(inkcore::lua::INSTRUCTION_BUDGET),
             ..Config::default()
         };
         let on_disk = state_disk::load(&state_dir);
@@ -197,8 +203,8 @@ impl Session {
         fn wait(&mut self, ms: i64) -> Result<(), String>;
         fn leave(&mut self);
         fn restart(&mut self);
-        fn lock(&mut self);
-        fn unlock(&mut self);
+        fn lock(&mut self) -> Result<(), String>;
+        fn unlock(&mut self) -> Result<(), String>;
         fn resume(&mut self);
         fn set_paused(&mut self, paused: bool);
         fn set_locale(&mut self, locale: &str);

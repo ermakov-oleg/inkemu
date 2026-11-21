@@ -19,7 +19,6 @@ def black(img: Image.Image, x: int, y: int) -> bool:
     return img.getpixel((x, y)) == 0
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_input_text_ok(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -33,7 +32,6 @@ def test_input_text_ok(make_app, emu_factory):
     assert emu.has_text("got Bob")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_input_text_cancel_does_not_call_back(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -45,7 +43,6 @@ def test_input_text_cancel_does_not_call_back(make_app, emu_factory):
     assert emu.pending is None and emu.has_text("none")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_input_edit_feeds_chars(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -63,7 +60,6 @@ def test_input_edit_feeds_chars(make_app, emu_factory):
     assert emu.has_text("a,ab,abc abc:enter")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_input_edit_object(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -74,13 +70,12 @@ def test_input_edit_object(make_app, emu_factory):
         )
     )
     assert emu.pending["text"] == "hello" and emu.has_text("hello")
-    emu._call("on_load", emu._ctx)  # a second edit replaces the first
+    emu.lua_exec("on_load(ctx)")  # a second edit replaces the first
     assert emu.pending["kind"] == "edit"
-    emu.L.execute("ed:close()")
+    emu.lua_exec("ed:close()")
     assert emu.pending is None
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_confirm_yes_no(make_app, emu_factory):
     app = make_app(
         "res = 'none'\nfunction on_load(c) c.dialog:confirm({title='T', text='Sure?'}, function(c, ok) res = tostring(ok); c:invalidate() end) end\n"
@@ -95,7 +90,6 @@ def test_confirm_yes_no(make_app, emu_factory):
     assert emu.has_text("res true")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_on_pending_hook(make_app, emu_factory):
     seen = []
     app = make_app(
@@ -110,7 +104,6 @@ def test_on_pending_hook(make_app, emu_factory):
     assert seen[-1]["kind"] == "leave"
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_answer_or_type_text_without_pending(make_app, emu_factory):
     emu = emu_factory(make_app("function on_load(c) end\n"))
     with pytest.raises(RuntimeError):
@@ -129,7 +122,6 @@ def test_leave_answer_yes_calls_on_leave(make_app, emu_factory):
     assert (emu.state_dir / "files" / "left").read_text() == "yes"
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_leave_answer_no_keeps_running(make_app, emu_factory):
     emu = emu_factory(make_app("function on_load(c) end\n"))
     emu.key("back")
@@ -137,7 +129,6 @@ def test_leave_answer_no_keeps_running(make_app, emu_factory):
     assert emu.pending is None and emu.status()["running"] is True
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_toast_visible_then_gone(make_app, emu_factory):
     emu = emu_factory(make_app("function on_load(c) c.dialog:toast('Saved') end\n" + DRAW % ""))
     assert emu.has_text("Saved")
@@ -150,7 +141,6 @@ def test_toast_visible_then_gone(make_app, emu_factory):
     assert not any(black(emu.shot(), 20, y) for y in range(700, 790))
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_toast_lifetime_is_virtual_2s(make_app, emu_factory):
     emu = emu_factory(make_app("function on_load(c) c.dialog:toast('Hi') end\n" + DRAW % ""))
     emu.wait(1900)
@@ -303,13 +293,11 @@ def test_released_layer_draw_is_an_error(make_app, emu_factory):
 
 
 @pytest.mark.allow_errors
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_dot_call_is_an_error(make_app, emu_factory):
     emu = emu_factory(make_app("function on_load(c) c.dialog.toast('x') end\n"))
     assert emu.errors and "colon" in emu.errors[0]
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_edit_close_inside_on_change_stops_feeding(make_app, emu_factory):
     emu = emu_factory(
         make_app(

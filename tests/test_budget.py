@@ -1,7 +1,7 @@
 import pytest
 from conftest import IMPL
 
-from inkemu import daemon, lua_env
+from inkemu import Emu, daemon
 
 LOOP = "while true do end"
 BUDGET_MSG = "callback exceeded the instruction budget"
@@ -9,7 +9,7 @@ BUDGET_MSG = "callback exceeded the instruction budget"
 
 @pytest.fixture(autouse=True)
 def small_budget(monkeypatch):
-    monkeypatch.setattr(lua_env, "INSTRUCTION_BUDGET", 1_000_000)
+    monkeypatch.setattr(Emu, "instruction_budget", 1_000_000)
 
 
 def _one_budget_error(emu, where: str) -> str:
@@ -31,7 +31,6 @@ def _one_budget_error(emu, where: str) -> str:
         ("on_tick", f"function on_load(c) c:set_tick(1000) end function on_tick(c) {LOOP} end", lambda e: e.wait("2s")),
     ],
 )
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_runaway_callback_is_an_app_error(make_app, emu_factory, where, code, act):
     emu = emu_factory(make_app(code + "\n"))
     if act:
@@ -67,7 +66,6 @@ def test_runaway_lock_screen(make_app, emu_factory):
         f"setmetatable({{}}, {{__index = function() {LOOP} end}}).x = nil; local _ = setmetatable({{}}, {{__index = function() {LOOP} end}}).x",
     ],
 )
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_app_cannot_swallow_the_abort(make_app, emu_factory, code):
     emu = emu_factory(make_app(f"function on_load(c) {code} end\n"))
     err = _one_budget_error(emu, "on_load")
@@ -86,7 +84,6 @@ def test_nested_callback_abort_is_reported_once(make_app, emu_factory):
     _one_budget_error(emu, "layer:draw callback")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_budget_is_per_callback_and_resets(make_app, emu_factory):
     # ~60 % of the budget per on_input call (down and up of three taps); they must not add up
     app = make_app(
@@ -100,7 +97,6 @@ def test_budget_is_per_callback_and_resets(make_app, emu_factory):
 
 
 @pytest.mark.allow_errors
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_load_cannot_fake_a_host_chunk(make_app, emu_factory):
     app = make_app(f"function on_load(c) load('{LOOP}', '<python>')() end\n")
     emu = emu_factory(app)
@@ -108,7 +104,6 @@ def test_load_cannot_fake_a_host_chunk(make_app, emu_factory):
 
 
 @pytest.mark.allow_errors
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_daemon_survives_runaway_and_stops(make_app, emu_factory):
     emu = emu_factory(make_app(f"function on_input(c, ev) {LOOP} end\nfunction on_draw(c, g) g:text(0, 0, 'hi') end\n"))
     r = daemon.execute(emu, "tap-text", {"text": "hi"})
@@ -116,7 +111,6 @@ def test_daemon_survives_runaway_and_stops(make_app, emu_factory):
     assert daemon.execute(emu, "stop")["ok"]
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_strict_globals_metatable_does_not_break_callbacks(make_app, emu_factory):
     # a strict.lua-style _G must not turn the host's lookup of undefined callbacks into an error or a hang
     app = make_app(

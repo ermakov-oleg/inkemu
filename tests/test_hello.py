@@ -7,7 +7,6 @@ ROOT = Path(__file__).resolve().parent.parent
 HELLO = ROOT / "examples" / "hello"
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_hello_tap_increments(emu_factory):
     emu = emu_factory(HELLO)
     assert emu.has_text("Taps: 0")
@@ -15,7 +14,6 @@ def test_hello_tap_increments(emu_factory):
     assert emu.has_text("Taps: 1")
 
 
-@pytest.mark.skipif(IMPL == "rust", reason="stage1: task 5")
 def test_hello_state_survives_restart(emu_factory):
     emu = emu_factory(HELLO)
     emu.tap(240, 600)

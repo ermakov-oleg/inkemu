@@ -55,6 +55,8 @@ pub struct Config {
     pub reader_json: Option<Vec<u8>>,
     /// Recorded network fixtures by file name.
     pub fixtures: BTreeMap<String, Vec<u8>>,
+    /// Lua instructions one outermost callback may run; kept across reboots of the Lua state.
+    pub instruction_budget: i64,
 }
 
 impl Default for Config {
@@ -71,6 +73,7 @@ impl Default for Config {
             fallback_app_id: "app".into(),
             reader_json: None,
             fixtures: BTreeMap::new(),
+            instruction_budget: crate::lua::INSTRUCTION_BUDGET,
         }
     }
 }

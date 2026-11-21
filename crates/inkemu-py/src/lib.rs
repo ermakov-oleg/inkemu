@@ -72,7 +72,8 @@ impl Session {
 impl Session {
     #[new]
     #[pyo3(signature = (app_dir, *, state_dir=None, fixtures_dir=None, net="replay".to_string(), start_time=None,
-        firmware_api=(2, 26), fresh=false, secrets_file=None, seed_files=None, random_seed=None))]
+        firmware_api=(2, 26), fresh=false, secrets_file=None, seed_files=None, random_seed=None,
+        instruction_budget=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         py: Python<'_>,
@@ -86,6 +87,7 @@ impl Session {
         secrets_file: Option<PathBuf>,
         seed_files: Option<bool>,
         random_seed: Option<String>,
+        instruction_budget: Option<i64>,
     ) -> PyResult<Self> {
         let opts = SessionOptions {
             state_dir,
@@ -97,6 +99,7 @@ impl Session {
             secrets_file,
             seed_files,
             random_seed,
+            instruction_budget,
         };
         let s = py
             .detach(|| Native::open(&app_dir, opts).map(SessionCell))
@@ -174,12 +177,12 @@ impl Session {
         self.with(py, |s| s.reload());
     }
 
-    fn lock(&self, py: Python<'_>) {
-        self.with(py, |s| s.lock());
+    fn lock(&self, py: Python<'_>) -> PyResult<()> {
+        self.with(py, |s| s.lock()).map_err(value_err)
     }
 
-    fn unlock(&self, py: Python<'_>) {
-        self.with(py, |s| s.unlock());
+    fn unlock(&self, py: Python<'_>) -> PyResult<()> {
+        self.with(py, |s| s.unlock()).map_err(value_err)
     }
 
     fn resume(&self, py: Python<'_>) {
