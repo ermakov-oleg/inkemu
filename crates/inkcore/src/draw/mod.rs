@@ -1,7 +1,8 @@
 //! The screen: draw commands, 1-bit rendering, text and the host's overlay plates.
+pub mod bdf;
 pub mod canvas;
 pub mod image;
-mod pattern;
+pub mod pattern;
 pub(crate) mod plates;
 pub mod raster;
 pub mod text;
@@ -12,6 +13,7 @@ use std::rc::Rc;
 use mlua::{IntoLuaMulti, Lua, MultiValue, Table, Value};
 
 pub use canvas::{Align, Canvas, Cmd, TextOpts, CAP};
+pub use pattern::Pattern;
 pub use raster::Style;
 
 use crate::ctx::object::{method, new_object, Method};
@@ -75,7 +77,7 @@ impl Frame {
 
 /// Argument kinds of the recorded `g` methods, checked as 0.1 did: n number, t table, s string or number,
 /// a any value.
-const SPECS: [(&str, &str); 13] = [
+const SPECS: [(&str, &str); 14] = [
     ("clear", ""),
     ("rect", "nnnn"),
     ("round_rect", "nnnn"),
@@ -89,6 +91,7 @@ const SPECS: [(&str, &str); 13] = [
     ("image", "ann"),
     ("pattern_rect", "nnnn"),
     ("fill_pattern", "nnnn"),
+    ("pattern", "nnnn"),
 ];
 
 /// Where a `g` draws: the screen, or a layer's own canvas.
@@ -241,12 +244,12 @@ fn truthy(v: &Value) -> bool {
     }
 }
 
-/// 1 black, 0 white: `color=0` (Python `== 0`) is white.
+/// 1 black, 0 white. The device's scale is 0 paper to 15 ink, drawn as a threshold: below 8 is white. A colour
+/// that is not a number keeps its 0.1 meaning: `false` (Python `== 0`) is white, anything else black.
 fn ink(o: &Option<Table>) -> u8 {
     match get(o, "color") {
-        Value::Integer(0) | Value::Boolean(false) => 0,
-        Value::Number(0.0) => 0,
-        _ => 1,
+        Value::Boolean(false) => 0,
+        v => as_num(&v).map_or(1, |n| u8::from(n >= 8.0)),
     }
 }
 
@@ -307,6 +310,7 @@ fn text_opts(o: &Option<Table>) -> TextOpts {
         font: font_of(o),
         align: pick("align", "center", "right"),
         valign: pick("valign", "middle", "bottom"),
+        ink: ink(o),
     }
 }
 
@@ -460,7 +464,31 @@ fn command(lua: &Lua, op: &str, a: &[Value]) -> Result<Cmd, String> {
         "pattern_rect" | "fill_pattern" => {
             let [x, y, w, h] = nums(op, a, ["x", "y", "w", "h"])?;
             let [x, y, w, h] = [x, y, w, h].map(|v| v.trunc() as i32);
-            Cmd::Pattern { x, y, w, h }
+            Cmd::Checker { x, y, w, h }
+        }
+        "pattern" => {
+            let [x, y, w, h] = nums(op, a, ["x", "y", "w", "h"])?;
+            let [x, y, w, h] = [x, y, w, h].map(|v| v.trunc() as i32);
+            let o = o(4);
+            let kind = match get(&o, "kind") {
+                Value::String(s) if s == "dot" => Pattern::dot(match get(&o, "density") {
+                    Value::Nil => 50.0,
+                    v => as_num(&v).filter(|n| n.is_finite()).ok_or_else(|| {
+                        format!("pattern: density must be a finite number, got {}", show(&v))
+                    })?,
+                }),
+                Value::String(s) if s == "line" => Pattern::Line,
+                Value::String(s) if s == "cross" => Pattern::Cross,
+                _ => return Ok(Cmd::Skip),
+            };
+            Cmd::Pattern {
+                x,
+                y,
+                w,
+                h,
+                kind,
+                ink: ink(&o),
+            }
         }
         _ => Cmd::Skip,
     })

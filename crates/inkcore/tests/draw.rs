@@ -35,8 +35,8 @@ fn measure_matches_drawn_advance() {
     for font in ["small", "medium", "large"] {
         for s in ["Tap me", "Привет", "İstanbul"] {
             let mut f = Frame::new(480, 120);
-            fonts.draw(&mut f, font, 10, 10, &format!("|{s}|"));
-            fonts.draw(&mut f, font, 10, 60, "|");
+            fonts.draw(&mut f, font, 10, 10, &format!("|{s}|"), 1);
+            fonts.draw(&mut f, font, 10, 60, "|", 1);
             let bar = ink_cols(&f, 60, 100);
             let cols = ink_cols(&f, 10, 50);
             let bar_w = bar[bar.len() - 1] - bar[0];
@@ -67,7 +67,7 @@ fn unknown_glyph_draws_nothing_but_advances() {
     let unknown = "\u{e000}";
     assert!(fonts.measure("medium", unknown) > 0);
     let mut f = Frame::new(100, 40);
-    fonts.draw(&mut f, "medium", 10, 10, unknown);
+    fonts.draw(&mut f, "medium", 10, 10, unknown, 1);
     assert_eq!(black(&f), 0);
 }
 
@@ -122,7 +122,7 @@ fn text_box_wraps() {
 
 #[test]
 fn wrap_splits_words_and_long_words() {
-    let (c, fonts) = (Canvas::new(480, 800), Fonts::new());
+    let (c, fonts) = (Canvas::new(480, 800, Fonts::new()), Fonts::new());
     let lines = c.wrap("small", "aaaaaaaaaaaaaaaaaaaa b\nc", 60.0);
     assert!(
         lines.len() > 3 && lines[lines.len() - 1] == "c",

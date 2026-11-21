@@ -4,9 +4,10 @@ use std::rc::Rc;
 use unicode_bidi::{bidi_class, BidiClass};
 
 use super::image::{self, Gray};
+use super::pattern::{self, Pattern};
 use super::raster::Style;
 use super::text::Fonts;
-use super::{pattern, Frame, TextItem};
+use super::{Frame, TextItem};
 use crate::log::py_repr_str;
 
 /// The device drops every draw command of a frame after this many.
@@ -24,6 +25,8 @@ pub struct TextOpts {
     pub font: &'static str,
     pub align: Align,
     pub valign: Align,
+    /// 1 black, 0 white.
+    pub ink: u8,
 }
 
 /// A draw command with its values already checked.
@@ -86,13 +89,22 @@ pub enum Cmd {
         w: u32,
         h: u32,
     },
-    /// Counted, draws nothing (`g:image` of something that is not an image).
+    /// Counted, draws nothing (`g:image` of something that is not an image, `g:pattern` of an unknown kind).
     Skip,
+    /// `g:pattern_rect` / `g:fill_pattern`.
+    Checker {
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+    },
     Pattern {
         x: i32,
         y: i32,
         w: i32,
         h: i32,
+        kind: Pattern,
+        ink: u8,
     },
 }
 
@@ -100,6 +112,7 @@ enum Op {
     Draw(Cmd),
     Lines {
         font: &'static str,
+        ink: u8,
         lines: Vec<(i32, i32, String)>,
     },
 }
@@ -126,11 +139,11 @@ pub(crate) fn py_round(v: f64) -> i32 {
 }
 
 impl Canvas {
-    pub fn new(w: u32, h: u32) -> Self {
+    pub fn new(w: u32, h: u32, fonts: Fonts) -> Self {
         Canvas {
             w,
             h,
-            fonts: Fonts::new(),
+            fonts,
             ops: vec![],
             texts: vec![],
             rec_ops: vec![],
@@ -142,7 +155,7 @@ impl Canvas {
     }
 
     pub fn fonts(&self) -> Fonts {
-        self.fonts
+        self.fonts.clone()
     }
 
     pub fn resize(&mut self, w: u32, h: u32) {
@@ -226,7 +239,7 @@ impl Canvas {
             ));
             return None;
         }
-        let (font, f) = (opts.font, self.fonts);
+        let (font, f) = (opts.font, self.fonts.clone());
         let lh = f64::from(f.line_height(font));
         let place = |at: f64, size: f64, room: f64, a: Align| match a {
             Align::Middle => at + (room - size) / 2.0,
@@ -270,7 +283,11 @@ impl Canvas {
             h,
             font,
         });
-        Some(Op::Lines { font, lines })
+        Some(Op::Lines {
+            font,
+            ink: opts.ink,
+            lines,
+        })
     }
 
     /// 0.1 `_wrap`: words on spaces, a word wider than `width` split by characters; `\n` starts a new line.
@@ -316,9 +333,9 @@ impl Canvas {
     pub fn render_on(&self, mut f: Frame) -> Frame {
         for op in &self.ops {
             match op {
-                Op::Lines { font, lines } => {
+                Op::Lines { font, ink, lines } => {
                     for (x, y, line) in lines {
-                        self.fonts.draw(&mut f, font, *x, *y, line);
+                        self.fonts.draw(&mut f, font, *x, *y, line, *ink);
                     }
                 }
                 Op::Draw(cmd) => draw(&mut f, cmd),
@@ -360,7 +377,15 @@ fn draw(f: &mut Frame, cmd: &Cmd) {
             width,
             ink,
         } if pts.len() >= 2 => f.polyline(pts, width, ink),
-        Cmd::Pattern { x, y, w, h } => pattern::fill(f, x, y, w, h),
+        Cmd::Checker { x, y, w, h } => pattern::checker(f, x, y, w, h),
+        Cmd::Pattern {
+            x,
+            y,
+            w,
+            h,
+            kind,
+            ink,
+        } => pattern::fill(f, (x, y, w, h), kind, ink),
         Cmd::Image {
             ref img,
             x,

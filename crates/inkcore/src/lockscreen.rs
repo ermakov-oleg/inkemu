@@ -223,7 +223,7 @@ pub(crate) fn present(h: &Host) {
             }
         }
         if std::mem::take(&mut s.lock.stale) {
-            s.canvas = Canvas::new(s.canvas.w, s.canvas.h);
+            s.canvas = Canvas::new(s.canvas.w, s.canvas.h, s.fonts.clone());
         }
         s.invalid = true;
     });

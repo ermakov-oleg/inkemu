@@ -161,17 +161,18 @@ pub(crate) fn draw(c: &Canvas, frame: &mut Frame, plates: &[Plate]) {
             rect(frame, b, 1, false, 2);
         }
         for it in &p.items {
-            fonts.draw(frame, it.font, it.x, it.y, &it.text);
+            fonts.draw(frame, it.font, it.x, it.y, &it.text, 1);
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::super::text::Fonts;
     use super::*;
 
     fn canvas() -> Canvas {
-        Canvas::new(480, 800)
+        Canvas::new(480, 800, Fonts::new())
     }
 
     fn pending(kind: &'static str, title: &str, text: &str) -> Pending {

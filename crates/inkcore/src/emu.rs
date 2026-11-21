@@ -14,6 +14,7 @@ use crate::ctx::net::{self, Fetcher, NetResult, NetState, OutRequest};
 use crate::dialog::Handler;
 use crate::draw::image::Gray;
 use crate::draw::plates::{self, Overlays, Plate};
+use crate::draw::text::Fonts;
 use crate::draw::{Canvas, Frame, Target, TextItem};
 use crate::fixtures::{FixtureSet, Redactor};
 use crate::lockscreen::{self, Lock};
@@ -79,6 +80,8 @@ pub(crate) struct State {
     /// Text and the clock ms it stays up to.
     pub(crate) toast: Option<(String, i64)>,
     pub(crate) canvas: Canvas,
+    /// The fonts of every canvas, `ctx.fonts` and the plates.
+    pub(crate) fonts: Fonts,
     /// `ctx.image`, `ctx.qr` and `ctx.layers` images by `_id`, until released; dropped with the Lua state.
     pub(crate) images: HashMap<i64, Rc<Gray>>,
     pub(crate) next_image: i64,
@@ -424,9 +427,9 @@ pub(crate) fn boot(st: &Shared, mode: BootMode) {
             mode == BootMode::Lock && s.lock.ctx.as_ref().is_some_and(|c| c.reason == "timer");
         if !s.lock.stale {
             s.canvas = if landscape {
-                Canvas::new(800, 480)
+                Canvas::new(800, 480, s.fonts.clone())
             } else {
-                Canvas::new(480, 800)
+                Canvas::new(480, 800, s.fonts.clone())
             };
         }
         s.frame_commands = 0;
@@ -536,6 +539,14 @@ impl Core {
             Redactor::new(&cfg.secrets),
         );
         net.fetcher = fetcher;
+        let (fonts, font_problem) = match cfg.fonts.take().as_ref().map(Fonts::from_bdf) {
+            None => (Fonts::new(), None),
+            Some(Ok(f)) => (f, None),
+            Some(Err(e)) => (
+                Fonts::new(),
+                Some(format!("fonts: {e}; drawing with DejaVu Sans")),
+            ),
+        };
         let rng = match cfg.random_seed {
             Some(seed) => ChaCha20Rng::seed_from_u64(seed),
             None => {
@@ -568,7 +579,8 @@ impl Core {
             down: None,
             hold_sent: false,
             toast: None,
-            canvas: Canvas::new(480, 800),
+            canvas: Canvas::new(480, 800, fonts.clone()),
+            fonts,
             images: HashMap::new(),
             next_image: 0,
             frame_commands: 0,
@@ -583,6 +595,9 @@ impl Core {
             persist_changed: false,
             net,
         }));
+        if let Some(p) = font_problem {
+            st.borrow_mut().warn(&p);
+        }
         boot(&st, BootMode::App);
         Core { st }
     }

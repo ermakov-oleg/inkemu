@@ -158,8 +158,39 @@ holds; side-button keys), `on_tick`, `on_leave`. A `lockscreen` block in the man
 lock and on every `interval_sec` wake, with `ctx.lock` (`reason`, `done`, `set_interval`, ...).
 
 Drawing (`g`): `clear`, `rect`, `round_rect`, `line`, `circle`, `arc`, `polygon`, `polyline`, `text`, `text_box`,
-`image`, `pattern_rect`, `fill_pattern`, `size`, `measure`, `measure_text`, plus layers via `ctx.layers`. The frame
-cap of 1024 commands is enforced.
+`image`, `pattern`, `pattern_rect`, `fill_pattern`, `size`, `measure`, `measure_text`, plus layers via `ctx.layers`.
+The frame cap of 1024 commands is enforced.
+
+Grey, as measured on 26112001: the canvas is 1-bit, and grey is a pattern of black and white pixels.
+
+- `color` is a threshold on the device's scale of 0 (paper) to 15 (ink): 0–7 draw white and 8–15 black in `rect`,
+  `circle`, `arc`, `line`, `polygon`, `polyline`, `text` and `text_box`. Without `color` they draw black.
+- `g:pattern(x, y, w, h, {kind, density, color})` sets the pattern's pixels to `color` and leaves the others as they
+  are, so `color = 0` puts white dots over ink. `kind = 'dot'` is an ordered dither, the standard 8×8 Bayer matrix
+  anchored to the screen, with `density` percent of ink. `'line'` inks every other row and `'cross'` is a grid with a
+  3 px pitch (about 57 %). Any other kind draws nothing and logs nothing, as on the device.
+- `g:rect(x, y, w, h, {radius = r})` rounds the corners; this is how the firmware's own UI draws rounded boxes.
+- A grey PNG or JPEG from `ctx.image` is dithered by `g:image` after scaling.
+
+## Fonts
+
+`ctx.fonts.small`, `medium` and `large` on the reader are the firmware's built-in bitmap font: line height 20/24/30,
+ascent 17/21/26, proportional digits, no kerning. That font is proprietary and is not shipped with inkemu. By
+default inkemu draws text in DejaVu Sans, bundled, at the same line heights; its widths and ascents differ from the
+reader's.
+
+If you have the reader's font as BDF files, point inkemu at them: set `INKEMU_FONTS=DIR`, or pass
+`Emu(..., fonts_dir=DIR)`. `DIR` must hold `small.bdf`, `medium.bdf` and `large.bdf`; a missing or broken file stops
+the start with an error. From each file inkemu takes:
+
+- `FONT_ASCENT` as `ascent` and `FONT_ASCENT` + `FONT_DESCENT` as the line height (else they come from
+  `FONTBOUNDINGBOX`; the line height last from `PIXEL_SIZE`);
+- each glyph's `DWIDTH` as its advance and its `BBX`/`BITMAP`, drawn pixel for pixel with the baseline at
+  `y + ascent`;
+- `DEFAULT_CHAR` for characters the file lacks (the reader draws a box for them).
+
+`measure` is the sum of the advances. The same fonts draw the host's dialogs and toasts. The reader's setting InkApp
+→ "Fonts" does not change `ctx.fonts`.
 
 `ctx`:
 
@@ -184,8 +215,8 @@ offset_minutes revision valid`.
 
 ## Differences from the device
 
-- Fonts are approximate: DejaVu Sans, bundled with inkemu, at fixed line heights 20/24/30, so text widths differ
-  from the device; `ctx.fonts:size(px)` picks the nearest of the three; an app cannot bring its own font.
+- Without BDF files (see Fonts) text is DejaVu Sans, so text widths and ascents differ from the device;
+  `ctx.fonts:size(px)` picks the nearest of the three; an app cannot bring its own font.
 - Lua is 5.5 with 32-bit integers and 32-bit floats, like the device (`math.maxinteger` is 2147483647,
   `16777217.0 == 16777216.0`).
 - The app sees no `io`, `os`, `debug`, `package`, `load`, `loadstring`, `dofile`, `loadfile`, `collectgarbage` or
@@ -208,9 +239,17 @@ offset_minutes revision valid`.
   - the result format of `ctx.hash:hmac_sha256` (raw bytes in inkemu) and of `ctx.hash:sha1` (hex in inkemu);
   - the level `ctx.frontlight:reset()` goes back to (inkemu: the level at start, 0);
   - `ctx.random:bytes(n)` with `n` below 0 or above 1 MiB: inkemu refuses it with `nil, "invalid_argument"`;
-  - the quota of `ctx.files` (inkemu: the same as `ctx.storage`'s, counted separately).
+  - the quota of `ctx.files` (inkemu: the same as `ctx.storage`'s, counted separately);
+  - `g:pattern` without `density` (inkemu: 50) or without `kind` (inkemu: nothing, like an unknown kind); whether
+    `density` changes `line` and `cross` (inkemu: no); whether `line` and `cross` are anchored to the screen like
+    `dot` or to the box (inkemu: the screen; the probe's boxes started where both agree);
+  - `g:pattern` with a `density` that is not a number (inkemu: the frame fails with "g: bad values in on_draw");
+  - the colour threshold in `arc`, `polyline` and `text_box` (the probe tried `rect`, `circle`, `line` and text);
+  - `color` outside 0–15: inkemu applies the same threshold (below 8 is white);
+  - `g:clear(color)`, which keeps the 0.1 rule (0 white, any other number black).
 - `g:round_rect`, `g:measure`, `g:measure_text`, `g:fill_pattern` and `g:pattern_rect` are not in the device's `g`
-  metatable listing and were not verified by a call; inkemu keeps them.
+  metatable listing and were not verified by a call; inkemu keeps them (`round_rect` as before; the device's way
+  is `g:rect` with `radius`).
 - Layer semantics and error codes are guesses based on the notes.
 - Remote commands (daemon verbs, MCP) freeze the window clock, read-only ones included, so a screenshot is stable;
   `resume`, or `P` in the window, lets time run again.
@@ -232,6 +271,9 @@ uv run pytest
 uv run ruff check && uv run ruff format --check
 uv run python docs/make_images.py    # regenerate the README screenshots
 ```
+
+`INKEMU_DEVICE_FONTS=DIR uv run pytest` also checks text widths against a captured device font: `DIR` holds the three
+BDF files and `device-fonts.json` with widths measured on a reader. Without it that test is skipped.
 
 ## Credits
 

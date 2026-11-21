@@ -3,15 +3,17 @@ use mlua::{IntoLuaMulti, Lua, Table, Value};
 
 use super::object::{method, new_object};
 use super::{arg, check_arg, fmt};
-use crate::draw::text::{Fonts, FONT_NAMES};
+use crate::draw::text::FONT_NAMES;
+use crate::emu::{with, Shared};
 
-pub(super) fn install(lua: &Lua, ctx: &Table) -> mlua::Result<()> {
-    let fonts = Fonts::new();
+pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
+    let fonts = with(st, |s| s.fonts.clone());
     let mut handles = vec![];
     for name in FONT_NAMES {
+        let f = fonts.clone();
         let measure = method(move |lua, args| {
             let s = fmt(args.iter().next().unwrap_or(&Value::Nil));
-            fonts.measure(name, &s).into_lua_multi(lua)
+            f.measure(name, &s).into_lua_multi(lua)
         });
         let h = new_object(lua, &format!("fonts.{name}"), &[("measure", measure)])?;
         h.raw_set("name", name)?;

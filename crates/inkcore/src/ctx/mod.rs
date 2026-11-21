@@ -122,7 +122,7 @@ pub(crate) fn new_ctx(
     basic::install(lua, &ctx, st)?;
     clock::install(lua, &ctx, st)?;
     device::install(lua, &ctx, st)?;
-    fonts::install(lua, &ctx)?;
+    fonts::install(lua, &ctx, st)?;
     files::install(lua, &ctx, st)?;
     package::install(lua, &ctx, st, app)?;
     utils::install(lua, &ctx, st)?;

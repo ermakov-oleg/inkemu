@@ -55,6 +55,7 @@ class Emu:
         secrets_file: str | Path | None = None,
         seed_files: bool | None = None,
         random_seed: int | str | None = None,
+        fonts_dir: str | Path | None = None,
     ):
         self._s = Session(
             Path(app_dir),
@@ -69,6 +70,7 @@ class Emu:
             random_seed=None if random_seed is None else str(random_seed),
             instruction_budget=self.instruction_budget,
             storage_quota=tuple(self.storage_quota),
+            fonts_dir=Path(fonts_dir) if fonts_dir else None,
         )
         self.net_mode = net
         self.firmware_api = tuple(firmware_api)

@@ -27,7 +27,11 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
                 return soft_fail(lua, "invalid_argument");
             }
             let (w, h) = (w as u32, h as u32);
-            let canvas = Rc::new(RefCell::new(Canvas::new(w, h)));
+            let canvas = Rc::new(RefCell::new(Canvas::new(
+                w,
+                h,
+                with(&st, |s| s.fonts.clone()),
+            )));
             let g = new_g(lua, &st, Target::Layer(canvas.clone()))?;
             let id = Rc::new(Cell::new(0));
             let draw = {

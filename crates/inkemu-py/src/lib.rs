@@ -52,7 +52,7 @@ impl Session {
     #[new]
     #[pyo3(signature = (app_dir, *, state_dir=None, fixtures_dir=None, net="replay".to_string(), start_time=None,
         firmware_api=(2, 33), fresh=false, secrets_file=None, seed_files=None, random_seed=None,
-        instruction_budget=None, storage_quota=None))]
+        instruction_budget=None, storage_quota=None, fonts_dir=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         py: Python<'_>,
@@ -68,6 +68,7 @@ impl Session {
         random_seed: Option<String>,
         instruction_budget: Option<i64>,
         storage_quota: Option<(u64, usize)>,
+        fonts_dir: Option<PathBuf>,
     ) -> PyResult<Self> {
         let opts = SessionOptions {
             state_dir,
@@ -81,6 +82,7 @@ impl Session {
             random_seed,
             instruction_budget,
             storage_quota,
+            fonts_dir,
         };
         let s = py
             .detach(|| Native::open(&app_dir, opts).map(SessionCell))

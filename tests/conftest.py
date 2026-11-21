@@ -13,6 +13,12 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "allow_errors: the test expects Lua errors in emu.errors")
 
 
+@pytest.fixture(autouse=True)
+def _bundled_fonts(monkeypatch):
+    """A shell's INKEMU_FONTS must not change the frames the suite pins."""
+    monkeypatch.delenv("INKEMU_FONTS", raising=False)
+
+
 @pytest.fixture
 def make_app(tmp_path) -> Callable[..., Path]:
     def make(index_lua: str, *, manifest: dict | None = None, files: dict[str, str] | None = None) -> Path:

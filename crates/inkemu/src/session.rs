@@ -34,6 +34,9 @@ pub struct SessionOptions {
     pub instruction_budget: Option<i64>,
     /// Quota (bytes, files) of `ctx.storage` and, separately, of `ctx.files`; None: the default.
     pub storage_quota: Option<(u64, usize)>,
+    /// A folder with `small.bdf`, `medium.bdf` and `large.bdf` for `ctx.fonts`; None: `$INKEMU_FONTS`, else the
+    /// bundled DejaVu Sans.
+    pub fonts_dir: Option<PathBuf>,
 }
 
 impl Default for SessionOptions {
@@ -50,6 +53,7 @@ impl Default for SessionOptions {
             random_seed: None,
             instruction_budget: None,
             storage_quota: None,
+            fonts_dir: None,
         }
     }
 }
@@ -91,6 +95,7 @@ impl Session {
         }
         // parsed before anything on disk is touched, as in 0.1
         let (start_local_ms, utc_offset_sec) = start_time(opts.start_time.as_deref())?;
+        let fonts = read_fonts(opts.fonts_dir.clone())?;
         let net_mode = match opts.net.as_str() {
             "record" => NetMode::Record,
             "live" => NetMode::Live,
@@ -148,6 +153,7 @@ impl Session {
                 .instruction_budget
                 .unwrap_or(inkcore::lua::INSTRUCTION_BUDGET),
             storage_quota: opts.storage_quota.unwrap_or(inkcore::STORAGE_QUOTA),
+            fonts,
         };
         let fetcher = fetcher(net_mode, secrets.values, net_dir);
         let core = Core::with_fetcher(files, cfg, on_disk.clone(), fetcher);
@@ -289,6 +295,26 @@ fn fetcher(mode: NetMode, secrets: Vec<(String, String)>, net_dir: PathBuf) -> O
     }
     let net = Net::new(mode, secrets, net_dir);
     Some(Box::new(move |r| net.perform(r)))
+}
+
+/// The three BDF files of `dir`, else of `$INKEMU_FONTS` (empty is unset); a set folder must hold readable fonts.
+fn read_fonts(dir: Option<PathBuf>) -> Result<Option<[Vec<u8>; 3]>, String> {
+    let dir = dir.or_else(|| {
+        std::env::var_os("INKEMU_FONTS")
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+    });
+    let Some(dir) = dir else {
+        return Ok(None);
+    };
+    let read = |name: &str| {
+        let path = dir.join(format!("{name}.bdf"));
+        fs::read(&path).map_err(|e| format!("fonts: cannot read {}: {e}", path.display()))
+    };
+    let files = [read("small")?, read("medium")?, read("large")?];
+    inkcore::draw::text::Fonts::from_bdf(&files)
+        .map_err(|e| format!("fonts: {}/{e}", dir.display()))?;
+    Ok(Some(files))
 }
 
 /// Every file under the app folder, by POSIX path; symlinks that leave the folder are skipped (0.1 `_find_file`).

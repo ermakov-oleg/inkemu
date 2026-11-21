@@ -1,5 +1,6 @@
 """Regenerate the README screenshots: `uv run python docs/make_images.py`."""
 
+import os
 import tempfile
 from pathlib import Path
 
@@ -17,6 +18,7 @@ def save(emu: Emu, name: str) -> None:
 
 
 def main() -> None:
+    os.environ.pop("INKEMU_FONTS", None)  # the shipped images must not show a user's (proprietary) font
     OUT.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
         emu = Emu(

@@ -73,6 +73,8 @@ pub struct Config {
     pub instruction_budget: i64,
     /// Total bytes and number of files the app may keep in `ctx.storage`, and again in `ctx.files`.
     pub storage_quota: (u64, usize),
+    /// The user's `small.bdf`, `medium.bdf` and `large.bdf` for `ctx.fonts`; None: the bundled DejaVu Sans.
+    pub fonts: Option<[Vec<u8>; 3]>,
 }
 
 impl Default for Config {
@@ -96,6 +98,7 @@ impl Default for Config {
             secret_problems: Vec::new(),
             instruction_budget: crate::lua::INSTRUCTION_BUDGET,
             storage_quota: STORAGE_QUOTA,
+            fonts: None,
         }
     }
 }
