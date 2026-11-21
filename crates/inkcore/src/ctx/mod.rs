@@ -21,7 +21,7 @@ pub(crate) use basic::save_state;
 
 use std::rc::Rc;
 
-use mlua::{IntoLuaMulti, Lua, MultiValue, Table, Value};
+use mlua::{Function, IntoLuaMulti, Lua, MultiValue, Table, Value};
 
 use crate::app::AppFiles;
 use crate::emu::{with, Host, Shared};
@@ -118,6 +118,7 @@ pub(crate) fn new_ctx(
             ("quit", quit),
         ],
     )?;
+    install_log(lua, &ctx, st)?;
     basic::install(lua, &ctx, st)?;
     clock::install(lua, &ctx, st)?;
     device::install(lua, &ctx, st)?;
@@ -138,6 +139,41 @@ pub(crate) fn new_ctx(
     layers::install(lua, &ctx, st)?;
     lock::install(lua, &ctx, st, lockscreen_api)?;
     Ok(ctx)
+}
+
+// `__call` drops the log table and tail-calls the colon-checked `ctx:log`, so its errors stay at the app's line
+const LOG_CALL: &str = "local log = ... return function(_, ...) return log(...) end";
+
+/// `ctx.log` is a table of levels on firmware 2.33; calling it as 2.26's `ctx:log(...)` still logs.
+fn install_log(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
+    let level = |prefix: &'static str| {
+        let st = st.clone();
+        method(move |_, args| {
+            let parts: Vec<String> = args.iter().map(fmt).collect();
+            with(&st, |s| {
+                s.log_line(&format!("[app] {prefix} {}", parts.join(" ")))
+            });
+            Ok(MultiValue::new())
+        })
+    };
+    let log = new_object(
+        lua,
+        "log",
+        &[
+            ("error", level("ERROR")),
+            ("info", level("INFO")),
+            ("warn", level("WARN")),
+        ],
+    )?;
+    let call: Function = lua
+        .load(LOG_CALL)
+        .set_name("=[host]")
+        .call(ctx.raw_get::<Function>("log")?)?;
+    let meta = lua.create_table()?;
+    meta.raw_set("__call", call)?;
+    meta.raw_set("__metatable", false)?;
+    log.set_metatable(Some(meta))?;
+    ctx.raw_set("log", log)
 }
 
 fn arg(a: &[Value], i: usize) -> &Value {

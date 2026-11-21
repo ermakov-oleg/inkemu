@@ -1,4 +1,4 @@
-//! The app's data on disk: `state.json`, `lock.json` and `files/`, as 0.1 laid them out.
+//! The app's data on disk: `state.json`, `lock.json`, `files/` (as 0.1 laid them out) and `appfiles/`.
 use std::collections::BTreeMap;
 use std::fs;
 use std::io;
@@ -31,10 +31,14 @@ fn py_os_error(e: &io::Error, p: &Path) -> String {
     )
 }
 
-/// The app data on disk, and why `state.json` could not be read (for the core's "unreadable state" warning).
-pub fn load(state_dir: &Path) -> (Persisted, Option<String>) {
+/// `ctx.storage` lives in `files/` (as 0.1), `ctx.files` in `appfiles/`: two directories on the device too.
+const STORAGE_DIR: &str = "files";
+const APP_FILES_DIR: &str = "appfiles";
+
+/// The files of one directory that an app can name.
+fn read_dir(dir: &Path) -> BTreeMap<String, Vec<u8>> {
     let mut files = BTreeMap::new();
-    if let Ok(rd) = fs::read_dir(state_dir.join("files")) {
+    if let Ok(rd) = fs::read_dir(dir) {
         for e in rd.flatten() {
             let Ok(name) = e.file_name().into_string() else {
                 continue;
@@ -46,6 +50,11 @@ pub fn load(state_dir: &Path) -> (Persisted, Option<String>) {
             }
         }
     }
+    files
+}
+
+/// The app data on disk, and why `state.json` could not be read (for the core's "unreadable state" warning).
+pub fn load(state_dir: &Path) -> (Persisted, Option<String>) {
     let (state_json, state_error) = match read_opt(&state_dir.join("state.json")) {
         Ok(data) => (data, None),
         Err(e) => (None, Some(e)),
@@ -53,7 +62,8 @@ pub fn load(state_dir: &Path) -> (Persisted, Option<String>) {
     let persisted = Persisted {
         state_json,
         lock_json: read_opt(&state_dir.join("lock.json")).unwrap_or_default(),
-        files,
+        files: read_dir(&state_dir.join(STORAGE_DIR)),
+        app_files: read_dir(&state_dir.join(APP_FILES_DIR)),
     };
     (persisted, state_error)
 }
@@ -84,9 +94,21 @@ pub fn save(state_dir: &Path, new: &Persisted, old: &Persisted) -> io::Result<()
             None => remove(&state_dir.join(name))?,
         }
     }
-    let root = state_dir.join("files");
-    for (name, data) in &new.files {
-        if old.files.get(name) != Some(data) {
+    save_dir(&state_dir.join(STORAGE_DIR), &new.files, &old.files)?;
+    save_dir(
+        &state_dir.join(APP_FILES_DIR),
+        &new.app_files,
+        &old.app_files,
+    )
+}
+
+fn save_dir(
+    root: &Path,
+    new: &BTreeMap<String, Vec<u8>>,
+    old: &BTreeMap<String, Vec<u8>>,
+) -> io::Result<()> {
+    for (name, data) in new {
+        if old.get(name) != Some(data) {
             write_atomic(
                 &root.join(name),
                 &root.join(format!("{name}.inkemu-tmp")),
@@ -94,7 +116,7 @@ pub fn save(state_dir: &Path, new: &Persisted, old: &Persisted) -> io::Result<()
             )?;
         }
     }
-    for name in old.files.keys().filter(|n| !new.files.contains_key(*n)) {
+    for name in old.keys().filter(|n| !new.contains_key(*n)) {
         remove(&root.join(name))?;
     }
     Ok(())
@@ -107,24 +129,24 @@ fn remove(p: &Path) -> io::Result<()> {
     }
 }
 
-/// `fresh`: forget saved state, lock data, files and screenshots.
+/// `fresh`: forget saved state, lock data, both file directories and screenshots.
 pub fn wipe(state_dir: &Path) {
     for name in ["state.json", "lock.json"] {
         let _ = remove(&state_dir.join(name));
     }
-    for name in ["files", "shots"] {
+    for name in [STORAGE_DIR, APP_FILES_DIR, "shots"] {
         let _ = fs::remove_dir_all(state_dir.join(name));
     }
 }
 
-/// Copies `<fixtures>/files/*` into the app's files folder, never overwriting.
+/// Copies `<fixtures>/files/*` into the app's `ctx.storage` folder, never overwriting.
 pub fn seed_files(fixtures_dir: &Path, state_dir: &Path) {
     let Ok(rd) = fs::read_dir(fixtures_dir.join("files")) else {
         return;
     };
     let mut entries: Vec<_> = rd.flatten().collect();
     entries.sort_by_key(|e| e.file_name());
-    let dst = state_dir.join("files");
+    let dst = state_dir.join(STORAGE_DIR);
     for e in entries {
         let Ok(name) = e.file_name().into_string() else {
             continue;

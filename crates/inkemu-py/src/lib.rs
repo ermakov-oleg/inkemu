@@ -51,7 +51,7 @@ impl Session {
 impl Session {
     #[new]
     #[pyo3(signature = (app_dir, *, state_dir=None, fixtures_dir=None, net="replay".to_string(), start_time=None,
-        firmware_api=(2, 26), fresh=false, secrets_file=None, seed_files=None, random_seed=None,
+        firmware_api=(2, 33), fresh=false, secrets_file=None, seed_files=None, random_seed=None,
         instruction_budget=None, storage_quota=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -148,6 +148,11 @@ impl Session {
 
     fn wait(&self, py: Python<'_>, ms: i64) -> PyResult<()> {
         self.with(py, |s| s.wait(ms)).map_err(PyValueError::new_err)
+    }
+
+    fn advance(&self, py: Python<'_>, ms: i64) -> PyResult<()> {
+        self.with(py, |s| s.advance(ms))
+            .map_err(PyValueError::new_err)
     }
 
     fn leave(&self, py: Python<'_>) {
@@ -265,7 +270,7 @@ impl Session {
         self.with(py, |s| s.core().pending_id())
     }
 
-    /// (requested, full) screen refreshes.
+    /// (requested, full) screen refreshes; always zero since firmware 2.33 dropped `ctx.display`.
     fn refresh_counts(&self, py: Python<'_>) -> (u32, u32) {
         self.with(py, |s| s.core().refresh_counts())
     }

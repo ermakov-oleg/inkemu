@@ -124,10 +124,10 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
             Ok(MultiValue::new())
         })
     };
-    ctx.raw_set(
-        "input",
-        new_object(lua, "input", &[("text", text), ("edit", edit)])?,
-    )?;
+    let input = new_object(lua, "input", &[("text", text), ("edit", edit)])?;
+    input.raw_set("keyboard_h", 436)?;
+    input.raw_set("pointer", true)?;
+    ctx.raw_set("input", input)?;
     ctx.raw_set(
         "dialog",
         new_object(lua, "dialog", &[("confirm", confirm), ("toast", toast)])?,

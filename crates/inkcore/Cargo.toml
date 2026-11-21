@@ -6,12 +6,15 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+crc32fast = "1"
 flate2 = "1"
 # no "simd": on x86 it rounds where the scalar path (ARM, wasm) truncates and sums coverage in another order,
 # so frames would differ between platforms
 fontdue = { version = "0.9", default-features = false, features = ["hashbrown"] }
 getrandom = "0.3"
+hmac = "0.12"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+md-5 = "0.10"
 mlua = { version = "0.12.2", features = ["lua55", "vendored"] }
 qrcode = { version = "0.15", default-features = false }
 rand_chacha = "0.9"

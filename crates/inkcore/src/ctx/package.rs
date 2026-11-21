@@ -74,10 +74,12 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared, app: &Rc<AppFiles>) -
         Ok(data) => int_value(data.len() as i64).into_lua_multi(lua),
         Err(why) => soft_fail(lua, why),
     });
+    let cache_stats = method(|lua, _| lua.create_table()?.into_lua_multi(lua));
     let package = new_object(
         lua,
         "package",
         &[
+            ("cache_stats", cache_stats),
             ("read", read),
             ("open_text", open_text),
             ("image", image),

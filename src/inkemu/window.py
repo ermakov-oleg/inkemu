@@ -221,7 +221,7 @@ class WindowApp:
         elapsed = int((now - self._last_tick) * 1000)
         self._last_tick = now
         if elapsed > 0 and not self.emu.paused and not self._dialog_open:
-            self._guard(self.emu.wait, min(elapsed, MAX_STEP_MS))
+            self._guard(self.emu.advance, min(elapsed, MAX_STEP_MS))
 
     def close(self) -> None:
         """Window closed: leave the app so on_leave runs and the state is saved."""

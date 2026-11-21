@@ -70,9 +70,10 @@ fn the_513th_file_has_no_space() {
     );
     no_errors(&core);
     assert_eq!(
-        core.lua_eval("return {tostring(r), e, again, ctx.storage:usage().used_files}")
+        core.lua_eval("return {tostring(r), e, again, ctx.storage:usage().files}")
             .unwrap(),
-        json!(["nil", "no_space", true, 512])
+        json!(["nil", "no_space", true, 512]),
+        "firmware 26112001 inventory: storage:usage() = {{bytes, files, max_bytes, max_files}}"
     );
 }
 
@@ -83,13 +84,17 @@ fn files_seeded_on_disk_are_readable_and_removable() {
         ..Persisted::default()
     };
     let mut core = Core::new(app_with("", &[], ""), Config::default(), persisted);
+    // seeded files are ctx.storage's: ctx.files is another directory on firmware 26112001 (verified in QEMU)
     assert_eq!(
-        core.lua_eval("return ctx.files:read('cal.txt')").unwrap(),
-        json!("Событие")
+        core.lua_eval("return ctx.storage:read('cal.txt')").unwrap(),
+        json!("Событие"),
+        "26112001: ctx.files and ctx.storage are different directories"
     );
     assert_eq!(
-        core.lua_eval("return ctx.files:remove('cal.txt')").unwrap(),
-        json!(true)
+        core.lua_eval("return ctx.storage:remove('cal.txt')")
+            .unwrap(),
+        json!(true),
+        "26112001: ctx.files and ctx.storage are different directories"
     );
     assert!(core.take_persist().unwrap().files.is_empty());
 }

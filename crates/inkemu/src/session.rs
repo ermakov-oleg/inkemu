@@ -32,7 +32,7 @@ pub struct SessionOptions {
     pub random_seed: Option<String>,
     /// Lua instructions one callback may run; None: the default.
     pub instruction_budget: Option<i64>,
-    /// `ctx.storage` quota (bytes, files); None: the default.
+    /// Quota (bytes, files) of `ctx.storage` and, separately, of `ctx.files`; None: the default.
     pub storage_quota: Option<(u64, usize)>,
 }
 
@@ -43,7 +43,7 @@ impl Default for SessionOptions {
             fixtures_dir: None,
             net: "replay".into(),
             start_time: None,
-            firmware_api: (2, 26),
+            firmware_api: (2, 33),
             fresh: false,
             secrets_file: None,
             seed_files: None,
@@ -259,6 +259,7 @@ impl Session {
         fn type_text(&mut self, text: &str) -> Result<(), String>;
         fn answer(&mut self, ok: bool) -> Result<(), String>;
         fn wait(&mut self, ms: i64) -> Result<(), String>;
+        fn advance(&mut self, ms: i64) -> Result<(), String>;
         fn leave(&mut self);
         fn resume(&mut self);
         fn set_paused(&mut self, paused: bool);

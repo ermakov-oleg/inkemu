@@ -142,10 +142,14 @@ fn clock_now_has_integer_epoch_and_local_seconds() {
         .lua_eval(
             "local t = ctx.clock:now()\n\
              return {math.type(t.epoch_sec), math.type(t.local_sec), t.hour, t.local_sec - t.epoch_sec,\n\
-               t.wday, t.yday, t.valid, ctx.clock:millis()}",
+               t.weekday, t.yday == nil, t.valid, ctx.clock:millis()}",
         )
         .unwrap();
-    assert_eq!(got, json!(["integer", "integer", 9, 3600, 6, 324, true, 0]));
+    assert_eq!(
+        got,
+        json!(["integer", "integer", 9, 3600, 6, true, true, 0]),
+        "firmware 26112001 inventory: clock:now() has weekday, no wday/yday"
+    );
     let epoch = core.lua_eval("return ctx.clock:now().epoch_sec").unwrap();
     // 2026-11-20T09:00 at UTC+1 is 08:00 UTC
     assert_eq!(epoch, json!(1_795_161_600));

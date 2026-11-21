@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-/// `ctx.storage` quota as 0.1: total bytes and number of files.
+/// Quota of `ctx.storage` and, separately, of `ctx.files`: total bytes and number of files.
 pub const STORAGE_QUOTA: (u64, usize) = (134_217_728, 512);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -71,7 +71,7 @@ pub struct Config {
     pub secret_problems: Vec<String>,
     /// Lua instructions one outermost callback may run; kept across reboots of the Lua state.
     pub instruction_budget: i64,
-    /// Total bytes and number of files the app may keep in `ctx.storage`.
+    /// Total bytes and number of files the app may keep in `ctx.storage`, and again in `ctx.files`.
     pub storage_quota: (u64, usize),
 }
 
@@ -80,7 +80,7 @@ impl Default for Config {
         Config {
             start_local_ms: 0,
             utc_offset_sec: 0,
-            firmware_api: (2, 26),
+            firmware_api: (2, 33),
             net_mode: NetMode::Replay,
             random_seed: None,
             locale: "en".into(),
@@ -100,10 +100,13 @@ impl Default for Config {
     }
 }
 
-/// App data that outlives a run: `state.json`, `lock.json` and the app's files.
+/// App data that outlives a run: `state.json`, `lock.json` and the app's two file directories.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Persisted {
     pub state_json: Option<Vec<u8>>,
     pub lock_json: Option<Vec<u8>>,
+    /// `ctx.storage`: `XTApps/<app_id>/files/` on the device.
     pub files: BTreeMap<String, Vec<u8>>,
+    /// `ctx.files`: `/AppFiles/<app_id>/` at the card root on the device.
+    pub app_files: BTreeMap<String, Vec<u8>>,
 }

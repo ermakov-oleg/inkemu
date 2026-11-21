@@ -16,15 +16,23 @@ fn eval(core: &mut Core, code: &str) -> serde_json::Value {
 }
 
 #[test]
-fn package_loaded_has_only_the_device_libraries() {
+fn require_gives_only_the_device_libraries() {
     let mut core = boot("");
-    let keys = eval(
-        &mut core,
-        "local o = {} for k in pairs(package.loaded) do o[#o + 1] = k end table.sort(o) return table.concat(o, ' ')",
-    );
-    assert_eq!(keys, "_G coroutine math package string table utf8");
-    let err = core.lua_exec("require('python')").unwrap_err();
-    assert!(err.contains("module 'python' not found"), "{err}");
+    for lib in ["_G", "coroutine", "math", "string", "table", "utf8"] {
+        assert_eq!(
+            eval(&mut core, &format!("return type(require('{lib}'))")),
+            "table",
+            "{lib}"
+        );
+    }
+    // the package library is loaded but out of reach, as on the device
+    for m in ["python", "package"] {
+        let err = core.lua_exec(&format!("require('{m}')")).unwrap_err();
+        assert!(
+            err.contains(&format!("module '{m}' not found")),
+            "firmware 26112001 inventory line 21: no package global: {err}"
+        );
+    }
 }
 
 #[test]
@@ -38,32 +46,22 @@ fn host_libraries_are_absent() {
         "collectgarbage",
         "debug",
         "print",
-        "package.loadlib",
-        "package.cpath",
-        "package.searchpath",
-        "package.loaded.io",
-        "package.loaded.os",
-        "package.loaded.debug",
+        "package",
         "python",
     ] {
         assert_eq!(
             eval(&mut core, &format!("return {name}")),
             serde_json::Value::Null,
-            "{name}"
+            "{name}; firmware 26112001 inventory line 21 lists no package global"
         );
     }
     for m in ["os", "io", "debug", "nonexistent"] {
         assert!(core.lua_exec(&format!("require('{m}')")).is_err(), "{m}");
     }
-    assert_eq!(eval(&mut core, "return load('return 1 + 1')()"), 2);
-    assert!(core.lua_exec("load(function() return nil end)").is_err());
-    // load of a binary chunk: nil plus a message
     assert_eq!(
-        eval(
-            &mut core,
-            "return select('#', load(string.dump(function() end)))"
-        ),
-        2
+        eval(&mut core, "return load"),
+        serde_json::Value::Null,
+        "firmware 26112001 inventory: no load, loadstring, dofile, loadfile"
     );
 }
 

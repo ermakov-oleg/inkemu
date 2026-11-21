@@ -1,28 +1,24 @@
-//! Members with nothing to emulate beyond counters and fixed answers (0.1 `_install_stubs`).
-use mlua::{IntoLuaMulti, Lua, Table};
+//! Members with nothing to emulate beyond fixed answers (0.1 `_install_stubs`).
+use mlua::{IntoLuaMulti, Lua, Table, Value};
 
-use super::object::{method, new_object, Method};
-use super::{arg, check_arg, fmt, int_value, nil, py_int};
-use crate::emu::{with, Shared, State};
+use super::object::{method, new_object};
+use super::{arg, check_arg, fmt, int_value, nil, py_int, soft_fail};
+use crate::emu::{with, Shared};
 
-const CAPABILITIES: [(&str, bool); 8] = [
+/// What the emulator emulates; the device (26112001) also reports `ble`, `identity`, `nn` and `ui` as true.
+const CAPABILITIES: [(&str, bool); 11] = [
+    ("ble", false),
     ("dialog", true),
     ("frontlight", true),
+    ("identity", false),
     ("image_decode", true),
     ("image_transform", true),
+    ("nn", false),
     ("pattern", true),
     ("reader", true),
     ("ui", false),
     ("ttf", false),
 ];
-
-fn counter(st: &Shared, bump: fn(&mut State)) -> Method {
-    let st = st.clone();
-    method(move |_, _| {
-        with(&st, bump);
-        Ok(nil())
-    })
-}
 
 pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
     let caps = lua.create_table()?;
@@ -33,15 +29,6 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
     let i18n = lua.create_table()?;
     i18n.raw_set("locale", with(st, |s| s.cfg.locale.clone()))?;
     ctx.raw_set("i18n", i18n)?;
-
-    let request = counter(st, |s| s.refresh_counts.0 += 1);
-    let full = counter(st, |s| s.refresh_counts.1 += 1);
-    let display = new_object(
-        lua,
-        "display",
-        &[("request_refresh", request), ("full_refresh", full)],
-    )?;
-    ctx.raw_set("display", display)?;
 
     let get = {
         let st = st.clone();
@@ -57,12 +44,39 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
             true.into_lua_multi(lua)
         })
     };
+    let reset = {
+        let st = st.clone();
+        method(move |_, _| {
+            with(&st, |s| s.frontlight = 0);
+            Ok(nil())
+        })
+    };
     ctx.raw_set(
         "frontlight",
-        new_object(lua, "frontlight", &[("get", get), ("set", set)])?,
+        new_object(
+            lua,
+            "frontlight",
+            &[("get", get), ("set", set), ("reset", reset)],
+        )?,
     )?;
 
     let can_open = method(|lua, _| false.into_lua_multi(lua));
+    // the strings the device accepts are unknown: every one is refused, as an unknown one is there
+    let act = {
+        let st = st.clone();
+        method(move |lua, args| {
+            let Some(Value::String(what)) = args.into_iter().next() else {
+                return Err(mlua::Error::runtime(
+                    "bad argument #1 to 'act' (string expected)",
+                ));
+            };
+            let what = what.to_string_lossy();
+            with(&st, |s| {
+                s.log_line(&format!("system:act {what}: not emulated"))
+            });
+            soft_fail(lua, "invalid_argument")
+        })
+    };
     let open = {
         let st = st.clone();
         method(move |lua, args| {
@@ -73,19 +87,15 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
     };
     ctx.raw_set(
         "system",
-        new_object(lua, "system", &[("can_open", can_open), ("open", open)])?,
+        new_object(
+            lua,
+            "system",
+            &[("act", act), ("can_open", can_open), ("open", open)],
+        )?,
     )?;
 
-    let info = {
-        let st = st.clone();
-        method(move |lua, _| {
-            let t = lua.create_table()?;
-            t.raw_set("free_heap", 1_048_576)?;
-            t.raw_set("min_free_heap", 524_288)?;
-            t.raw_set("uptime_ms", int_value(with(&st, |s| s.sched.clock.ms)))?;
-            t.into_lua_multi(lua)
-        })
-    };
+    // the device's fields (asset_hit, draw_us, ...) measure its renderer, which inkemu does not have
+    let info = method(|lua, _| lua.create_table()?.into_lua_multi(lua));
     ctx.raw_set("perf", new_object(lua, "perf", &[("info", info)])?)?;
     let collect = method(|_, _| Ok(nil()));
     let count = method(|lua, _| 256.0_f32.into_lua_multi(lua));

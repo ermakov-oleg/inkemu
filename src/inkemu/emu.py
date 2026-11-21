@@ -40,7 +40,7 @@ class Emu:
     """One emulated InkApp: Lua state, ctx, virtual time, screen and lifecycle."""
 
     instruction_budget = INSTRUCTION_BUDGET  # per outermost callback; tests lower it on the class
-    storage_quota = STORAGE_QUOTA  # ctx.storage (bytes, files); tests lower it on the class
+    storage_quota = STORAGE_QUOTA  # (bytes, files) of ctx.storage and again of ctx.files; tests lower it on the class
 
     def __init__(
         self,
@@ -50,7 +50,7 @@ class Emu:
         fixtures_dir: str | Path | None = None,
         net: str = "replay",
         start_time: str | datetime | None = None,
-        firmware_api: tuple[int, int] = (2, 26),
+        firmware_api: tuple[int, int] = (2, 33),
         fresh: bool = False,
         secrets_file: str | Path | None = None,
         seed_files: bool | None = None,
@@ -126,7 +126,12 @@ class Emu:
     # ---- time and lifecycle -----------------------------------------------------------------
 
     def wait(self, ms: int | str) -> None:
+        """Jump the clock forward: timers fire and `clock:now().revision` changes."""
         self._run(self._s.wait, parse_duration(ms) if isinstance(ms, str) else int(ms))
+
+    def advance(self, ms: int) -> None:
+        """Let real time pass (the window's ticks): like `wait`, but `clock:now().revision` stays."""
+        self._run(self._s.advance, int(ms))
 
     def leave(self) -> None:
         self._run(self._s.leave)

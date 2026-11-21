@@ -1,4 +1,4 @@
-//! `ctx.device` (0.1 `_install_device`).
+//! `ctx.device` (0.1 `_install_device`), with the fields of firmware 26112001.
 use mlua::{IntoLuaMulti, Lua, Table};
 use sha2::{Digest, Sha256};
 
@@ -19,10 +19,12 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
             t.into_lua_multi(lua)
         })
     };
-    let ((major, minor), app_id) = with(st, |s| (s.cfg.firmware_api, s.app_id.clone()));
+    let app_id = with(st, |s| s.app_id.clone());
     let device = new_object(lua, "device", &[("battery", battery)])?;
-    device.raw_set("firmware", format!("inkemu (API {major}.{minor})"))?;
-    device.raw_set("model", "X4 Pro")?;
+    device.raw_set("firmware", "XT Licorice 26112001")?;
+    device.raw_set("model", "x4_pro")?;
+    device.raw_set("name", "book")?;
+    device.raw_set("lock_timer", true)?;
     let id = hex(&Sha256::digest(format!("inkemu:{app_id}")));
     device.raw_set("id_for_app", &id[..16])?;
     ctx.raw_set("device", device)

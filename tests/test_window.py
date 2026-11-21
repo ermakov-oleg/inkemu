@@ -219,6 +219,20 @@ def test_real_hold_is_long_not_tap(make_window, make_app, paused):
     assert app.emu.has_text("res long")
 
 
+def test_real_time_ticks_keep_the_clock_revision_and_minute_keys_change_it(make_window):
+    app = make_window()
+    rev = "return ctx.clock:now().revision"
+    before, start_ms = app.emu.lua_eval(rev), app.emu.lua_eval("return ctx.clock:millis()")
+    real_wait(app, 0.3)
+    app._advance()
+    assert app.emu.lua_eval("return ctx.clock:millis()") > start_ms
+    assert app.emu.lua_eval(rev) == before
+    key(app, "bracketright")
+    assert app.emu.lua_eval(rev) == before + 1
+    key(app, "braceright")
+    assert app.emu.lua_eval(rev) == before + 2
+
+
 def test_close_leaves_and_persists_state(make_window, make_app, emu_factory):
     src = """
 function on_load(c) c.state.n = (c.state.n or 0) + 1 end

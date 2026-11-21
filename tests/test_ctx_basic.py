@@ -63,20 +63,26 @@ def test_storage_list_usage_remove(make_app, emu_factory):
         emu_factory,
         "ctx.storage:write('b.txt', 'xx'); ctx.storage:write('a.txt', 'yyy')\n"
         "local u = ctx.storage:usage()\nlocal l = ctx.storage:list()\n"
-        "ctx.files:remove('a.txt')\n"
-        "msg = table.concat(l, ',') .. ' ' .. u.max_files .. ' ' .. u.max_bytes .. ' ' .. u.used_files .. ' ' ..\n"
-        "  u.used_bytes .. ' ' .. tostring(ctx.storage:exists('a.txt')) .. #ctx.files:list()",
+        "ctx.storage:remove('a.txt')\n"
+        "msg = table.concat(l, ',') .. ' ' .. u.max_files .. ' ' .. u.max_bytes .. ' ' .. u.files .. ' ' ..\n"
+        "  u.bytes .. ' ' .. tostring(ctx.storage:exists('a.txt')) .. #ctx.storage:list()",
     )
-    assert emu.has_text("msg a.txt,b.txt 512 134217728 2 5 false1")
+    assert emu.has_text("msg a.txt,b.txt 512 134217728 2 5 false1"), (
+        "firmware 26112001 inventory: storage:usage() = {bytes, files, max_bytes=134217728, max_files=512}; "
+        "ctx.files is another directory than ctx.storage on 26112001 (verified in QEMU)"
+    )
 
 
-def test_files_path_and_shared_dir(make_app, emu_factory):
+def test_files_path_and_own_dir(make_app, emu_factory, tmp_path):
     emu = run(
         make_app,
         emu_factory,
-        "ctx.files:write('x.txt', 'shared')\nmsg = ctx.files.path .. ' ' .. ctx.storage:read('x.txt')",
+        "ctx.files:write('x.txt', 'own')\n"
+        "msg = ctx.files.path .. ' ' .. tostring(ctx.storage:read('x.txt')) .. ' ' .. ctx.files:read('x.txt')",
     )
-    assert emu.has_text("msg /AppFiles/testapp shared")
+    # ctx.files and ctx.storage are different directories on 26112001, verified in QEMU
+    assert emu.has_text("msg /AppFiles/testapp nil own"), "26112001: ctx.files is not ctx.storage's directory"
+    assert (tmp_path / "state" / "appfiles" / "x.txt").read_text() == "own"
 
 
 def test_storage_read_offset_warns(make_app, emu_factory):
@@ -218,7 +224,7 @@ def test_codecs_and_hashes(make_app, emu_factory):
         "local b = ctx.base64:encode('Привет\\255')\n"
         "local parts = {b, ctx.base64:decode(b) == 'Привет\\255' and 'ok' or 'bad',\n"
         "  ctx.hex:encode('\\0\\255a'), ctx.hex:decode('00ff61') == '\\0\\255a' and 'ok' or 'bad',\n"
-        "  ctx.hash:sha1('abc'), ctx.hash:sha256('abc'),\n"
+        "  ctx.hash:sha1('abc'), ctx.hex:encode(ctx.hash:sha256('abc')),\n"
         "  ctx.url:encode('a b/я?'), ctx.url:decode('a%20b%2F%D1%8F+'), #ctx.random:uuid(),\n"
         "  tostring((ctx.base64:decode('***')))}\n"
         "msg = table.concat(parts, '|')",
@@ -226,7 +232,10 @@ def test_codecs_and_hashes(make_app, emu_factory):
     b64 = "0J/RgNC40LLQtdGC/w=="
     sha1 = "a9993e364706816aba3e25717850c26c9cd0d89d"
     sha256 = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-    assert emu.has_text(f"msg {b64}|ok|00ff61|ok|{sha1}|{sha256}|a%20b%2F%D1%8F%3F|a b/я+|36|nil")
+    # sha256 returns the raw digest on 26112001, verified in QEMU
+    assert emu.has_text(f"msg {b64}|ok|00ff61|ok|{sha1}|{sha256}|a%20b%2F%D1%8F%3F|a b/я+|36|nil"), (
+        "26112001: ctx.hash:sha256 returns 32 raw bytes"
+    )
 
 
 def test_random_uuid_is_reproducible_with_a_seed(make_app, emu_factory, tmp_path):
@@ -396,12 +405,13 @@ def test_capabilities_i18n_and_stubs(make_app, emu_factory):
         "local cap = ctx.capabilities\nlocal parts = {tostring(cap.image_decode), tostring(cap.ui), tostring(cap.ttf), ctx.i18n.locale,\n"
         "  tostring(ctx.ui), tostring(ctx.system:can_open('http://x')), tostring(ctx.system:open('http://x')),\n"
         "  type(ctx.perf:info()), type(ctx.gc:count()), tostring(ctx.gc:collect()), tostring(ctx.budget:extend()),\n"
-        "  ctx.frontlight:get()}\n"
-        "ctx.frontlight:set(7)\nctx.display:request_refresh()\nctx.display:full_refresh()\nctx.display:full_refresh()\n"
+        "  ctx.frontlight:get(), tostring(ctx.display)}\n"
+        "ctx.frontlight:set(7)\n"
         "parts[#parts + 1] = ctx.frontlight:get()\nmsg = table.concat(parts, '|')",
     )
-    assert emu.has_text("msg true|false|false|en|nil|false|false|table|number|nil|true|0|7")
-    assert emu.refresh_counts == {"request": 1, "full": 2}
+    inventory = "firmware 26112001 inventory: ctx has no display"
+    assert emu.has_text("msg true|false|false|en|nil|false|false|table|number|nil|true|0|nil|7"), inventory
+    assert emu.refresh_counts == {"request": 0, "full": 0}, inventory
     assert any("http://x" in line for line in emu.log)
 
 

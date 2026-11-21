@@ -69,8 +69,8 @@ fn api_above_firmware_refused() {
     let err = &core.errors()[0];
     assert!(err.contains("app needs firmware with API 9.0"), "{err}");
     assert_eq!(
-        err,
-        "manifest.json: app needs firmware with API 9.0; the emulated firmware has 2.26"
+        err, "manifest.json: app needs firmware with API 9.0; the emulated firmware has 2.33",
+        "firmware 26112001 inventory: ctx.api is 2.33"
     );
     assert!(!core.status().running);
 }

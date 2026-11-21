@@ -20,16 +20,10 @@ const HOST_SRC: &str = "=[host]";
 const HOST_FRAME: &str = "[host]:";
 
 const SANDBOX: &str = r#"
-local raw_load, error, type = load, error, type
-local HOST_SRC = ...
-dofile, loadfile, collectgarbage, print = nil, nil, nil, nil
+local raw_load, error = load, error
+load, dofile, loadfile, collectgarbage, print = nil, nil, nil, nil, nil
 package.loadlib, package.cpath, package.path, package.searchpath = nil, nil, '', nil
 for k in pairs(package.preload) do package.preload[k] = nil end
-function load(chunk, name, mode, ...)
-  if type(chunk) ~= 'string' then error("bad argument #1 to 'load' (only string chunks are allowed)", 2) end
-  if name == HOST_SRC then name = '=(load)' end  -- host chunks are exempt from the budget check
-  return raw_load(chunk, name, 't', ...)
-end
 local find
 package.searchers = { function(name)
   if not find then return nil end
@@ -39,6 +33,8 @@ package.searchers = { function(name)
   if not f then error("error loading module '" .. name .. "' from file '" .. path .. "':\n\t" .. err, 0) end
   return f, path
 end }
+-- the device has no package global; `require` keeps its own reference to the table
+package.loaded.package, package = nil, nil
 return function(f) find = f end
 "#;
 
@@ -99,7 +95,7 @@ pub fn new_lua() -> Lua {
     let set_find: Function = lua
         .load(SANDBOX)
         .set_name(HOST_SRC)
-        .call(HOST_SRC)
+        .call(())
         .expect("sandbox setup failed");
     lua.set_named_registry_value("inkemu.set_find", set_find)
         .expect("sandbox setup failed");
@@ -445,46 +441,18 @@ mod tests {
     }
 
     #[test]
-    fn load_cannot_fake_a_host_chunk() {
-        let err = run(&format!("load('{LOOP}', '{HOST_SRC}')()")).unwrap_err();
-        assert!(
-            err.contains("callback exceeded the instruction budget"),
-            "{err}"
-        );
-    }
-
-    #[test]
     fn sandbox_globals() {
         let lua = new_lua();
         let ok: bool = lua
             .load(
                 "return io == nil and os == nil and debug == nil and dofile == nil and loadfile == nil \
-                 and collectgarbage == nil and print == nil and package.loadlib == nil and #package.searchers == 1",
+                 and load == nil and collectgarbage == nil and print == nil and package == nil \
+                 and not pcall(require, 'package')",
             )
             .set_name("@t.lua")
             .eval()
             .unwrap();
         assert!(ok);
-    }
-
-    #[test]
-    fn load_is_text_only() {
-        let lua = new_lua();
-        let (f, err): (Option<Function>, String) = lua
-            .load("return load(string.dump(function() end))")
-            .set_name("@t.lua")
-            .eval()
-            .unwrap_or_else(|_| (None, "string.dump failed".into()));
-        assert!(f.is_none(), "{err}");
-        let err = lua
-            .load("load(print)")
-            .set_name("@t.lua")
-            .exec()
-            .unwrap_err();
-        assert!(
-            error_text(&err).starts_with("t.lua:1: bad argument #1 to 'load' (only string chunks"),
-            "{err}"
-        );
     }
 
     #[test]

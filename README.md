@@ -142,23 +142,45 @@ back for `live` and `record` requests, including their percent-encoded forms. A 
 
 ## State on disk
 
-`<state root>/<app_id>/` holds `state.json` (`ctx.state`), `files/` (`ctx.storage`), `lock.json` and `shots/`.
-The state root is `.emu/` in the working directory, or `$INKEMU_STATE_ROOT`. `--fresh` wipes the app state first.
+`<state root>/<app_id>/` holds `state.json` (`ctx.state`), `files/` (`ctx.storage`), `appfiles/` (`ctx.files`),
+`lock.json` and `shots/`. On the device `ctx.storage` and `ctx.files` are two directories too (`XTApps/<app_id>/files/`
+and `/AppFiles/<app_id>/`); inkemu applies the quota of 128 MiB and 512 files to each of them. The state root is
+`.emu/` in the working directory, or `$INKEMU_STATE_ROOT`. `--fresh` wipes the app state first, both file directories
+included, then seeds `files/` from `<fixtures dir>/files/`.
 
 ## Supported API
+
+inkemu emulates firmware API 2.33, build 26112001 (`ctx.device.firmware` is `XT Licorice 26112001`, `model`
+`x4_pro`, `name` `book`), as inventoried on a reader. A manifest asking for a higher `api` is refused.
 
 Callbacks: `on_load`, `on_resume`, `on_draw(ctx, g)`, `on_input(ctx, ev)` (pointer taps, double taps, swipes and
 holds; side-button keys), `on_tick`, `on_leave`. A `lockscreen` block in the manifest runs its own entry file on
 lock and on every `interval_sec` wake, with `ctx.lock` (`reason`, `done`, `set_interval`, ...).
 
 Drawing (`g`): `clear`, `rect`, `round_rect`, `line`, `circle`, `arc`, `polygon`, `polyline`, `text`, `text_box`,
-`image`, `pattern_rect`, `fill_pattern`, plus layers via `ctx.layers`. The frame cap of 1024 commands is enforced.
+`image`, `pattern_rect`, `fill_pattern`, `size`, `measure`, `measure_text`, plus layers via `ctx.layers`. The frame
+cap of 1024 commands is enforced.
 
-`ctx`: `invalidate`, `after`/timers, `set_tick`, `defer_full_refresh`, `quit`, `log`, `save_state`, `state`, `api`,
-`capabilities`, `clock`, `device`, `fonts`, `storage`/`files`, `package`, `net` (`request`; GET and POST),
-`dialog` (`confirm`, `toast`), `input` (`text`, `edit`), `image`, `qr`, `json`, `hex`, `hash`, `url`, `zlib`,
-`random`, `screen`, `display`, `frontlight`, `system`, `i18n`, `perf`, `gc`, `budget`, `reader` (answers from
-`<fixtures dir>/reader.json`), `lockscreen`, `lock`. `ctx.ui` is not implemented.
+`ctx`:
+
+- `invalidate`, `after`/timers, `set_tick`, `defer_full_refresh`, `quit`, `save_state`, `state`, `api`.
+- `log`: a table with `error`, `info` and `warn`, each logging with its level (`[app] WARN ...`).
+- `capabilities`, `clock` (`now`, `millis`), `device` (`battery`, `firmware`, `model`, `name`, `id_for_app`,
+  `lock_timer`), `fonts`.
+- `storage` (`read`, `write`, `exists`, `size`, `remove`, `list`, `usage` = `{bytes, files, max_bytes, max_files}`).
+- `files` (`read`, `write`, `append`, `exists`, `size`, `remove`, `list`; `path` = `/AppFiles/<app_id>`).
+- `package` (`read`, `open_text`, `image`, `exists`, `size`, `cache_stats` = `{}`).
+- `net` (`request`; GET and POST), `dialog` (`confirm`, `toast`), `input` (`text`, `edit`, `keyboard_h` = 436,
+  `pointer` = true).
+- `image`, `qr`, `json`, `hex`, `url` (`encode`, `decode`), `zlib`, `random` (`uuid`, `bytes`).
+- `hash`: `sha256`, `md5` and `hmac_sha256` return the raw digest bytes (use `ctx.hex:encode` for text); `crc32`
+  returns the CRC as a 32-bit float, so its low bits are rounded away as on the device; `sha1` returns hex.
+- `screen` (`width`, `height`, `orientation`, `set_orientation`, `gray_levels` = 2, `gray_still` = 4),
+  `frontlight` (`get`, `set`, `reset`), `system` (`can_open`, `open`, `act`), `i18n` (`locale`), `perf` (`info` =
+  `{}`), `gc`, `budget`, `reader` (answers from `<fixtures dir>/reader.json`), `lockscreen`, `lock`.
+
+`clock:now()` has `year month day hour minute second weekday hour12 date_order date_sep epoch_sec local_sec
+offset_minutes revision valid`.
 
 ## Differences from the device
 
@@ -166,7 +188,29 @@ Drawing (`g`): `clear`, `rect`, `round_rect`, `line`, `circle`, `arc`, `polygon`
   from the device; `ctx.fonts:size(px)` picks the nearest of the three; an app cannot bring its own font.
 - Lua is 5.5 with 32-bit integers and 32-bit floats, like the device (`math.maxinteger` is 2147483647,
   `16777217.0 == 16777216.0`).
-- No `ctx.ui`, no BLE, no WebSocket; only GET and POST get a network callback.
+- The app sees no `io`, `os`, `debug`, `package`, `load`, `loadstring`, `dofile`, `loadfile`, `collectgarbage` or
+  `print`, as on the device; `require` searches only the app folder.
+- Not emulated, so nil: `ctx.crypto`, `ctx.nn`, `ctx.ui`, `ctx.widget`, `dialog:choose`, `i18n:t`, `url:query`,
+  `input.keys`, `input.listen`, `input.gamepad`, `device.display`, `device.keep_awake`, `device.radios`,
+  `screen.occlusion`, and the fields of `perf:info()` (`asset_hit asset_miss cmd_count draw_frame draw_us image_count
+  tick_us` on the device). No BLE, no WebSocket; only GET and POST get a network callback.
+- `ctx.capabilities` reports what inkemu emulates: `dialog frontlight image_decode image_transform pattern reader`
+  are true, `ble identity nn ui ttf` false. The device reports `ble dialog frontlight identity image_decode
+  image_transform nn pattern reader ui` as true and `ttf` as false.
+- `ctx.system:act(s)` needs a string ("string expected" otherwise), as on the device. Which strings the device
+  accepts is unknown, so inkemu answers every one with `nil, "invalid_argument"` and logs it.
+- Not verified on the device:
+  - the 2.26 call form `ctx:log(...)`, which still logs;
+  - the format of the level prefix of `ctx.log:info/warn/error`;
+  - the numbering of `clock:now().weekday` (inkemu: Sunday = 1, as 2.26's `wday`);
+  - the meaning of `clock:now().revision` (inkemu: it changes when the clock is moved by a wait, `]` or `}`, not
+    when time passes in the window or with an input);
+  - the result format of `ctx.hash:hmac_sha256` (raw bytes in inkemu) and of `ctx.hash:sha1` (hex in inkemu);
+  - the level `ctx.frontlight:reset()` goes back to (inkemu: the level at start, 0);
+  - `ctx.random:bytes(n)` with `n` below 0 or above 1 MiB: inkemu refuses it with `nil, "invalid_argument"`;
+  - the quota of `ctx.files` (inkemu: the same as `ctx.storage`'s, counted separately).
+- `g:round_rect`, `g:measure`, `g:measure_text`, `g:fill_pattern` and `g:pattern_rect` are not in the device's `g`
+  metatable listing and were not verified by a call; inkemu keeps them.
 - Layer semantics and error codes are guesses based on the notes.
 - Remote commands (daemon verbs, MCP) freeze the window clock, read-only ones included, so a screenshot is stable;
   `resume`, or `P` in the window, lets time run again.

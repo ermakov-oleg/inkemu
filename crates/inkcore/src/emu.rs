@@ -86,9 +86,10 @@ pub(crate) struct State {
     pub(crate) locked: bool,
     pub(crate) lock_wakes: u32,
     pub(crate) lock: Lock,
-    pub(crate) refresh_counts: (u32, u32),
     pub(crate) frontlight: i64,
     pub(crate) full_refresh_deferred: i64,
+    /// `clock:now().revision`: counts the host's moves of the clock.
+    pub(crate) clock_revision: i32,
     /// For `ctx.random`; lives as long as the core, so uuids never repeat across restarts.
     pub(crate) rng: ChaCha20Rng,
     pub(crate) persisted: Persisted,
@@ -574,9 +575,9 @@ impl Core {
             locked: false,
             lock_wakes: 0,
             lock: Lock::default(),
-            refresh_counts: (0, 0),
             frontlight: 0,
             full_refresh_deferred: 0,
+            clock_revision: 0,
             rng,
             persisted,
             persist_changed: false,
@@ -680,8 +681,17 @@ impl Core {
 
     // ---- time and lifecycle --------------------------------------------------------------------
 
-    /// Runs virtual time forward, firing due timers and redrawing as needed.
+    /// Jumps virtual time forward, firing due timers and redrawing as needed; `clock:now().revision` changes.
     pub fn wait(&mut self, ms: i64) -> Result<(), String> {
+        if ms > 0 {
+            with(&self.st, |s| s.clock_revision += 1);
+        }
+        self.advance(ms)
+    }
+
+    /// Lets virtual time pass as real time does (the window's ticks): like [`Core::wait`], but the clock is not
+    /// moved, so `clock:now().revision` stays.
+    pub fn advance(&mut self, ms: i64) -> Result<(), String> {
         self.run(|h| h.wait(ms))
     }
 
@@ -828,9 +838,9 @@ impl Core {
         self.st.borrow().sched.clock.now()
     }
 
-    /// (requested, full) screen refreshes.
+    /// (requested, full) screen refreshes through `ctx.display`, which firmware 2.33 no longer has: always zero.
     pub fn refresh_counts(&self) -> (u32, u32) {
-        self.st.borrow().refresh_counts
+        (0, 0)
     }
 
     pub fn set_locale(&mut self, locale: &str) {

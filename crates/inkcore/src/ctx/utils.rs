@@ -2,6 +2,8 @@
 //! Strings are bytes end to end: a Lua string never goes through a Rust `String` unless it must be text.
 use std::io::Read;
 
+use hmac::{Hmac, Mac};
+use md5::Md5;
 use mlua::{IntoLuaMulti, Lua, Table, Value};
 use rand_chacha::rand_core::RngCore;
 use sha1::Sha1;
@@ -9,9 +11,12 @@ use sha2::{Digest, Sha256};
 
 use super::convert::{big_int_warning, dump, json_to_lua, lua_to_json};
 use super::object::{method, new_object, Method};
-use super::{bytes_arg, soft_fail};
+use super::{arg, bytes_arg, check_arg, py_int, soft_fail};
 use crate::emu::{with, Shared};
 use crate::lua::first_in_callback;
+
+/// `random:bytes` refuses more than this; the device's limit is unknown.
+const MAX_RANDOM_BYTES: i64 = 1 << 20;
 
 const NULL: &str =
     "return setmetatable({}, {__tostring = function() return 'null' end, __metatable = false})";
@@ -71,6 +76,20 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
     json.raw_set("null", null)?;
     ctx.raw_set("json", json)?;
 
+    let crc32 = method(|lua, args| {
+        let b = bytes_arg("crc32", 1, args.iter().next().unwrap_or(&Value::Nil))?;
+        // the device returns the CRC as a 32-bit float, so the low bits are rounded away (verified on 26112001)
+        Value::Number(crc32fast::hash(&b) as f32).into_lua_multi(lua)
+    });
+    let hmac_sha256 = method(|lua, args| {
+        let a = args.into_vec();
+        let key = bytes_arg("hmac_sha256", 1, a.first().unwrap_or(&Value::Nil))?;
+        let msg = bytes_arg("hmac_sha256", 2, a.get(1).unwrap_or(&Value::Nil))?;
+        let mut mac = Hmac::<Sha256>::new_from_slice(&key).expect("HMAC takes a key of any length");
+        mac.update(&msg);
+        lua.create_string(mac.finalize().into_bytes())?
+            .into_lua_multi(lua)
+    });
     let objects: [(&str, Vec<(&str, Method)>); 5] = [
         (
             "base64",
@@ -90,7 +109,10 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
             "hash",
             vec![
                 codec("sha1", |b| Ok(hex(&Sha1::digest(b)).into_bytes())),
-                codec("sha256", |b| Ok(hex(&Sha256::digest(b)).into_bytes())),
+                codec("sha256", |b| Ok(Sha256::digest(b).to_vec())),
+                codec("md5", |b| Ok(Md5::digest(b).to_vec())),
+                ("crc32", crc32),
+                ("hmac_sha256", hmac_sha256),
             ],
         ),
         (
@@ -114,7 +136,25 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
             uuid4(b).into_lua_multi(lua)
         })
     };
-    ctx.raw_set("random", new_object(lua, "random", &[("uuid", uuid)])?)
+    let bytes = {
+        let st = st.clone();
+        method(move |lua, args| {
+            let a = args.into_vec();
+            check_arg("bytes", 1, arg(&a, 0), "number")?;
+            // made outside the Lua budget and memory: a huge count must not stall or abort the emulator
+            let n = py_int(arg(&a, 0))?;
+            if !(0..=MAX_RANDOM_BYTES).contains(&n) {
+                return soft_fail(lua, "invalid_argument");
+            }
+            let mut b = vec![0u8; n as usize];
+            with(&st, |s| s.rng.fill_bytes(&mut b));
+            lua.create_string(b)?.into_lua_multi(lua)
+        })
+    };
+    ctx.raw_set(
+        "random",
+        new_object(lua, "random", &[("bytes", bytes), ("uuid", uuid)])?,
+    )
 }
 
 /// Python `str(uuid.UUID(int=..., version=4))`.

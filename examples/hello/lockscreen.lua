@@ -14,7 +14,7 @@ function on_draw(c, g)
     local t = c.clock:now()
     g:round_rect(90, 240, W - 180, 120, 16)
     g:text(W // 2, 300, string.format('%02d:%02d', t.hour, t.minute), { font = c.fonts.large, align = 'center', valign = 'middle' })
-    g:text(W // 2, 400, string.format('%s, %d %s', DAYS[t.wday], t.day, MONTHS[t.month]),
+    g:text(W // 2, 400, string.format('%s, %d %s', DAYS[t.weekday], t.day, MONTHS[t.month]),
       { font = c.fonts.large, align = 'center' })
     g:line(120, 460, W - 120, 460)
     local taps = type(c.state) == 'table' and tonumber(c.state.taps) or 0

@@ -318,3 +318,51 @@ fn an_unreadable_state_json_warns_and_starts_empty() {
     let started = log.iter().position(|l| l.contains("app testapp started"));
     assert!(warned < started, "{log:?}");
 }
+
+#[test]
+fn ctx_files_live_in_appfiles_apart_from_storage_and_fresh_wipes_them() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = write_app(
+        tmp.path(),
+        "function on_load(c)\n\
+           if not c.files:exists('a') then c.files:write('a', '1') c.storage:write('b', '2') end\n\
+         end\n",
+    );
+    let seed = tmp.path().join("fixtures/files");
+    fs::create_dir_all(&seed).unwrap();
+    fs::write(seed.join("cal.txt"), "seeded").unwrap();
+    let seeded = SessionOptions {
+        seed_files: Some(true),
+        ..opts(tmp.path())
+    };
+    let s = Session::open(&app, seeded).unwrap();
+    assert!(
+        s.core().errors().is_empty(),
+        "{:?}",
+        s.core().errors().to_vec()
+    );
+    drop(s);
+    let state = tmp.path().join("state");
+    assert_eq!(fs::read(state.join("appfiles/a")).unwrap(), b"1");
+    assert_eq!(fs::read(state.join("files/b")).unwrap(), b"2");
+    assert!(!state.join("files/a").exists() && !state.join("appfiles/b").exists());
+
+    let mut s = Session::open(&app, opts(tmp.path())).unwrap();
+    assert_eq!(
+        s.lua_eval("return {ctx.files:read('a'), ctx.storage:read('cal.txt'), ctx.files:exists('cal.txt')}")
+            .unwrap(),
+        json!(["1", "seeded", false])
+    );
+    s.lua_exec("ctx.files:remove('a')").unwrap();
+    assert!(!state.join("appfiles/a").exists());
+    s.lua_exec("ctx.files:write('z', '9')").unwrap();
+    assert!(state.join("appfiles/z").exists());
+    drop(s);
+
+    let fresh = SessionOptions {
+        fresh: true,
+        ..opts(tmp.path())
+    };
+    let _s = Session::open(&app, fresh).unwrap();
+    assert!(!state.join("appfiles/z").exists());
+}
