@@ -41,14 +41,14 @@ async function helloFiles() {
 const NET_MANIFEST = '{"app_id": "testapp", "entry": "index.lua", "api": "2.2", "permissions": ["net"]}';
 
 // draws the byte length and the first two bytes of the body the request got
-function bodyApp(url) {
+function bodyApp(url, more = '') {
   return files({
     'manifest.json': NET_MANIFEST,
     'index.lua':
       "msg = 'none'\n" +
       'function on_draw(c, g) g:clear(0); g:text(0, 0, msg) end\n' +
       'function on_load(c)\n' +
-      `  c.net:request({url = '${url}'}, function(c, resp)\n` +
+      `  c.net:request({url = '${url}'${more}}, function(c, resp)\n` +
       "    local body = resp.body or ''\n" +
       "    msg = #body .. ':' .. tostring(body:byte(1)) .. ':' .. tostring(body:byte(2))\n" +
       '    c:invalidate()\n' +
@@ -150,19 +150,19 @@ test('a fixture body with NUL and 0xff reaches Lua byte-exact', () => {
 
 test('fixtures+live: a request without a fixture goes out and the delivered bytes reach Lua', () => {
   const core = factory.create({
-    files: bodyApp('http://x.test/live'),
+    files: bodyApp('http://x.test/live', ", method = 'POST', body = '\\0\\255'"),
     fixtures: new Map(),
     fonts: null,
-    config: config({ net: 'fixtures+live' }),
+    config: config({ net: 'fixtures+live', random_seed: null }),
   });
   try {
     const out = core.cmd({ cmd: 'take_outgoing' });
     assert.equal(out.ok, true);
     assert.equal(out.requests.length, 1);
     const [r] = out.requests;
-    assert.equal(r.method, 'GET');
+    assert.equal(r.method, 'POST');
     assert.equal(r.url, 'http://x.test/live');
-    assert.equal(r.body_b64, '');
+    assert.equal(r.body_b64, toBase64(new Uint8Array([0, 0xff])));
     assert.deepEqual(core.cmd({ cmd: 'take_outgoing' }).requests, []);
 
     const res = core.cmd({
@@ -221,6 +221,31 @@ test('reload with new files runs the new code', () => {
     assert.equal(r.ok, true, r.error);
     assert.ok(hasText(r, 'new'), JSON.stringify(r.texts));
     assert.ok(hasText(core.cmd({ cmd: 'reload', with_state: true }), 'new'));
+  } finally {
+    core.destroy();
+  }
+});
+
+// the page takes apps up to 20 MiB: the module's memory grows and core.js must follow the new heap
+test('a 20 MiB app grows the memory; create, frame and reload still work', async () => {
+  const big = await helloFiles();
+  const filler = new Uint8Array(20 * 1024 * 1024);
+  for (let i = 0; i < filler.length; i += 4096) filler[i] = i & 0xff;
+  big.set('big.bin', filler);
+  const core = factory.create({ files: big, fixtures: new Map(), fonts: null, config: config() });
+  try {
+    const st = core.cmd({ cmd: 'state' });
+    const it = st.texts.findLast((t) => t.text === 'Tap me');
+    core.cmd({ cmd: 'tap', x: it.x + Math.floor(it.w / 2), y: it.y + Math.floor(it.h / 2) });
+    core.cmd({ cmd: 'wait', ms: 61_000 });
+    assert.equal(createHash('sha256').update(core.frame(false).bits).digest('hex'), HELLO_HASH);
+    const t0 = performance.now();
+    const r = core.cmd({ cmd: 'reload', files: big, with_state: true });
+    const ms = performance.now() - t0;
+    assert.equal(r.ok, true, r.error);
+    assert.deepEqual(r.errors, []);
+    assert.ok(hasText(r, 'Taps: 1'), JSON.stringify(r.texts));
+    assert.ok(ms < 5000, `reload took ${ms} ms`);
   } finally {
     core.destroy();
   }
