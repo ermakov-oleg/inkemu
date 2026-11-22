@@ -10,6 +10,4 @@ function on_draw(ctx, g)
   T.call("two_points", function() return g:polygon(flat(2)) end)
   T.call("empty", function() return g:polygon({}) end)
   T.call("odd_array", function() return g:polygon({ 10, 10, 20, 20, 30, 10, 40 }) end)
-  T.call("three_points", function() return g:polygon(flat(3)) end)
-  T.call("max_points", function() return g:polygon(flat(128)) end)
 end

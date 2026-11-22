@@ -90,6 +90,8 @@ The refresh kind is not observable today. Proposed: two fields. `Emu.status()["r
 - Touch points: `crates/inkcore/src/ctx/basic.rs` (`defer_full_refresh`).
 - Source: contract only.
 
+Already green and pinned (the valid cases of the rules above): `05/cmd_cap_text_box_counter` (the rectangles that still fit after a refused `text_box`), `05/cmd_cap_underline_text`, `05/invalidate_valid`.
+
 ## §6 Drawing
 
 ### 06/g_methods
@@ -158,6 +160,8 @@ The refresh kind is not observable today. Proposed: two fields. `Emu.status()["r
 - Touch points: `crates/inkcore/src/ctx/image.rs`, `crates/inkcore/src/ctx/layers.rs`, `crates/inkcore/src/draw/mod.rs` (`image_command`).
 - Source: contract only.
 
+Already green and pinned (the valid cases of the rules above): `06/g_methods_present`, `06/polyline_points_valid`, `06/polygon_points_valid`, `06/pattern_valid_args`, `06/image_src_valid`.
+
 ## §7 Text and fonts
 
 ### 07/text_invalid_utf8, 07/text_rtl
@@ -206,6 +210,8 @@ The refresh kind is not observable today. Proposed: two fields. `Emu.status()["r
 - Core now: line heights match, ascents come from the bundled font (16, 19, 23).
 - Touch points: `crates/inkcore/src/draw/text.rs` (`ascent`).
 - Source: probe-confirmed for small (17) and medium (21); large (26) is contract only.
+
+Already green and pinned (the valid cases of the rules above): `07/font_line_heights`, `07/font_object_fields`, `07/fonts_size_valid`, `07/fonts_size_sample_valid`, `07/measure_other_opts`, `07/text_utf8_valid`, `07/text_latin`, `07/text_limit_frame_fit`, `07/text_limits_call_max`.
 
 ## §9 Private files
 
@@ -427,7 +433,7 @@ Already green and pinned: `15/lock_reason_timer`, `15/lock_elapsed_first`, `15/l
 - Touch points: `crates/inkcore/src/ctx/stubs.rs` (`act`), `crates/inkcore/src/emu.rs` (lock path).
 - Source: contract only.
 
-Already green and pinned: `25/act_args` (unknown name is `nil, "invalid_argument"` - probe-confirmed; a non-string name raises). Not covered: `act("power_off")` with its confirmation dialog and `busy` (contract only, needs system dialog support).
+Already green and pinned: `25/act_inactive_no_lock` (a refused `act("sleep")` does not lock the device), `25/act_args` (unknown name is `nil, "invalid_argument"` - probe-confirmed; a non-string name raises). Not covered: `act("power_off")` with its confirmation dialog and `busy` (contract only, needs system dialog support).
 
 ## §26 Encoding, hashes, random
 

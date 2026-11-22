@@ -1,0 +1,79 @@
+{
+  "spec": "\u00a77",
+  "about": "every font object has name, integer line_height and ascent and a measure method; system fonts carry no px",
+  "expect": {
+    "small.name": {
+      "value": "small",
+      "spec": "\u00a77"
+    },
+    "medium.name": {
+      "value": "medium",
+      "spec": "\u00a77"
+    },
+    "large.name": {
+      "value": "large",
+      "spec": "\u00a77"
+    },
+    "small.line_height": {
+      "value": "integer",
+      "spec": "\u00a77"
+    },
+    "small.ascent": {
+      "value": "integer",
+      "spec": "\u00a77"
+    },
+    "small.measure": {
+      "value": "function",
+      "spec": "\u00a77"
+    },
+    "medium.line_height": {
+      "value": "integer",
+      "spec": "\u00a77"
+    },
+    "medium.ascent": {
+      "value": "integer",
+      "spec": "\u00a77"
+    },
+    "medium.measure": {
+      "value": "function",
+      "spec": "\u00a77"
+    },
+    "large.line_height": {
+      "value": "integer",
+      "spec": "\u00a77"
+    },
+    "large.ascent": {
+      "value": "integer",
+      "spec": "\u00a77"
+    },
+    "large.measure": {
+      "value": "function",
+      "spec": "\u00a77"
+    },
+    "sized.line_height": {
+      "value": "integer",
+      "spec": "\u00a77"
+    },
+    "sized.ascent": {
+      "value": "integer",
+      "spec": "\u00a77"
+    },
+    "sized.measure": {
+      "value": "function",
+      "spec": "\u00a77"
+    },
+    "small.px": {
+      "value": "nil",
+      "spec": "\u00a77"
+    },
+    "medium.px": {
+      "value": "nil",
+      "spec": "\u00a77"
+    },
+    "large.px": {
+      "value": "nil",
+      "spec": "\u00a77"
+    }
+  },
+  "errors": []
+}

@@ -1,0 +1,37 @@
+{
+  "spec": "\u00a77",
+  "about": "the sample of fonts:size may be nil, empty or plain text",
+  "expect": {
+    "sample_ascii": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true,
+          null
+        ]
+      },
+      "spec": "\u00a77"
+    },
+    "sample_empty": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true,
+          null
+        ]
+      },
+      "spec": "\u00a77"
+    },
+    "sample_nil": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true,
+          null
+        ]
+      },
+      "spec": "\u00a77"
+    }
+  },
+  "errors": []
+}

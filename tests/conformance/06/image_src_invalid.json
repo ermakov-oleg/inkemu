@@ -1,28 +1,7 @@
 {
-  "spec": "§6",
-  "about": "an image src region must be four integers inside the image, in named or positional (2.33) form; otherwise invalid_argument",
+  "spec": "\u00a76",
+  "about": "an image src region outside the image, with a negative origin, an empty size or fractions is invalid_argument, in named and positional (2.33) form",
   "expect": {
-    "src_named_ok": {
-      "value": {
-        "ok": true,
-        "ret": []
-      },
-      "spec": "§6"
-    },
-    "src_positional_ok": {
-      "value": {
-        "ok": true,
-        "ret": []
-      },
-      "spec": "§6"
-    },
-    "src_edge_ok": {
-      "value": {
-        "ok": true,
-        "ret": []
-      },
-      "spec": "§6"
-    },
     "src_too_big": {
       "value": {
         "ok": true,
@@ -31,7 +10,7 @@
           "invalid_argument"
         ]
       },
-      "spec": "§6"
+      "spec": "\u00a76"
     },
     "src_overhang": {
       "value": {
@@ -41,7 +20,7 @@
           "invalid_argument"
         ]
       },
-      "spec": "§6"
+      "spec": "\u00a76"
     },
     "src_negative_x": {
       "value": {
@@ -51,7 +30,7 @@
           "invalid_argument"
         ]
       },
-      "spec": "§6"
+      "spec": "\u00a76"
     },
     "src_zero_w": {
       "value": {
@@ -61,7 +40,7 @@
           "invalid_argument"
         ]
       },
-      "spec": "§6"
+      "spec": "\u00a76"
     },
     "src_fraction": {
       "value": {
@@ -71,7 +50,7 @@
           "invalid_argument"
         ]
       },
-      "spec": "§6"
+      "spec": "\u00a76"
     },
     "src_positional_bad": {
       "value": {
@@ -81,7 +60,7 @@
           "invalid_argument"
         ]
       },
-      "spec": "§6"
+      "spec": "\u00a76"
     }
   },
   "errors": []

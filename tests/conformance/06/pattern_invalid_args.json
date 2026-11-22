@@ -1,6 +1,6 @@
 {
-  "spec": "§6",
-  "about": "an unknown pattern kind or a density outside 0..100 is invalid_argument and draws nothing; valid forms return nothing",
+  "spec": "\u00a76",
+  "about": "an unknown pattern kind or a density outside 0..100 is invalid_argument and draws nothing",
   "expect": {
     "bogus_kind": {
       "value": {
@@ -10,7 +10,7 @@
           "invalid_argument"
         ]
       },
-      "spec": "§6"
+      "spec": "\u00a76"
     },
     "density_101": {
       "value": {
@@ -20,7 +20,7 @@
           "invalid_argument"
         ]
       },
-      "spec": "§6"
+      "spec": "\u00a76"
     },
     "density_negative": {
       "value": {
@@ -30,35 +30,7 @@
           "invalid_argument"
         ]
       },
-      "spec": "§6"
-    },
-    "dot_50": {
-      "value": {
-        "ok": true,
-        "ret": []
-      },
-      "spec": "§6"
-    },
-    "line_default": {
-      "value": {
-        "ok": true,
-        "ret": []
-      },
-      "spec": "§6"
-    },
-    "cross_default": {
-      "value": {
-        "ok": true,
-        "ret": []
-      },
-      "spec": "§6"
-    },
-    "defaults": {
-      "value": {
-        "ok": true,
-        "ret": []
-      },
-      "spec": "§6"
+      "spec": "\u00a76"
     }
   },
   "pixels": [

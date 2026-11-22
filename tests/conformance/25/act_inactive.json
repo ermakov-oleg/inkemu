@@ -4,8 +4,7 @@
   "steps": [
     "wait 1s",
     "tap 100 100",
-    "wait 1s",
-    "observe s"
+    "wait 1s"
   ],
   "expect": {
     "load_sleep": {
@@ -66,10 +65,6 @@
           "inactive"
         ]
       },
-      "spec": "\u00a725"
-    },
-    "s.locked": {
-      "value": false,
       "spec": "\u00a725"
     }
   },

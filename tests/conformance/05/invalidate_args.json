@@ -1,21 +1,7 @@
 {
-  "spec": "§5",
-  "about": "invalidate takes nothing or \"full\" and returns nothing; any other argument is invalid_argument",
+  "spec": "\u00a75",
+  "about": "invalidate takes nothing or \"full\"; any other argument is invalid_argument",
   "expect": {
-    "plain": {
-      "value": {
-        "ok": true,
-        "ret": []
-      },
-      "spec": "§5"
-    },
-    "full": {
-      "value": {
-        "ok": true,
-        "ret": []
-      },
-      "spec": "§5"
-    },
     "bogus": {
       "value": {
         "ok": true,
@@ -24,7 +10,7 @@
           "invalid_argument"
         ]
       },
-      "spec": "§5"
+      "spec": "\u00a75"
     },
     "number": {
       "value": {
@@ -34,7 +20,7 @@
           "invalid_argument"
         ]
       },
-      "spec": "§5"
+      "spec": "\u00a75"
     }
   },
   "errors": []

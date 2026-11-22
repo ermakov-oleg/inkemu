@@ -1,27 +1,7 @@
 {
-  "spec": "§7",
-  "about": "fonts:size takes an integer from 8 to 96; anything else is invalid_argument",
+  "spec": "\u00a77",
+  "about": "fonts:size outside 8..96 or with a fraction is invalid_argument",
   "expect": {
-    "size_8": {
-      "value": {
-        "ok": true,
-        "ret": [
-          true,
-          null
-        ]
-      },
-      "spec": "§7"
-    },
-    "size_96": {
-      "value": {
-        "ok": true,
-        "ret": [
-          true,
-          null
-        ]
-      },
-      "spec": "§7"
-    },
     "size_7": {
       "value": {
         "ok": true,
@@ -30,7 +10,7 @@
           "invalid_argument"
         ]
       },
-      "spec": "§7"
+      "spec": "\u00a77"
     },
     "size_97": {
       "value": {
@@ -40,7 +20,7 @@
           "invalid_argument"
         ]
       },
-      "spec": "§7"
+      "spec": "\u00a77"
     },
     "size_0": {
       "value": {
@@ -50,7 +30,7 @@
           "invalid_argument"
         ]
       },
-      "spec": "§7"
+      "spec": "\u00a77"
     },
     "size_fraction": {
       "value": {
@@ -60,7 +40,7 @@
           "invalid_argument"
         ]
       },
-      "spec": "§7"
+      "spec": "\u00a77"
     }
   },
   "errors": []

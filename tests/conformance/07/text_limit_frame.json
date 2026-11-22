@@ -1,16 +1,7 @@
 {
-  "spec": "§7",
-  "about": "all text in one frame is capped at 65536 bytes: eight 8192-byte texts fit, one more byte is limit_exceeded",
+  "spec": "\u00a77",
+  "about": "all text in one frame is capped at 65536 bytes: after eight 8192-byte texts one more byte is limit_exceeded",
   "expect": {
-    "eight_texts": {
-      "value": {
-        "ok": true,
-        "ret": [
-          0
-        ]
-      },
-      "spec": "§7"
-    },
     "ninth_byte": {
       "value": {
         "ok": true,
@@ -19,7 +10,7 @@
           "limit_exceeded"
         ]
       },
-      "spec": "§7"
+      "spec": "\u00a77"
     }
   },
   "errors": []

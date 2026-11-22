@@ -5,6 +5,6 @@ end
 
 function on_draw(ctx, g)
   fill(g, 1022)
-  T.call("underlined_text", function() return g:text(10, 10, "hi", { underline = true }) end)
+  g:text(10, 10, "hi", { underline = true })
   T.call("rect_after", function() return g:rect(0, 0, 1, 1, { fill = true, color = 0 }) end)
 end

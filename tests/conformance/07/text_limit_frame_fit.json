@@ -1,0 +1,16 @@
+{
+  "spec": "\u00a77",
+  "about": "eight 8192-byte texts fit in one frame",
+  "expect": {
+    "eight_texts": {
+      "value": {
+        "ok": true,
+        "ret": [
+          0
+        ]
+      },
+      "spec": "\u00a77"
+    }
+  },
+  "errors": []
+}

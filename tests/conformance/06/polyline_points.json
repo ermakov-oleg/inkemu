@@ -1,6 +1,6 @@
 {
-  "spec": "§6",
-  "about": "polyline takes 2 to 128 points: one point, no points and an odd-length array are invalid_argument",
+  "spec": "\u00a76",
+  "about": "one point, no points and an odd-length array are invalid_argument for a polyline",
   "expect": {
     "one_point": {
       "value": {
@@ -10,7 +10,7 @@
           "invalid_argument"
         ]
       },
-      "spec": "§6"
+      "spec": "\u00a76"
     },
     "empty": {
       "value": {
@@ -20,7 +20,7 @@
           "invalid_argument"
         ]
       },
-      "spec": "§6"
+      "spec": "\u00a76"
     },
     "odd_array": {
       "value": {
@@ -30,21 +30,7 @@
           "invalid_argument"
         ]
       },
-      "spec": "§6"
-    },
-    "two_points": {
-      "value": {
-        "ok": true,
-        "ret": []
-      },
-      "spec": "§6"
-    },
-    "max_points": {
-      "value": {
-        "ok": true,
-        "ret": []
-      },
-      "spec": "§6"
+      "spec": "\u00a76"
     }
   },
   "errors": []

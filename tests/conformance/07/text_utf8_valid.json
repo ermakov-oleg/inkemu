@@ -1,0 +1,14 @@
+{
+  "spec": "\u00a77",
+  "about": "text with a valid multi-byte UTF-8 character is drawn and returns nothing",
+  "expect": {
+    "text_ok": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "\u00a77"
+    }
+  },
+  "errors": []
+}

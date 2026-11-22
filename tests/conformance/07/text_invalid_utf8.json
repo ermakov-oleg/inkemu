@@ -1,5 +1,5 @@
 {
-  "spec": "§7",
+  "spec": "\u00a77",
   "about": "text that is not valid UTF-8 is invalid_argument in text, text_box, measure and layout",
   "expect": {
     "text": {
@@ -10,7 +10,7 @@
           "invalid_argument"
         ]
       },
-      "spec": "§7"
+      "spec": "\u00a77"
     },
     "text_cut": {
       "value": {
@@ -20,7 +20,7 @@
           "invalid_argument"
         ]
       },
-      "spec": "§7"
+      "spec": "\u00a77"
     },
     "text_box": {
       "value": {
@@ -30,7 +30,7 @@
           "invalid_argument"
         ]
       },
-      "spec": "§7"
+      "spec": "\u00a77"
     },
     "measure": {
       "value": {
@@ -40,7 +40,7 @@
           "invalid_argument"
         ]
       },
-      "spec": "§7"
+      "spec": "\u00a77"
     },
     "layout": {
       "value": {
@@ -50,14 +50,7 @@
           "invalid_argument"
         ]
       },
-      "spec": "§7"
-    },
-    "text_ok": {
-      "value": {
-        "ok": true,
-        "ret": []
-      },
-      "spec": "§7"
+      "spec": "\u00a77"
     }
   },
   "errors": []

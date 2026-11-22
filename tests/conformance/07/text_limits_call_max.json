@@ -1,0 +1,31 @@
+{
+  "spec": "\u00a77",
+  "about": "g:text, g:text_box and font:measure take 8192 bytes per call",
+  "expect": {
+    "text_8192": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "\u00a77"
+    },
+    "box_8192": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "\u00a77"
+    },
+    "measure_8192": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "number",
+          null
+        ]
+      },
+      "spec": "\u00a77"
+    }
+  },
+  "errors": []
+}

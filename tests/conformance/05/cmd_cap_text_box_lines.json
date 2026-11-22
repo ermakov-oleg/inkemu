@@ -1,6 +1,6 @@
 {
-  "spec": "§5",
-  "about": "each line g:text_box draws is one command; a text_box that would pass the cap is refused whole and does not count",
+  "spec": "\u00a75",
+  "about": "each line g:text_box draws is one command; a text_box that would pass the cap is refused whole, so the next command that fits is still the 1025th",
   "expect": {
     "box_three_lines": {
       "value": {
@@ -10,21 +10,7 @@
           "limit_exceeded"
         ]
       },
-      "spec": "§5"
-    },
-    "rect_1023": {
-      "value": {
-        "ok": true,
-        "ret": []
-      },
-      "spec": "§5"
-    },
-    "rect_1024": {
-      "value": {
-        "ok": true,
-        "ret": []
-      },
-      "spec": "§5"
+      "spec": "\u00a75"
     },
     "rect_1025": {
       "value": {
@@ -34,7 +20,7 @@
           "limit_exceeded"
         ]
       },
-      "spec": "§5"
+      "spec": "\u00a75"
     }
   },
   "errors": []

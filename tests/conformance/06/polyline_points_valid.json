@@ -1,0 +1,21 @@
+{
+  "spec": "\u00a76",
+  "about": "polyline takes 2 to 128 points: the bounds return nothing",
+  "expect": {
+    "two_points": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "\u00a76"
+    },
+    "max_points": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "\u00a76"
+    }
+  },
+  "errors": []
+}

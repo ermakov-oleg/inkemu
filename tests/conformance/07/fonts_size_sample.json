@@ -1,37 +1,7 @@
 {
-  "spec": "§7",
-  "about": "the sample is nil or text; bad UTF-8, NUL and right-to-left text are invalid_argument, other types raise an error",
+  "spec": "\u00a77",
+  "about": "a sample with bad UTF-8, NUL or right-to-left text is invalid_argument and other types raise an error",
   "expect": {
-    "sample_ascii": {
-      "value": {
-        "ok": true,
-        "ret": [
-          true,
-          null
-        ]
-      },
-      "spec": "§7"
-    },
-    "sample_empty": {
-      "value": {
-        "ok": true,
-        "ret": [
-          true,
-          null
-        ]
-      },
-      "spec": "§7"
-    },
-    "sample_nil": {
-      "value": {
-        "ok": true,
-        "ret": [
-          true,
-          null
-        ]
-      },
-      "spec": "§7"
-    },
     "sample_bad_utf8": {
       "value": {
         "ok": true,
@@ -40,7 +10,7 @@
           "invalid_argument"
         ]
       },
-      "spec": "§7"
+      "spec": "\u00a77"
     },
     "sample_nul": {
       "value": {
@@ -50,7 +20,7 @@
           "invalid_argument"
         ]
       },
-      "spec": "§7"
+      "spec": "\u00a77"
     },
     "sample_rtl": {
       "value": {
@@ -60,15 +30,15 @@
           "invalid_argument"
         ]
       },
-      "spec": "§7"
+      "spec": "\u00a77"
     },
     "raises_table": {
       "value": true,
-      "spec": "§7"
+      "spec": "\u00a77"
     },
     "raises_boolean": {
       "value": true,
-      "spec": "§7"
+      "spec": "\u00a77"
     }
   },
   "errors": []

@@ -1,94 +1,22 @@
 {
-  "spec": "§7",
-  "about": "every font object has name, integer line_height and ascent, measure and layout; system fonts carry no px",
+  "spec": "\u00a77",
+  "about": "every font object, system or sized, has a layout method",
   "expect": {
-    "small.name": {
-      "value": "small",
-      "spec": "§7"
-    },
-    "medium.name": {
-      "value": "medium",
-      "spec": "§7"
-    },
-    "large.name": {
-      "value": "large",
-      "spec": "§7"
-    },
-    "small.line_height": {
-      "value": "integer",
-      "spec": "§7"
-    },
-    "small.ascent": {
-      "value": "integer",
-      "spec": "§7"
-    },
-    "small.measure": {
-      "value": "function",
-      "spec": "§7"
-    },
     "small.layout": {
       "value": "function",
-      "spec": "§7"
-    },
-    "medium.line_height": {
-      "value": "integer",
-      "spec": "§7"
-    },
-    "medium.ascent": {
-      "value": "integer",
-      "spec": "§7"
-    },
-    "medium.measure": {
-      "value": "function",
-      "spec": "§7"
+      "spec": "\u00a77"
     },
     "medium.layout": {
       "value": "function",
-      "spec": "§7"
-    },
-    "large.line_height": {
-      "value": "integer",
-      "spec": "§7"
-    },
-    "large.ascent": {
-      "value": "integer",
-      "spec": "§7"
-    },
-    "large.measure": {
-      "value": "function",
-      "spec": "§7"
+      "spec": "\u00a77"
     },
     "large.layout": {
       "value": "function",
-      "spec": "§7"
-    },
-    "sized.line_height": {
-      "value": "integer",
-      "spec": "§7"
-    },
-    "sized.ascent": {
-      "value": "integer",
-      "spec": "§7"
-    },
-    "sized.measure": {
-      "value": "function",
-      "spec": "§7"
+      "spec": "\u00a77"
     },
     "sized.layout": {
       "value": "function",
-      "spec": "§7"
-    },
-    "small.px": {
-      "value": "nil",
-      "spec": "§7"
-    },
-    "medium.px": {
-      "value": "nil",
-      "spec": "§7"
-    },
-    "large.px": {
-      "value": "nil",
-      "spec": "§7"
+      "spec": "\u00a77"
     }
   },
   "errors": []

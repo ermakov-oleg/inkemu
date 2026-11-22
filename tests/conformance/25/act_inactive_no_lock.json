@@ -1,0 +1,15 @@
+{
+  "spec": "\u00a725",
+  "about": "act(\"sleep\") outside a key or pointer up does not lock the device",
+  "steps": [
+    "wait 1s",
+    "observe s"
+  ],
+  "expect": {
+    "s.locked": {
+      "value": false,
+      "spec": "\u00a725"
+    }
+  },
+  "errors": []
+}
