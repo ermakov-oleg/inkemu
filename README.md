@@ -19,6 +19,30 @@ network responses.
 The device API is not publicly documented. Everything here is built from community reverse-engineering notes, so
 treat inkemu as a development aid, not as a reference of the firmware.
 
+## In the browser
+
+The same core runs as a static page: **<https://ermakov-oleg.github.io/inkemu/>**. It is for trying an InkApp without
+Python or the reader. Open an app by pasting a GitHub folder link (`https://github.com/<owner>/<repo>/tree/<ref>/<path>`),
+loading a zip, or picking a local folder (re-read it after editing). Click = tap, drag = swipe, long press = hold,
+arrows/Enter/Esc = side buttons.
+
+- Share link: `?gh=<owner>/<repo>&ref=<ref>&path=<path>`. It always follows the branch, it is never pinned to a commit.
+- Limits: 20 MiB and 2000 files per app; GitHub allows 60 API calls per hour per IP without a token, one per open.
+- Fixtures: the nearest `tests/fixtures/<app_id>/` up the tree from the app folder (its `net/` and `reader.json`).
+  The default is "fixtures, then the network"; the "fixtures only" toggle replays only.
+- Network: the page calls servers from the browser, so a server without CORS headers answers `no_network`. Record a
+  fixture with `inkemu run --net record` and keep it in the repository.
+- Fonts: the bundled DejaVu Sans is used. "Fonts..." takes your own `small.bdf`, `medium.bdf` and `large.bdf`; the
+  reader's font is not included.
+
+Development:
+
+```bash
+scripts/build-web.sh                 # builds the Wasm core into web/core/ (needs emscripten)
+python3 -m http.server -d web        # then open http://localhost:8000
+node --test 'web/tests/**/*.test.mjs'
+```
+
 ## Install
 
 ```bash
