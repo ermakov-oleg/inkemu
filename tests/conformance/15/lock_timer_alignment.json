@@ -1,0 +1,29 @@
+{
+  "spec": "\u00a715",
+  "about": "a timer wake comes at the next whole multiple of interval_sec in local time, not interval_sec after locking",
+  "manifest": {
+    "lockscreen": {
+      "entry": "lockscreen.lua",
+      "interval_sec": 60
+    }
+  },
+  "files": {
+    "lockscreen.lua": "lock_reason.lockscreen.lua"
+  },
+  "start_time": "2026-11-20T09:00:20",
+  "steps": [
+    "lock",
+    "wait 41s"
+  ],
+  "expect": {
+    "reason": {
+      "value": "timer",
+      "spec": "\u00a715"
+    },
+    "elapsed": {
+      "value": 40,
+      "spec": "\u00a715"
+    }
+  },
+  "errors": []
+}

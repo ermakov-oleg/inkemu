@@ -1,0 +1,36 @@
+{
+  "spec": "\u00a715",
+  "about": "a timer session waits for its request and draws once with the fetched data",
+  "manifest": {
+    "permissions": [
+      "net"
+    ],
+    "lockscreen": {
+      "entry": "lockscreen.lua",
+      "interval_sec": 60,
+      "net": true
+    }
+  },
+  "files": {
+    "lockscreen.lua": "lock_fetch.lockscreen.lua"
+  },
+  "fixtures": [
+    {
+      "method": "GET",
+      "url": "https://x.test/lock",
+      "status": 200,
+      "body": "fresh"
+    }
+  ],
+  "steps": [
+    "lock",
+    "wait 61s"
+  ],
+  "expect": {
+    "draws": {
+      "value": "fresh",
+      "spec": "\u00a715"
+    }
+  },
+  "errors": []
+}

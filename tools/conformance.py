@@ -64,6 +64,7 @@ STEP_FORMS = {
     "restart": re.compile(r"^restart$"),
     "reload": re.compile(r"^reload$"),
 }
+GRAY_LEVELS = {0: 3, 85: 2, 170: 1, 255: 0}
 RECORD = re.compile(r"@conformance (\S+) (.*)$")
 
 
@@ -157,8 +158,11 @@ def _validate(path: Path, d: object) -> None:
     if not isinstance(log, list) or not all(isinstance(s, str) for s in log):
         raise _fail(path, '"log" must be a list of strings')
     for p in d.get("pixels", []):
-        if not (isinstance(p, list) and len(p) == 3 and all(type(v) is int for v in p) and p[2] in (0, 1)):
-            raise _fail(path, f"bad pixel {p!r}: use [x, y, 1 for ink or 0 for paper]")
+        ok = isinstance(p, list) and len(p) in (3, 4) and all(type(v) is int for v in p) and p[2] in (0, 1)
+        if not ok or (len(p) == 4 and p[3] not in range(4)):
+            raise _fail(path, f"bad pixel {p!r}: use [x, y, 1 for ink or 0 for paper] and an optional gray level 0-3")
+        if len(p) == 4 and p[2] != (p[3] == 3):
+            raise _fail(path, f"bad pixel {p!r}: only level 3 is ink")
     if not (expect or errors or log or d.get("pixels")):
         raise _fail(path, "expects nothing")
 
@@ -444,17 +448,24 @@ def evaluate(check: Check, records: dict, observed: dict, errors: list[str], log
             diffs.append(f"no Lua error contains {s!r}; errors: {_j(errors)}")
     text = "\n".join(log)
     diffs += [f"log has no {s!r}" for s in check.data.get("log", []) if s not in text]
-    for x, y, want in check.data.get("pixels", []):
+    gray = image is not None and image.mode == "L"
+    for x, y, want, *level in check.data.get("pixels", []):
         if image is None:
             diffs.append("pixels: no frame")
             break
         if not (0 <= x < image.width and 0 <= y < image.height):
             diffs.append(f"pixel ({x}, {y}) is outside the {image.width}x{image.height} frame")
             continue
-        got = 1 if image.getpixel((x, y)) == 0 else 0
+        value = image.getpixel((x, y))
+        got = 1 if value == 0 else 0
         if got != want:
             names = ("paper", "ink")
             diffs.append(f"pixel ({x}, {y}): expected {names[want]}, got {names[got]}")
+        elif gray and level:
+            # a gray shot is mode "L" with 0, 85, 170, 255 for 3, 2, 1, 0 ink steps
+            got_level = GRAY_LEVELS.get(value)
+            if got_level != level[0]:
+                diffs.append(f"pixel ({x}, {y}): expected gray level {level[0]}, got {got_level} (value {value})")
     return diffs
 
 

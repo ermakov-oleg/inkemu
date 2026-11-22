@@ -158,6 +158,47 @@ function on_draw(ctx, g) g:clear(0); g:rect(0, 0, 10, 10, { fill = true }) end
     assert any(d.startswith("no Lua error contains 'nope'") for d in diffs)
 
 
+def gray_diffs(tmp_path, pixels, image):
+    data = {"spec": "§3", "pixels": pixels}
+    root = make_root(tmp_path, {"03/gray": (VALUE_LUA, data)}, name=f"conf{len(list(tmp_path.iterdir()))}")
+    return conformance.evaluate(conformance.all_checks(root)[0], {}, {}, [], [], image)
+
+
+def gray_shot():
+    from PIL import Image
+
+    img = Image.new("L", (4, 1))
+    img.putdata([0, 85, 170, 255])
+    return img
+
+
+def test_gray_level_is_checked_on_a_gray_frame(tmp_path):
+    ok = [[0, 0, 1, 3], [1, 0, 0, 2], [2, 0, 0, 1], [3, 0, 0, 0]]
+    assert gray_diffs(tmp_path, ok, gray_shot()) == []
+    diffs = gray_diffs(tmp_path, [[1, 0, 0, 1], [2, 0, 0, 0], [0, 0, 1]], gray_shot())
+    assert diffs == [
+        "pixel (1, 0): expected gray level 1, got 2 (value 85)",
+        "pixel (2, 0): expected gray level 0, got 1 (value 170)",
+    ]
+    assert gray_diffs(tmp_path, [[1, 0, 1]], gray_shot()) == ["pixel (1, 0): expected ink, got paper"]
+
+
+def test_gray_level_is_ignored_on_a_one_bit_frame(tmp_path):
+    from PIL import Image
+
+    img = Image.new("1", (2, 1))
+    img.putdata([0, 255])
+    assert gray_diffs(tmp_path, [[0, 0, 1, 3], [1, 0, 0, 2]], img) == []
+    assert gray_diffs(tmp_path, [[0, 0, 0, 0]], img) == ["pixel (0, 0): expected paper, got ink"]
+
+
+@pytest.mark.parametrize("pixel", [[0, 0, 1, 4], [0, 0, 0, -1], [0, 0, 1, 2], [0, 0, 0, 3], [0, 0, 1, 3, 1]])
+def test_bad_gray_pixels_are_malformed(tmp_path, pixel):
+    root = make_root(tmp_path, {"03/gray": (VALUE_LUA, {"spec": "§3", "pixels": [pixel]})})
+    with pytest.raises(conformance.CheckError, match="bad pixel"):
+        conformance.all_checks(root)
+
+
 def test_lua_error_fails_unless_expected(tmp_path):
     lua = 'function on_load(ctx) error("kaput") end\n'
     root = make_root(

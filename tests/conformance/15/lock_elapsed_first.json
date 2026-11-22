@@ -1,0 +1,23 @@
+{
+  "spec": "\u00a715",
+  "about": "elapsed_sec is 0 in the first session",
+  "manifest": {
+    "lockscreen": {
+      "entry": "lockscreen.lua",
+      "interval_sec": 60
+    }
+  },
+  "files": {
+    "lockscreen.lua": "lock_reason.lockscreen.lua"
+  },
+  "steps": [
+    "lock"
+  ],
+  "expect": {
+    "elapsed": {
+      "value": 0,
+      "spec": "\u00a715"
+    }
+  },
+  "errors": []
+}

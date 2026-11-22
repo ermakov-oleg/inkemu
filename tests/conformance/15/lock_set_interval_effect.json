@@ -1,0 +1,28 @@
+{
+  "spec": "\u00a715",
+  "about": "set_interval moves the next wakes: with 120 the second session comes at 120 s and reports the new interval",
+  "manifest": {
+    "lockscreen": {
+      "entry": "lockscreen.lua",
+      "interval_sec": 60
+    }
+  },
+  "files": {
+    "lockscreen.lua": "lock_interval_effect.lockscreen.lua"
+  },
+  "steps": [
+    "lock",
+    "wait 121s"
+  ],
+  "expect": {
+    "sessions": {
+      "value": 2,
+      "spec": "\u00a715"
+    },
+    "interval": {
+      "value": 120,
+      "spec": "\u00a715"
+    }
+  },
+  "errors": []
+}

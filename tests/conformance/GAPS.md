@@ -5,6 +5,24 @@ conformance check listed in `pending.json`; when the core is fixed the check tur
 Source: `probe-confirmed` means the behaviour was measured on the reader (firmware 26112001); `contract only` means the
 contract states it and the reader was not measured. File names are relative to the repository root.
 
+## §3 Gray frames
+
+### Gray frames: proposed interface
+A frame is gray when one of its `g:image` calls sets `gray = true` (outside `layer:draw`; `ctx.screen.gray_still` is 4, probe-confirmed). `Emu.status()["refresh"]` and `["refreshes"]` report such a frame as `"gray"` (see "Refresh kind: proposed interface" under §5). `Emu.shot()` returns a Pillow image of mode `"L"` for a gray frame, with the gray levels 0, 85, 170 and 255 for 3, 2, 1 and 0 ink steps, and keeps returning mode `"1"` for every other frame. The runner tells the two apart by `image.mode`: a `pixels` entry `[x, y, ink, level]` always checks ink (`1` only for black, the 3-step level) and also checks the level 0-3 when the shot is gray, so the level is ignored on a 1-bit frame. The core stays 1-bit for normal frames; only a gray frame needs the 4-step buffer.
+- Touch points: `crates/inkcore/src/draw/canvas.rs` and `crates/inkcore/src/draw/image.rs` (frame buffer and `g:image` options), `crates/inkcore/src/emu.rs` (frame presentation, `frame`), `crates/inkemu-py/src/lib.rs` and `src/inkemu/emu.py` (`_image`, `shot`).
+
+### 03/gray_frame_refresh, 03/gray_next_frame_full, 03/gray_layer_ignored
+- Contract: a frame with a `g:image` that sets `gray = true` is presented as a gray frame (a full refresh with the gray waveform); the first normal frame after it is a full refresh and the one after that is partial again; `gray = true` inside a `layer:draw` callback has no effect.
+- Core now: `gray` is ignored and no refresh kind is recorded.
+- Touch points: `crates/inkcore/src/draw/image.rs`, `crates/inkcore/src/ctx/layers.rs`, `crates/inkcore/src/emu.rs`.
+- Source: contract only.
+
+### 03/gray_pixels
+- Contract: a gray frame is drawn in `gray_still` steps, `(color * gray_still) // 16`, for rectangles and the rest; a black-and-white image stays black and white. The check expects colors 3, 4, 8, 12 and 15 to come out as 0, 1, 2, 3 and 3 steps.
+- Core now: the shot is always 1-bit, so a rectangle of color 8 or more is full ink and the levels cannot be told apart.
+- Touch points: as for the interface above.
+- Source: contract only.
+
 ## §5 Presenting a frame
 
 ### 05/cmd_cap_1025, 05/cmd_cap_clear
@@ -322,6 +340,72 @@ All network checks use replay fixtures on `.test` hosts, so they pass the same w
 - Source: contract only.
 
 Already green and pinned: `14/net_methods_basic`, `14/net_method_empty`, `14/net_body_allowed`, `14/net_url_scheme`, `14/net_timeout_accepted`, `14/net_keep_wifi_types`, `14/net_body_cap_exact`, `14/net_header_limits_ok`, `14/net_redirect_not_followed`. Not covered: `ctx.net:websocket` (not emulated), `no_network`, `timeout`, `io_error` and `out_of_memory` answers (a fixture cannot express them), unfixtured requests (replay answers `no_fixture`, which the contract does not know), the `content-type` default, and header joining of duplicates.
+
+## §15 Lock screen
+
+Lock-screen frames count as app frames in `status()["refresh"]` and `status()["refreshes"]` (see "Refresh kind: proposed interface" under §5): after `lock` the list has the session-start frame of the app first, then the frames of the first session, then one per timer wake. The checks below assume that. Frame counts of a networked session follow the contract's step list (one frame at once with the stored data when requests or timers remain after `on_load`, one final frame).
+
+### 15/lock_reason_first
+- Contract: `ctx.lock.reason` is `"first"` in the first session after locking and `"timer"` in a wake.
+- Core now: the first session reports `"lock"`; the timer value is right (`15/lock_reason_timer`, green).
+- Touch points: `crates/inkcore/src/lockscreen.rs` (`lock`, `enter`), `crates/inkcore/src/ctx/lock.rs`.
+- Source: contract only.
+
+### 15/lock_timer_alignment
+- Contract: after a session the device sleeps until the next whole multiple of `interval_sec` of local time (an interval of 60 wakes on the minute). The check locks at 09:00:20 and expects the wake at 09:01:00 with `elapsed_sec` 40.
+- Core now: the wake comes `interval_sec` after locking (09:01:20).
+- Touch points: `crates/inkcore/src/lockscreen.rs` (`schedule`).
+- Source: contract only (not in the task list; the guide and §15 both state it).
+
+### 15/lock_net_interval_blocks, 15/lock_net_interval_clamp
+- Contract: `lockscreen.net_interval_sec` defaults to `interval_sec` and is limited to 30-3600. `ctx.lock.net` is true in the first session and later only when at least `net_interval_sec` seconds have passed since the start of the last session where it was true; when it is false `ctx.net` is nil. The clamp check uses `interval_sec` 600 and `net_interval_sec` 100000 and expects the sequence true, five times false, true (the wake of 3600 s). The low bound of the clamp cannot be told apart from the default with `interval_sec` at its minimum, so it has no check.
+- Core now: `net_interval_sec` is not read; `lock.net` follows the manifest's `net` flag in every session. Default, elapsed interval and the undeclared case are pinned in `15/lock_net_interval_default`, `15/lock_net_interval_elapsed`, `15/lock_net_first`, `15/lock_net_undeclared` (green).
+- Touch points: `crates/inkcore/src/lockscreen.rs` (`enter`, `LockCtx`), `crates/inkcore/src/ctx/lock.rs`, `crates/inkcore/src/ctx/net.rs` (`ctx.net` must follow `lock.net`).
+- Source: contract only. Not modelled: battery below 20% and the three failed Wi-Fi connections.
+
+### 15/lock_prep_first, 15/lock_first_frames
+- Contract: in a networked first session, when requests are unfinished after `on_load`, `on_draw` runs once at once with the stored data (full refresh) and again after the preparation phase with the fetched data (partial refresh).
+- Core now: the first session draws once at once and never again when the request finishes. A timer session already waits for its request and draws once (`15/lock_prep_timer`, green).
+- Touch points: `crates/inkcore/src/lockscreen.rs` (`after_load`, `present`), `crates/inkcore/src/emu.rs` (frame scheduling).
+- Source: contract only.
+
+### 15/lock_prep_cap
+- Contract: the preparation phase ends 28000 ms after the session start; unfinished requests and timers are cancelled and `on_draw` runs (a request that takes 29 s never delivers). `lock:done()` also ends it early (`15/lock_done_early`, green).
+- Core now: a timer wake waits 30 s (`LOCK_WAIT_MS`) and a 29 s request is delivered before the draw.
+- Touch points: `crates/inkcore/src/lockscreen.rs` (`LOCK_WAIT_MS`, `after_load`), `crates/inkcore/src/ctx/net.rs` (cancel on the end of the phase).
+- Source: contract only.
+
+### 15/lock_invalidate_full_prep, 15/lock_invalidate_plain_prep, 15/lock_refresh_kinds
+- Contract: the first session presents a full refresh and a timer session a partial one; `ctx:invalidate("full")` during the preparation phase makes the frame of step 5 full and a plain `invalidate()` draws no extra frame.
+- Core now: no refresh kind is recorded.
+- Touch points: `crates/inkcore/src/lockscreen.rs`, `crates/inkcore/src/ctx/mod.rs` (`invalidate`), `crates/inkcore/src/emu.rs`.
+- Source: contract only.
+
+### 15/lock_gray_then_normal
+- Contract: a lock session can present a gray frame (any session); a gray frame is a full refresh, and the next normal frame, even in a later session (the timer wake), is a full refresh too. Expected kinds after lock and one wake: full (app start), gray, full.
+- Core now: nothing is gray and no kind is recorded.
+- Touch points: as for the gray frames in §3, plus `crates/inkcore/src/lockscreen.rs`.
+- Source: contract only.
+
+### 15/lock_after_noop
+- Contract: in a lock session without `lockscreen.net`, `ctx:after` has no effect (its callback never runs). With `lockscreen.net` timers work during the preparation phase.
+- Core now: the callback runs.
+- Touch points: `crates/inkcore/src/ctx/mod.rs` (`after`), `crates/inkcore/src/lockscreen.rs`.
+- Source: contract only.
+
+### 15/lock_budget_inactive
+- Contract: `ctx.budget:extend()` returns `nil, "inactive"` in a lock session.
+- Core now: returns `true`.
+- Touch points: `crates/inkcore/src/ctx/stubs.rs` (`budget`).
+- Source: contract only.
+
+### 15/lock_set_interval_args
+- Contract: `set_interval` takes an integer from 30 to 3600 and returns nothing. The contract names no result for other values; the check expects `nil, "invalid_argument"` like the other integer arguments (29, 3601 and 45.5).
+- Core now: any positive number is accepted and `true` is returned; only 0 and negatives are refused.
+- Touch points: `crates/inkcore/src/ctx/lock.rs` (`set_interval`).
+- Source: contract only. The error code for a bad value is inferred, confirm it before the fix.
+
+Already green and pinned: `15/lock_reason_timer`, `15/lock_elapsed_first`, `15/lock_net_first`, `15/lock_net_undeclared`, `15/lock_net_interval_default`, `15/lock_net_interval_elapsed`, `15/lock_prep_timer`, `15/lock_done_early`, `15/lock_set_interval_effect`. The prelude records reach `emu.log` from a lock session (these checks read them). Not covered: the system lock screen on a missing entry, error or timeout in the script (default picture, no more wakes), low battery, `ctx.lockscreen` wallpaper calls and the confirmation dialog.
 
 ## §25 System actions
 

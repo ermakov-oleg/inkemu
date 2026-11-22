@@ -1,0 +1,41 @@
+{
+  "spec": "\u00a715",
+  "about": "a networked first session presents two frames: a full refresh with the stored data, then a partial one with the fetched data",
+  "manifest": {
+    "permissions": [
+      "net"
+    ],
+    "lockscreen": {
+      "entry": "lockscreen.lua",
+      "interval_sec": 60,
+      "net": true
+    }
+  },
+  "files": {
+    "lockscreen.lua": "lock_fetch.lockscreen.lua"
+  },
+  "fixtures": [
+    {
+      "method": "GET",
+      "url": "https://x.test/lock",
+      "status": 200,
+      "body": "fresh"
+    }
+  ],
+  "steps": [
+    "lock",
+    "wait 1s",
+    "observe s"
+  ],
+  "expect": {
+    "s.refreshes": {
+      "value": [
+        "full",
+        "full",
+        "partial"
+      ],
+      "spec": "\u00a715"
+    }
+  },
+  "errors": []
+}

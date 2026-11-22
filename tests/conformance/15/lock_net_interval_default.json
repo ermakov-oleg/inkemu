@@ -1,0 +1,32 @@
+{
+  "spec": "\u00a715",
+  "about": "net_interval_sec defaults to interval_sec, so every wake of this lock screen has the network",
+  "manifest": {
+    "permissions": [
+      "net"
+    ],
+    "lockscreen": {
+      "entry": "lockscreen.lua",
+      "interval_sec": 60,
+      "net": true
+    }
+  },
+  "files": {
+    "lockscreen.lua": "lock_net.lockscreen.lua"
+  },
+  "steps": [
+    "lock",
+    "wait 181s"
+  ],
+  "expect": {
+    "lock_net": {
+      "value": true,
+      "spec": "\u00a715"
+    },
+    "has_net": {
+      "value": true,
+      "spec": "\u00a715"
+    }
+  },
+  "errors": []
+}

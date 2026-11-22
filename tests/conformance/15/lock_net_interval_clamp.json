@@ -1,0 +1,29 @@
+{
+  "spec": "\u00a715",
+  "about": "net_interval_sec above 3600 is limited to 3600: the network returns at the wake of 3600 s and not before",
+  "manifest": {
+    "permissions": [
+      "net"
+    ],
+    "lockscreen": {
+      "entry": "lockscreen.lua",
+      "interval_sec": 600,
+      "net": true,
+      "net_interval_sec": 100000
+    }
+  },
+  "files": {
+    "lockscreen.lua": "lock_net_seq.lockscreen.lua"
+  },
+  "steps": [
+    "lock",
+    "wait 3601s"
+  ],
+  "expect": {
+    "net_seq": {
+      "value": "true,false,false,false,false,false,true",
+      "spec": "\u00a715"
+    }
+  },
+  "errors": []
+}

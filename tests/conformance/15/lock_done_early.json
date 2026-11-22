@@ -1,0 +1,37 @@
+{
+  "spec": "\u00a715",
+  "about": "lock:done() ends the preparation phase: the frame is drawn without waiting for the slow request",
+  "manifest": {
+    "permissions": [
+      "net"
+    ],
+    "lockscreen": {
+      "entry": "lockscreen.lua",
+      "interval_sec": 60,
+      "net": true
+    }
+  },
+  "files": {
+    "lockscreen.lua": "lock_done.lockscreen.lua"
+  },
+  "fixtures": [
+    {
+      "method": "GET",
+      "url": "https://x.test/lock",
+      "status": 200,
+      "body": "fresh",
+      "delay_ms": 29000
+    }
+  ],
+  "steps": [
+    "lock",
+    "wait 63s"
+  ],
+  "expect": {
+    "timer_draw": {
+      "value": "none",
+      "spec": "\u00a715"
+    }
+  },
+  "errors": []
+}

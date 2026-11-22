@@ -1,0 +1,42 @@
+{
+  "spec": "\u00a715",
+  "about": "a plain invalidate in the preparation phase draws no extra frame: the timer session presents one partial refresh",
+  "manifest": {
+    "permissions": [
+      "net"
+    ],
+    "lockscreen": {
+      "entry": "lockscreen.lua",
+      "interval_sec": 60,
+      "net": true
+    }
+  },
+  "files": {
+    "lockscreen.lua": "lock_invalidate_plain.lockscreen.lua"
+  },
+  "fixtures": [
+    {
+      "method": "GET",
+      "url": "https://x.test/lock",
+      "status": 200,
+      "body": "fresh"
+    }
+  ],
+  "steps": [
+    "lock",
+    "wait 61s",
+    "observe s"
+  ],
+  "expect": {
+    "s.refreshes": {
+      "value": [
+        "full",
+        "full",
+        "partial",
+        "partial"
+      ],
+      "spec": "\u00a715"
+    }
+  },
+  "errors": []
+}

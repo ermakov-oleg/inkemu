@@ -1,0 +1,31 @@
+{
+  "spec": "\u00a715",
+  "about": "without lockscreen.net, lock.net is false and ctx.net is nil",
+  "manifest": {
+    "permissions": [
+      "net"
+    ],
+    "lockscreen": {
+      "entry": "lockscreen.lua",
+      "interval_sec": 60
+    }
+  },
+  "files": {
+    "lockscreen.lua": "lock_net.lockscreen.lua"
+  },
+  "steps": [
+    "lock",
+    "wait 61s"
+  ],
+  "expect": {
+    "lock_net": {
+      "value": false,
+      "spec": "\u00a715"
+    },
+    "has_net": {
+      "value": false,
+      "spec": "\u00a715"
+    }
+  },
+  "errors": []
+}

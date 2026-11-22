@@ -88,7 +88,7 @@ fields you mean.
   },
   "errors": [],
   "log": ["substring"],
-  "pixels": [[10, 10, 1], [11, 10, 0]]
+  "pixels": [[10, 10, 1], [11, 10, 0], [12, 10, 0, 2]]
 }
 ```
 
@@ -102,7 +102,11 @@ fields you mean.
   error and other errors are allowed. Error texts differ between cores, so to pin that a call raises, record
   `T.value("raises", not pcall(f))` and expect `true`.
 - `log`: substrings that must appear somewhere in the log.
-- `pixels`: `[x, y, 1]` for ink and `[x, y, 0]` for paper on the final frame, taken with `shot(dialog=False)`.
+- `pixels`: `[x, y, 1]` for ink and `[x, y, 0]` for paper on the final frame, taken with `shot(dialog=False)`. An optional
+  fourth value is the gray level 0-3 (the ink steps of a gray frame): `[x, y, 0, 2]`. It is checked only when the shot is
+  a gray frame. The proposed way to tell: `Emu.shot()` returns a Pillow image of mode `"L"` for a gray frame, with the
+  values 0, 85, 170 and 255 for levels 3, 2, 1 and 0, and mode `"1"` for every other frame. The ink value is always checked
+  (`1` only for level 3), so it must agree with the level: `[x, y, 1, 3]`, `[x, y, 0, 2]`. See `GAPS.md`, section 3.
 - `fixtures`: replayed network answers, written in the 0.1 fixture format (`net/METHOD_host_hash.json` plus a
   `.body` file). Optional fields: `body_hex` for binary bodies, `body_repeat` (`["x", 131082]`) for a large body,
   `delay_ms`, `match` (`exact`, `prefix`, `glob`) and `request_body` for a POST matched by its body.
@@ -110,6 +114,10 @@ fields you mean.
   URL, body and `match`) are refused as a malformed check.
 - Steps: `wait <n>[ms|s|m|h]`, `tap <x> <y>`, `key up|down|left|right|ok|back`, `answer yes|no`, `lock`, `unlock`,
   `restart`, `reload`, `observe <label>`.
+- Lock screen: put the entry script in a helper file next to the check, map it with `files`
+  (`{"lockscreen.lua": "name.lockscreen.lua"}`) and add the manifest's `lockscreen` block (`entry`, `interval_sec`, `net`,
+  `net_interval_sec`). The helper can `require("conformance")` like the app; its records reach the log. Sessions share
+  the app's storage, so a helper can count sessions there. Waits are virtual time, so `lock` + `wait 3601s` is cheap.
 
 ## Adding a check
 

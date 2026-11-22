@@ -1,0 +1,24 @@
+{
+  "spec": "\u00a715",
+  "about": "ctx:after has no effect in a lock session without lockscreen.net: its callback never runs",
+  "manifest": {
+    "lockscreen": {
+      "entry": "lockscreen.lua",
+      "interval_sec": 60
+    }
+  },
+  "files": {
+    "lockscreen.lua": "lock_after.lockscreen.lua"
+  },
+  "steps": [
+    "lock",
+    "wait 61s"
+  ],
+  "expect": {
+    "after_ran": {
+      "value": false,
+      "spec": "\u00a715"
+    }
+  },
+  "errors": []
+}

@@ -1,0 +1,26 @@
+{
+  "spec": "\u00a73",
+  "about": "the first normal frame after a gray frame is a full refresh; the one after it is partial again",
+  "steps": [
+    "wait 1s",
+    "tap 100 100",
+    "wait 1s",
+    "tap 100 100",
+    "wait 1s",
+    "tap 100 100",
+    "wait 1s",
+    "observe s"
+  ],
+  "expect": {
+    "s.refreshes": {
+      "value": [
+        "full",
+        "gray",
+        "full",
+        "partial"
+      ],
+      "spec": "\u00a73"
+    }
+  },
+  "errors": []
+}
