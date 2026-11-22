@@ -148,6 +148,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--old-index", help="use this local index file instead of fetching the locked commit (--diff)")
     p.add_argument("--commit", help="commit sha to record or report when --index is used")
     args = p.parse_args(argv)
+    if args.check and args.diff:
+        p.error("--check never prints contract text; do not combine it with --diff")
 
     try:
         return run(args)

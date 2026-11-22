@@ -173,3 +173,11 @@ def test_network_error_exit_two(env, monkeypatch, capsys):
     monkeypatch.setattr(spec_sync, "_get", boom)
     assert run("--check") == 2
     assert capsys.readouterr().err.count("\n") == 1
+
+
+def test_check_with_diff_is_a_usage_error(env, capsys):
+    locked(env)
+    with pytest.raises(SystemExit) as exc:
+        run("--check", "--diff", "--index", write(env[0] / "new.json", make_index()))
+    assert exc.value.code == 2
+    assert "--diff" in capsys.readouterr().err
