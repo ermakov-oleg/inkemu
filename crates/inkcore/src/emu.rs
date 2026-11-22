@@ -796,6 +796,7 @@ impl Core {
     }
 
     /// Changes whenever the next `frame` would differ: an app frame was drawn or the plates changed.
+    /// Borrows the state mutably: never call it while a `log()`/`errors()`/... `Ref` is alive.
     pub fn frame_seq(&self) -> u64 {
         let mut s = self.st.borrow_mut();
         let now = s.sched.clock.ms;

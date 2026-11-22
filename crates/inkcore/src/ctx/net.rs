@@ -1,6 +1,7 @@
-//! `ctx.net` (0.1 `net.install`): `replay` is answered here from fixtures. `record` and `live` requests go to the
-//! host's [`Fetcher`] at request time, as 0.1's synchronous fetch; a host without one (the web page) takes them
-//! from an outbox and hands the answer back through [`Core::deliver`].
+//! `ctx.net` (0.1 `net.install`): `replay` is answered here from fixtures, and so is `fixtures+live` when a
+//! fixture matches. `record` and `live` requests, and `fixtures+live` ones without a fixture, go to the host's
+//! [`Fetcher`] at request time, as 0.1's synchronous fetch; a host without one (the web page) takes them from an
+//! outbox and hands the answer back through [`Core::deliver`].
 //!
 //! [`Core::deliver`]: crate::Core::deliver
 use std::cell::Cell;
