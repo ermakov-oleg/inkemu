@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/inkcore", "crates/inkemu", "crates/inkemu-py"]
+members = ["crates/inkcore", "crates/inkcore-wasm", "crates/inkemu", "crates/inkemu-py"]
 
 [workspace.package]
 version = "0.1.1"

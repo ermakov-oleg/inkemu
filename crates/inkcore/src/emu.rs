@@ -46,6 +46,9 @@ pub struct Status {
     pub locked: bool,
 }
 
+/// What the plates show: error overlay, dialog, visible toast.
+pub(crate) type PlatesSig = (Option<(String, String)>, Option<Pending>, Option<String>);
+
 /// What a timer does when it fires.
 pub(crate) type TimerFn = Rc<dyn Fn(&Host)>;
 
@@ -97,6 +100,9 @@ pub(crate) struct State {
     pub(crate) persisted: Persisted,
     pub(crate) persist_changed: bool,
     pub(crate) net: NetState,
+    /// Moves when a new frame is drawn; see `Core::frame_seq`.
+    pub(crate) frame_seq: u64,
+    pub(crate) plates_sig: PlatesSig,
 }
 
 impl State {
@@ -354,6 +360,7 @@ impl Host<'_> {
         });
         self.call("on_draw", (ctx, g));
         with(self.st, |s| {
+            s.frame_seq += 1;
             let n = s.canvas.end_frame();
             for w in s.canvas.take_warnings() {
                 s.warn(&w);
@@ -432,6 +439,7 @@ pub(crate) fn boot(st: &Shared, mode: BootMode) {
             };
         }
         s.frame_commands = 0;
+        s.frame_seq += 1;
         s.lua.replace(new)
     });
     drop(old);
@@ -592,6 +600,8 @@ impl Core {
             persisted,
             persist_changed: false,
             net,
+            frame_seq: 0,
+            plates_sig: PlatesSig::default(),
         }));
         if let Some(p) = font_problem {
             st.borrow_mut().warn(&p);
@@ -783,6 +793,23 @@ impl Core {
         let mut f = s.canvas.render();
         plates::draw(&s.canvas, &mut f, &s.plates(dialog));
         f
+    }
+
+    /// Changes whenever the next `frame` would differ: an app frame was drawn or the plates changed.
+    /// Borrows the state mutably: never call it while a `log()`/`errors()`/... `Ref` is alive.
+    pub fn frame_seq(&self) -> u64 {
+        let mut s = self.st.borrow_mut();
+        let now = s.sched.clock.ms;
+        let sig = (
+            s.overlay.clone(),
+            s.pending.clone(),
+            s.toast.as_ref().filter(|t| now < t.1).map(|t| t.0.clone()),
+        );
+        if sig != s.plates_sig {
+            s.plates_sig = sig;
+            s.frame_seq += 1;
+        }
+        s.frame_seq
     }
 
     /// The app's own frame, without plates.

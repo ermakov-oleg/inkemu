@@ -436,6 +436,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "inkcore-wasm"
+version = "0.1.1"
+dependencies = [
+ "base64",
+ "inkcore",
+ "serde_json",
+]
+
+[[package]]
 name = "inkemu"
 version = "0.1.1"
 dependencies = [

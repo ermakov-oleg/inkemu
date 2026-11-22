@@ -131,3 +131,53 @@ fn instruction_budget_survives_a_reload() {
         );
     }
 }
+
+#[test]
+fn frame_seq_moves_only_when_the_frame_changes() {
+    let mut core = boot(
+        "n = 0\nfunction on_draw(c, g) n = n + 1; g:clear(0) end\n\
+         function on_input(c, ev)\n  if ev.gesture == 'tap' then c:invalidate(); c.dialog:toast('hi') end\n  return true\nend\n",
+        "2.2",
+    );
+    let first = core.frame_seq();
+    core.advance(100).unwrap();
+    assert_eq!(core.frame_seq(), first);
+    core.tap(10, 10).unwrap();
+    let after_tap = core.frame_seq();
+    assert!(after_tap > first);
+    core.advance(1000).unwrap();
+    assert_eq!(core.frame_seq(), after_tap);
+    core.advance(1500).unwrap();
+    assert!(core.frame_seq() > after_tap);
+}
+
+#[test]
+fn frame_seq_moves_when_a_dialog_opens_and_closes() {
+    let mut core = boot(
+        "function on_draw(c, g) g:clear(0) end\n\
+         function on_input(c, ev)\n  if ev.gesture == 'tap' then c.dialog:confirm({title = 'Sure?'}, function() end) end\n  return true\nend\n",
+        "2.2",
+    );
+    let first = core.frame_seq();
+    core.tap(10, 10).unwrap();
+    assert!(core.status().pending.is_some());
+    let open = core.frame_seq();
+    assert!(open > first);
+    assert_eq!(core.frame_seq(), open);
+    core.answer(true).unwrap();
+    assert!(core.status().pending.is_none());
+    assert!(core.frame_seq() > open);
+}
+
+#[test]
+fn frame_seq_moves_when_the_error_overlay_appears() {
+    let mut core = boot(
+        "function on_draw(c, g) g:clear(0) end\n\
+         function on_input(c, ev) error('boom') end\n",
+        "2.2",
+    );
+    let first = core.frame_seq();
+    core.key("ok").unwrap();
+    assert_eq!(core.errors().len(), 1);
+    assert!(core.frame_seq() > first);
+}

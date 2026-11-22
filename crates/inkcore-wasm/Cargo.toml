@@ -1,0 +1,16 @@
+[package]
+name = "inkcore-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# scripts/build-web.sh builds it for wasm32-unknown-emscripten; on other targets it is an empty program
+[[bin]]
+name = "inkcore_wasm"
+path = "src/main.rs"
+
+[target.'cfg(target_os = "emscripten")'.dependencies]
+base64 = "0.22"
+inkcore = { path = "../inkcore" }
+serde_json = "1"
