@@ -79,6 +79,7 @@
   "15/lock_invalidate_plain_prep": "status() has no refreshes field",
   "15/lock_net_interval_blocks": "net_interval_sec is ignored: lock.net is true in every session",
   "15/lock_net_interval_clamp": "net_interval_sec is ignored: lock.net is true in every session",
+  "15/lock_net_interval_clamp_low": "net_interval_sec is ignored and the wake is not aligned to the interval: no wake 10 s after the first session",
   "15/lock_prep_cap": "a timer session waits 30 s for the request instead of ending the preparation phase at 28 s",
   "15/lock_prep_first": "the first session draws once at once and never again after the request finishes",
   "15/lock_reason_first": "ctx.lock.reason is lock instead of first in the first session",

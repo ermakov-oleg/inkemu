@@ -158,9 +158,9 @@ function on_draw(ctx, g) g:clear(0); g:rect(0, 0, 10, 10, { fill = true }) end
     assert any(d.startswith("no Lua error contains 'nope'") for d in diffs)
 
 
-def gray_diffs(tmp_path, pixels, image):
+def gray_diffs(tmp_path, pixels, image, name="conf"):
     data = {"spec": "§3", "pixels": pixels}
-    root = make_root(tmp_path, {"03/gray": (VALUE_LUA, data)}, name=f"conf{len(list(tmp_path.iterdir()))}")
+    root = make_root(tmp_path, {"03/gray": (VALUE_LUA, data)}, name=name)
     return conformance.evaluate(conformance.all_checks(root)[0], {}, {}, [], [], image)
 
 
@@ -175,12 +175,21 @@ def gray_shot():
 def test_gray_level_is_checked_on_a_gray_frame(tmp_path):
     ok = [[0, 0, 1, 3], [1, 0, 0, 2], [2, 0, 0, 1], [3, 0, 0, 0]]
     assert gray_diffs(tmp_path, ok, gray_shot()) == []
-    diffs = gray_diffs(tmp_path, [[1, 0, 0, 1], [2, 0, 0, 0], [0, 0, 1]], gray_shot())
+    diffs = gray_diffs(tmp_path, [[1, 0, 0, 1], [2, 0, 0, 0], [0, 0, 1]], gray_shot(), "c1")
     assert diffs == [
         "pixel (1, 0): expected gray level 1, got 2 (value 85)",
         "pixel (2, 0): expected gray level 0, got 1 (value 170)",
     ]
-    assert gray_diffs(tmp_path, [[1, 0, 1]], gray_shot()) == ["pixel (1, 0): expected ink, got paper"]
+    assert gray_diffs(tmp_path, [[1, 0, 1]], gray_shot(), "c2") == ["pixel (1, 0): expected ink, got paper"]
+
+
+def test_unknown_gray_value_is_reported(tmp_path):
+    from PIL import Image
+
+    img = Image.new("L", (1, 1), 100)
+    assert gray_diffs(tmp_path, [[0, 0, 0, 1]], img) == [
+        "pixel (0, 0): value 100 is not a gray level (expected 0, 85, 170 or 255)"
+    ]
 
 
 def test_gray_level_is_ignored_on_a_one_bit_frame(tmp_path):
@@ -189,7 +198,7 @@ def test_gray_level_is_ignored_on_a_one_bit_frame(tmp_path):
     img = Image.new("1", (2, 1))
     img.putdata([0, 255])
     assert gray_diffs(tmp_path, [[0, 0, 1, 3], [1, 0, 0, 2]], img) == []
-    assert gray_diffs(tmp_path, [[0, 0, 0, 0]], img) == ["pixel (0, 0): expected paper, got ink"]
+    assert gray_diffs(tmp_path, [[0, 0, 0, 0]], img, "c3") == ["pixel (0, 0): expected paper, got ink"]
 
 
 @pytest.mark.parametrize("pixel", [[0, 0, 1, 4], [0, 0, 0, -1], [0, 0, 1, 2], [0, 0, 0, 3], [0, 0, 1, 3, 1]])

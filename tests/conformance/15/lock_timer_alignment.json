@@ -1,6 +1,6 @@
 {
   "spec": "\u00a715",
-  "about": "a timer wake comes at the next whole multiple of interval_sec in local time, not interval_sec after locking",
+  "about": "the timer wake is aligned to wall-clock multiples of interval_sec (locked at :20 the first wake is at the next :00, not 60 s later)",
   "manifest": {
     "lockscreen": {
       "entry": "lockscreen.lua",

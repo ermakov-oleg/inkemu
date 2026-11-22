@@ -18,7 +18,7 @@ A frame is gray when one of its `g:image` calls sets `gray = true` (outside `lay
 - Source: contract only.
 
 ### 03/gray_pixels
-- Contract: a gray frame is drawn in `gray_still` steps, `(color * gray_still) // 16`, for rectangles and the rest; a black-and-white image stays black and white. The check expects colors 3, 4, 8, 12 and 15 to come out as 0, 1, 2, 3 and 3 steps.
+- Contract: every color of a gray frame is scaled to `gray_still` steps as `(color * gray_still) // 16`, and a 1-bit image keeps only black and white. The check expects colors 3, 4, 8, 12 and 15 to come out as 0, 1, 2, 3 and 3 steps.
 - Core now: the shot is always 1-bit, so a rectangle of color 8 or more is full ink and the levels cannot be told apart.
 - Touch points: as for the interface above.
 - Source: contract only.
@@ -358,13 +358,13 @@ Lock-screen frames count as app frames in `status()["refresh"]` and `status()["r
 - Source: contract only.
 
 ### 15/lock_timer_alignment
-- Contract: after a session the device sleeps until the next whole multiple of `interval_sec` of local time (an interval of 60 wakes on the minute). The check locks at 09:00:20 and expects the wake at 09:01:00 with `elapsed_sec` 40.
+- Contract: wakes are aligned to wall-clock multiples of `interval_sec`, so a 60 s interval wakes at :00 of each minute. The check locks at 09:00:20 and expects the wake at 09:01:00 with `elapsed_sec` 40.
 - Core now: the wake comes `interval_sec` after locking (09:01:20).
 - Touch points: `crates/inkcore/src/lockscreen.rs` (`schedule`).
 - Source: contract only (not in the task list; the guide and §15 both state it).
 
-### 15/lock_net_interval_blocks, 15/lock_net_interval_clamp
-- Contract: `lockscreen.net_interval_sec` defaults to `interval_sec` and is limited to 30-3600. `ctx.lock.net` is true in the first session and later only when at least `net_interval_sec` seconds have passed since the start of the last session where it was true; when it is false `ctx.net` is nil. The clamp check uses `interval_sec` 600 and `net_interval_sec` 100000 and expects the sequence true, five times false, true (the wake of 3600 s). The low bound of the clamp cannot be told apart from the default with `interval_sec` at its minimum, so it has no check.
+### 15/lock_net_interval_blocks, 15/lock_net_interval_clamp, 15/lock_net_interval_clamp_low
+- Contract: `lockscreen.net_interval_sec` defaults to `interval_sec` and is limited to 30-3600. `ctx.lock.net` is true in the first session and in a later session only once `net_interval_sec` seconds have gone by since the last session that had it; when it is false `ctx.net` is nil. The clamp check uses `interval_sec` 600 and `net_interval_sec` 100000 and expects the sequence true, five times false, true (the wake of 3600 s). The low bound is pinned by `15/lock_net_interval_clamp_low`: locked at 09:00:50 the first wake comes 10 s later, and `net_interval_sec` 10 is raised to 30, so that wake has no network (it also depends on the alignment rule).
 - Core now: `net_interval_sec` is not read; `lock.net` follows the manifest's `net` flag in every session. Default, elapsed interval and the undeclared case are pinned in `15/lock_net_interval_default`, `15/lock_net_interval_elapsed`, `15/lock_net_first`, `15/lock_net_undeclared` (green).
 - Touch points: `crates/inkcore/src/lockscreen.rs` (`enter`, `LockCtx`), `crates/inkcore/src/ctx/lock.rs`, `crates/inkcore/src/ctx/net.rs` (`ctx.net` must follow `lock.net`).
 - Source: contract only. Not modelled: battery below 20% and the three failed Wi-Fi connections.
@@ -433,7 +433,7 @@ Already green and pinned: `15/lock_reason_timer`, `15/lock_elapsed_first`, `15/l
 - Touch points: `crates/inkcore/src/ctx/stubs.rs` (`act`), `crates/inkcore/src/emu.rs` (lock path).
 - Source: contract only.
 
-Already green and pinned: `25/act_inactive_no_lock` (a refused `act("sleep")` does not lock the device), `25/act_args` (unknown name is `nil, "invalid_argument"` - probe-confirmed; a non-string name raises). Not covered: `act("power_off")` with its confirmation dialog and `busy` (contract only, needs system dialog support).
+Already green and pinned: `25/act_inactive_no_lock` (refused `sleep`/`power_off` calls do not lock the device), `25/act_args` (unknown name is `nil, "invalid_argument"` - probe-confirmed; a non-string name raises). Not covered: `act("power_off")` with its confirmation dialog and `busy` (contract only, needs system dialog support).
 
 ## §26 Encoding, hashes, random
 

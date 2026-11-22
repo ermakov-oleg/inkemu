@@ -1,6 +1,6 @@
 {
   "spec": "\u00a715",
-  "about": "set_interval takes an integer from 30 to 3600 and returns nothing; other values return nil, invalid_argument",
+  "about": "set_interval takes an integer from 30 to 3600 and returns nothing; other values return nil, invalid_argument (the general out-of-range rule; the section itself gives only the range)",
   "manifest": {
     "lockscreen": {
       "entry": "lockscreen.lua",

@@ -1,4 +1,5 @@
 function on_load(ctx)
+  if not ctx.lock.net then return end
   ctx.net:request({ url = "https://x.test/lock" }, function(ctx, res)
     if ctx.lock.reason == "timer" then ctx:invalidate("full") end
   end)

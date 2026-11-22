@@ -464,7 +464,9 @@ def evaluate(check: Check, records: dict, observed: dict, errors: list[str], log
         elif gray and level:
             # a gray shot is mode "L" with 0, 85, 170, 255 for 3, 2, 1, 0 ink steps
             got_level = GRAY_LEVELS.get(value)
-            if got_level != level[0]:
+            if got_level is None:
+                diffs.append(f"pixel ({x}, {y}): value {value} is not a gray level (expected 0, 85, 170 or 255)")
+            elif got_level != level[0]:
                 diffs.append(f"pixel ({x}, {y}): expected gray level {level[0]}, got {got_level} (value {value})")
     return diffs
 
