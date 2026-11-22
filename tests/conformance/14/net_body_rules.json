@@ -1,0 +1,64 @@
+{
+  "spec": "§14",
+  "about": "a body on GET or HEAD, or over 65536 bytes on any method, is invalid_argument; other methods may carry one",
+  "manifest": {
+    "permissions": [
+      "net"
+    ]
+  },
+  "fixtures": [
+    {
+      "method": "PUT",
+      "url": "https://b.test/p",
+      "status": 200,
+      "delay_ms": 10
+    }
+  ],
+  "expect": {
+    "get_body": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "head_body": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "post_over": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "put_over": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "put_body_started": {
+      "value": true,
+      "spec": "§14"
+    }
+  },
+  "errors": []
+}

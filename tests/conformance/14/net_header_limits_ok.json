@@ -1,0 +1,56 @@
+{
+  "spec": "§14",
+  "about": "16 entries, a 64-byte name, a long value and 65536 bytes in all are accepted",
+  "manifest": {
+    "permissions": [
+      "net"
+    ]
+  },
+  "fixtures": [
+    {
+      "method": "GET",
+      "url": "https://hd.test/a",
+      "status": 200,
+      "body": "ok",
+      "delay_ms": 10
+    }
+  ],
+  "steps": [
+    "wait 6s"
+  ],
+  "expect": {
+    "started_sixteen": {
+      "value": true,
+      "spec": "§14"
+    },
+    "status_sixteen": {
+      "value": 200,
+      "spec": "§14"
+    },
+    "started_name64": {
+      "value": true,
+      "spec": "§14"
+    },
+    "status_name64": {
+      "value": 200,
+      "spec": "§14"
+    },
+    "started_value_8193": {
+      "value": true,
+      "spec": "§14"
+    },
+    "status_value_8193": {
+      "value": 200,
+      "spec": "§14"
+    },
+    "started_total_65536": {
+      "value": true,
+      "spec": "§14"
+    },
+    "status_total_65536": {
+      "value": 200,
+      "spec": "§14"
+    }
+  },
+  "errors": []
+}

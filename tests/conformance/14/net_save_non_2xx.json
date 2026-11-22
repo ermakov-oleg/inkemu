@@ -1,0 +1,48 @@
+{
+  "spec": "§14",
+  "about": "a non-2xx answer leaves the save target alone: saved = false and the body comes back in res.body",
+  "manifest": {
+    "permissions": [
+      "net"
+    ]
+  },
+  "fixtures": [
+    {
+      "method": "GET",
+      "url": "https://s.test/fail",
+      "status": 404,
+      "body": "nope",
+      "delay_ms": 10
+    }
+  ],
+  "steps": [
+    "wait 3s"
+  ],
+  "expect": {
+    "ok": {
+      "value": true,
+      "spec": "§14"
+    },
+    "status": {
+      "value": 404,
+      "spec": "§14"
+    },
+    "saved": {
+      "value": false,
+      "spec": "§14"
+    },
+    "body": {
+      "value": "nope",
+      "spec": "§14"
+    },
+    "err": {
+      "value": "nil",
+      "spec": "§14"
+    },
+    "file": {
+      "value": "keep",
+      "spec": "§14"
+    }
+  },
+  "errors": []
+}

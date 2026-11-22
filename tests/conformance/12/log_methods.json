@@ -1,0 +1,40 @@
+{
+  "spec": "§12",
+  "about": "the log methods take one string and return nothing; a non-string argument raises a Lua error",
+  "expect": {
+    "info": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§12"
+    },
+    "warn": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§12"
+    },
+    "error": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§12"
+    },
+    "info_table_raises": {
+      "value": true,
+      "spec": "§12"
+    },
+    "warn_nil_raises": {
+      "value": true,
+      "spec": "§12"
+    },
+    "error_bool_raises": {
+      "value": true,
+      "spec": "§12"
+    }
+  },
+  "errors": []
+}

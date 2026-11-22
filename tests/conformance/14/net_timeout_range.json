@@ -1,0 +1,90 @@
+{
+  "spec": "§14",
+  "about": "timeout_ms must be an integer from 1000 to 60000, the ends are accepted",
+  "manifest": {
+    "permissions": [
+      "net"
+    ]
+  },
+  "fixtures": [
+    {
+      "method": "GET",
+      "url": "https://t.test/a",
+      "status": 200,
+      "body": "ok",
+      "delay_ms": 10
+    }
+  ],
+  "steps": [
+    "wait 5s"
+  ],
+  "expect": {
+    "bad_1": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "bad_2": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "bad_3": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "bad_4": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "bad_5": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "min_started": {
+      "value": true,
+      "spec": "§14"
+    },
+    "min_status": {
+      "value": 200,
+      "spec": "§14"
+    },
+    "max_started": {
+      "value": true,
+      "spec": "§14"
+    },
+    "max_status": {
+      "value": 200,
+      "spec": "§14"
+    }
+  },
+  "errors": []
+}

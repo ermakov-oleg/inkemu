@@ -1,0 +1,36 @@
+{
+  "spec": "§9",
+  "about": "read and size of an absent file are not_found, exists is false",
+  "expect": {
+    "read": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "not_found"
+        ]
+      },
+      "spec": "§9"
+    },
+    "size": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "not_found"
+        ]
+      },
+      "spec": "§9"
+    },
+    "exists": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§9"
+    }
+  },
+  "errors": []
+}

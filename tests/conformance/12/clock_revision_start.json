@@ -1,0 +1,19 @@
+{
+  "spec": "§12",
+  "about": "revision is the integer 1 at the start of the session",
+  "expect": {
+    "revision": {
+      "value": 1,
+      "spec": "§12"
+    },
+    "revision_type": {
+      "value": "integer",
+      "spec": "§12"
+    },
+    "same_snapshot": {
+      "value": true,
+      "spec": "§12"
+    }
+  },
+  "errors": []
+}

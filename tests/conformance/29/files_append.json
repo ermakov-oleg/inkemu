@@ -1,0 +1,81 @@
+{
+  "spec": "§29",
+  "about": "append creates a missing file or adds to the end; over 262144 bytes per call is limit_exceeded and changes nothing",
+  "expect": {
+    "append_new": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "append_more": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "read": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "abc"
+        ]
+      },
+      "spec": "§29"
+    },
+    "size": {
+      "value": {
+        "ok": true,
+        "ret": [
+          3
+        ]
+      },
+      "spec": "§29"
+    },
+    "append_bad_name": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "append_over": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§29"
+    },
+    "unchanged": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "append_empty": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    }
+  },
+  "errors": []
+}

@@ -39,7 +39,18 @@ CHECK_KEYS = {
     "log",
     "pixels",
 }
-FIXTURE_KEYS = {"method", "url", "status", "body", "body_hex", "headers", "delay_ms", "match", "request_body"}
+FIXTURE_KEYS = {
+    "method",
+    "url",
+    "status",
+    "body",
+    "body_hex",
+    "body_repeat",
+    "headers",
+    "delay_ms",
+    "match",
+    "request_body",
+}
 RESERVED_FILES = {"manifest.json", "index.lua", PRELUDE}
 KEYS = ("up", "down", "left", "right", "ok", "back")
 STEP_FORMS = {
@@ -259,8 +270,20 @@ def _fixture_problem(f: object) -> str | None:
     for k in ("body", "body_hex", "request_body"):
         if k in f and not isinstance(f[k], str):
             return f"{k} must be a string"
-    if "body" in f and "body_hex" in f:
-        return "give body or body_hex, not both"
+    if sum(k in f for k in ("body", "body_hex", "body_repeat")) > 1:
+        return "give one of body, body_hex and body_repeat"
+    if "body_repeat" in f:
+        rep = f["body_repeat"]
+        if not (
+            isinstance(rep, list)
+            and len(rep) == 2
+            and isinstance(rep[0], str)
+            and rep[0]
+            and isinstance(rep[1], int)
+            and not isinstance(rep[1], bool)
+            and 0 <= rep[1] <= 16 * 1024 * 1024
+        ):
+            return 'body_repeat must be ["text", count] with count up to 16 MiB'
     if "body_hex" in f:
         try:
             bytes.fromhex(f["body_hex"])
@@ -298,7 +321,12 @@ def write_fixtures(fixtures: list[dict], fixtures_dir: Path) -> list[Path]:
         stem = fixture_stem(method, f["url"], req_body)
         if f.get("match", "exact") != "exact":
             stem += "_" + f["match"]
-        body = bytes.fromhex(f["body_hex"]) if "body_hex" in f else f.get("body", "").encode("utf-8")
+        if "body_hex" in f:
+            body = bytes.fromhex(f["body_hex"])
+        elif "body_repeat" in f:
+            body = f["body_repeat"][0].encode("utf-8") * f["body_repeat"][1]
+        else:
+            body = f.get("body", "").encode("utf-8")
         (net / f"{stem}.body").write_bytes(body)
         response = {
             "status": f.get("status", 200),

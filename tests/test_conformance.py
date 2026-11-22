@@ -278,7 +278,15 @@ def test_selection_helpers_and_json(tmp_path, capsys):
                 "pixels": [[0, 0, 0]],
                 "fixtures": [{"method": "GET", "url": "https://x.test/a", "body": "a", "body_hex": "00"}],
             },
-            "not both",
+            "give one of body",
+        ),
+        (
+            {
+                "spec": "§1",
+                "pixels": [[0, 0, 0]],
+                "fixtures": [{"method": "GET", "url": "https://x.test/a", "body_repeat": ["x", -1]}],
+            },
+            "body_repeat must be",
         ),
         (
             {
@@ -316,6 +324,14 @@ def test_fixture_files_follow_the_recorder_format(tmp_path):
     assert (tmp_path / "net" / get["response"]["body_file"]).read_bytes() == b"\x00\xff"
     assert post["request"]["body_sha256"] == conformance._sha(b"q=1")
     assert post["response"]["status"] == 201 and post["response"]["delay_ms"] == 5
+
+
+def test_fixture_body_repeat(tmp_path):
+    (path,) = conformance.write_fixtures(
+        [{"method": "GET", "url": "https://x.test/a", "body_repeat": ["ab", 3]}], tmp_path
+    )
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    assert (tmp_path / "net" / doc["response"]["body_file"]).read_bytes() == b"ababab"
 
 
 def test_fixtures_replay_through_the_core(tmp_path):

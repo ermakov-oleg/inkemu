@@ -104,9 +104,10 @@ fields you mean.
 - `log`: substrings that must appear somewhere in the log.
 - `pixels`: `[x, y, 1]` for ink and `[x, y, 0]` for paper on the final frame, taken with `shot(dialog=False)`.
 - `fixtures`: replayed network answers, written in the 0.1 fixture format (`net/METHOD_host_hash.json` plus a
-  `.body` file). Optional fields: `body_hex` for binary bodies, `delay_ms`, `match` (`exact`, `prefix`, `glob`) and
-  `request_body` for a POST matched by its body. The core serves the first fixture that matches a request, so
-  two fixtures for the same request (same method, URL, body and `match`) are refused as a malformed check.
+  `.body` file). Optional fields: `body_hex` for binary bodies, `body_repeat` (`["x", 131082]`) for a large body,
+  `delay_ms`, `match` (`exact`, `prefix`, `glob`) and `request_body` for a POST matched by its body.
+  The core serves the first fixture that matches a request, so two fixtures for the same request (same method,
+  URL, body and `match`) are refused as a malformed check.
 - Steps: `wait <n>[ms|s|m|h]`, `tap <x> <y>`, `key up|down|left|right|ok|back`, `answer yes|no`, `lock`, `unlock`,
   `restart`, `reload`, `observe <label>`.
 

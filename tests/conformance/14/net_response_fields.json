@@ -1,0 +1,60 @@
+{
+  "spec": "§14",
+  "about": "a complete answer has ok = true, status, body, bytes, lowercase header names, and no err or saved",
+  "manifest": {
+    "permissions": [
+      "net"
+    ]
+  },
+  "fixtures": [
+    {
+      "method": "GET",
+      "url": "https://r.test/a",
+      "status": 200,
+      "body": "hello",
+      "headers": {
+        "Content-Type": "text/plain",
+        "X-Test": "1"
+      },
+      "delay_ms": 10
+    }
+  ],
+  "steps": [
+    "wait 3s"
+  ],
+  "expect": {
+    "ok": {
+      "value": true,
+      "spec": "§14"
+    },
+    "status": {
+      "value": 200,
+      "spec": "§14"
+    },
+    "body": {
+      "value": "hello",
+      "spec": "§14"
+    },
+    "bytes": {
+      "value": 5,
+      "spec": "§14"
+    },
+    "content_type": {
+      "value": "text/plain",
+      "spec": "§14"
+    },
+    "x_test": {
+      "value": "1",
+      "spec": "§14"
+    },
+    "err": {
+      "value": "nil",
+      "spec": "§14"
+    },
+    "saved": {
+      "value": "nil",
+      "spec": "§14"
+    }
+  },
+  "errors": []
+}

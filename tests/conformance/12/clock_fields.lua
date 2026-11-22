@@ -1,0 +1,15 @@
+local T = require("conformance")
+
+function on_load(ctx)
+  local t = ctx.clock:now()
+  T.value("valid", t.valid)
+  T.value("year", t.year)
+  T.value("month", t.month)
+  T.value("day", t.day)
+  T.value("hour", t.hour)
+  T.value("minute", t.minute)
+  T.value("second", t.second)
+  T.type("hour12", t.hour12)
+  T.type("epoch_sec", t.epoch_sec)
+  T.value("local_is_epoch_plus_offset", t.local_sec == t.epoch_sec + t.offset_minutes * 60)
+end

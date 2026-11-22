@@ -1,0 +1,88 @@
+{
+  "spec": "§9",
+  "about": "write replaces the whole file, keeps any bytes and allows an empty file",
+  "expect": {
+    "write1": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§9"
+    },
+    "write2": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§9"
+    },
+    "read": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "de"
+        ]
+      },
+      "spec": "§9"
+    },
+    "size": {
+      "value": {
+        "ok": true,
+        "ret": [
+          2
+        ]
+      },
+      "spec": "§9"
+    },
+    "write_binary": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§9"
+    },
+    "read_binary": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "00ff0a00"
+        ]
+      },
+      "spec": "§9"
+    },
+    "write_empty": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§9"
+    },
+    "read_empty": {
+      "value": {
+        "ok": true,
+        "ret": [
+          ""
+        ]
+      },
+      "spec": "§9"
+    },
+    "size_empty": {
+      "value": {
+        "ok": true,
+        "ret": [
+          0
+        ]
+      },
+      "spec": "§9"
+    }
+  },
+  "errors": []
+}

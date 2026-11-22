@@ -1,0 +1,115 @@
+{
+  "spec": "§9",
+  "about": "names of 1 to 64 bytes from a-z 0-9 . _ - that do not start or end with a dot are accepted",
+  "expect": {
+    "write.one": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§9"
+    },
+    "exists.one": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§9"
+    },
+    "write.digit": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§9"
+    },
+    "exists.digit": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§9"
+    },
+    "write.mixed": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§9"
+    },
+    "exists.mixed": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§9"
+    },
+    "write.long64": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§9"
+    },
+    "exists.long64": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§9"
+    },
+    "write.leading_dash": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§9"
+    },
+    "exists.leading_dash": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§9"
+    },
+    "write.ext": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§9"
+    },
+    "exists.ext": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§9"
+    }
+  },
+  "errors": []
+}

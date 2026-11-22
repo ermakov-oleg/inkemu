@@ -1,0 +1,33 @@
+{
+  "spec": "§29",
+  "about": "list returns { name, size } items in byte order of the names",
+  "expect": {
+    "list": {
+      "value": {
+        "ok": true,
+        "ret": [
+          [
+            {
+              "name": "A.txt",
+              "size": 1
+            },
+            {
+              "name": "Z.txt",
+              "size": 3
+            },
+            {
+              "name": "a1.txt",
+              "size": 0
+            },
+            {
+              "name": "b.txt",
+              "size": 2
+            }
+          ]
+        ]
+      },
+      "spec": "§29"
+    }
+  },
+  "errors": []
+}

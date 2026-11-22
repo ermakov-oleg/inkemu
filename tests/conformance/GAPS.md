@@ -184,6 +184,140 @@ The refresh kind is not observable today. Proposed: two fields. `Emu.status()["r
 - Touch points: `crates/inkcore/src/draw/text.rs` (`ascent`).
 - Source: probe-confirmed for small (17) and medium (21); large (26) is contract only.
 
+## §9 Private files
+
+### 09/storage_name_invalid
+- Contract: a name is 1 to 64 bytes from `[a-z0-9._-]` and does not start or end with `.`; any other name returns `nil, "invalid_argument"` from `write`, `read`, `size` and `remove`, and `exists` returns false.
+- Core now: `valid_name` is the 0.1 rule (any UTF-8 up to 255 bytes without whitespace or slashes), so capitals, a leading or trailing dot and 65-byte names are stored.
+- Touch points: `crates/inkcore/src/ctx/files.rs` (`valid_name`; storage and files need separate rules).
+- Source: probe-confirmed for `write`, `remove` and `exists` (`Bad`, `.x`, 65 bytes); `x.`, `read`, `size` and the space and slash cases are contract only.
+
+### 09/storage_file_size_limit
+- Contract: one file holds at most 262144 bytes; a `write` of more returns `nil, "limit_exceeded"` and an existing file stays as it was.
+- Core now: no per-file limit, only the total quota.
+- Touch points: `crates/inkcore/src/ctx/files.rs` (`writer`).
+- Source: probe-confirmed for the 262145-byte write on a new name; the unchanged old file is contract only.
+
+### 09/storage_file_count_limit
+- Contract: a `write` that would create a 513th file returns `nil, "limit_exceeded"`; rewriting or removing keeps working.
+- Core now: the same refusal, but the code is `no_space`.
+- Touch points: `crates/inkcore/src/ctx/files.rs` (`writer`).
+- Source: contract only.
+
+### 09/storage_remove_missing
+- Contract: `remove` returns true for a file that does not exist.
+- Core now: `nil, "not_found"`.
+- Touch points: `crates/inkcore/src/ctx/files.rs` (`remove`).
+- Source: probe-confirmed.
+
+Already green and pinned: `09/storage_usage`, `09/storage_name_valid`, `09/storage_missing_file`, `09/storage_write_replaces`, `09/storage_list_order` (byte order is contract only; the probe sample was alphabetical), `09/storage_full_quota` (512 full-size files are exactly the 128 MB total, so the total quota is not reachable separately and is covered by this check).
+
+## §12 Clock, log and memory
+
+### 12/clock_weekday_sunday, 12/clock_weekday_saturday
+- Contract: `weekday` is 0 for Sunday (6 for Saturday).
+- Core now: `weekday` is 1-based from Sunday (Friday 6, Sunday 1, Saturday 7), the Lua `os.date` numbering.
+- Touch points: `crates/inkcore/src/ctx/clock.rs`.
+- Source: contract only.
+
+### 12/clock_revision_start
+- Contract: `revision` is an integer and is 1 at the start of the session.
+- Core now: 0.
+- Touch points: `crates/inkcore/src/ctx/clock.rs`.
+- Source: contract only.
+
+### 12/log_methods
+- Contract: `ctx.log:info`, `warn` and `error` take one string, return nothing, and raise a Lua error for a non-string argument.
+- Core now: they return nothing but accept tables, nil and booleans.
+- Touch points: `crates/inkcore/src/ctx/mod.rs` (log object).
+- Source: contract only.
+
+Already green and pinned: `12/log_and_clock`, `12/clock_fields` (date and time fields, epoch and local seconds), `12/clock_millis`.
+
+## §14 Networking
+
+All network checks use replay fixtures on `.test` hosts, so they pass the same way on any core that answers fixtures. The current core only answers `GET` and `POST` and ignores `save`, so most of these are red. Unverified on 26112001 (no radio in the probe): completion of `PUT`, `PATCH`, `DELETE` and the rest; the checks follow the contract (note N1 in `spec/deviations.md`).
+
+### 14/net_methods_accepted, 14/net_head_no_body
+- Contract: the 13 methods `GET POST PUT PATCH DELETE HEAD OPTIONS PROPFIND PROPPATCH MKCOL COPY MOVE REPORT` are accepted; a fixture for each reaches the completion function. A `HEAD` answer has `body = ""`, `bytes = 0` and its headers.
+- Core now: any other method than `GET` and `POST` logs a warning and never calls back.
+- Touch points: `crates/inkcore/src/ctx/net.rs` (`first_step`), `crates/inkcore/src/fixtures.rs` (matching already works for any method).
+- Source: probe-confirmed that the requests are accepted synchronously and return a job; completion is contract only.
+
+### 14/net_method_case
+- Contract: a method is compared byte for byte and must be uppercase; lowercase, mixed case, unknown and empty strings return `nil, "invalid_argument"`.
+- Core now: the method is upper-cased and an unknown one starts a request that never answers.
+- Touch points: `crates/inkcore/src/ctx/net.rs` (`request`).
+- Source: probe-confirmed for `patch` and `FOO`; the other spellings are contract only.
+
+### 14/net_body_rules
+- Contract: a body on `GET` or `HEAD` is `invalid_argument`; a body is at most 65536 bytes; other methods may carry one.
+- Core now: nothing is checked.
+- Touch points: `crates/inkcore/src/ctx/net.rs` (`request`).
+- Source: contract only.
+
+### 14/net_header_invalid
+- Contract: headers are at most 16 entries, names at most 64 bytes, all names and values together at most 65536 bytes (2.26), and no value holds CR, LF or NUL; otherwise `nil, "invalid_argument"`.
+- Core now: nothing is checked (a non-string value is dropped).
+- Touch points: `crates/inkcore/src/ctx/net.rs` (`header_pairs`, `request`).
+- Source: contract only. `14/net_header_limits_ok` pins the accepted edges and is green.
+
+### 14/net_url_invalid
+- Contract: the URL is `http://` or `https://` and at most 1024 bytes.
+- Core now: the scheme is checked, the length is not.
+- Touch points: `crates/inkcore/src/ctx/net.rs` (`url_ok`).
+- Source: contract only.
+
+### 14/net_timeout_range
+- Contract: `timeout_ms` is an integer from 1000 to 60000; anything else is `invalid_argument`.
+- Core now: any number is accepted.
+- Touch points: `crates/inkcore/src/ctx/net.rs` (`request`, `round_ms`).
+- Source: contract only.
+
+### 14/net_busy
+- Contract: only one request is unfinished at a time; another `request` returns `nil, "busy"`, but a bad method is `invalid_argument` even then; the slot frees when the answer arrives.
+- Core now: no busy state, requests run side by side.
+- Touch points: `crates/inkcore/src/ctx/net.rs` (`NetState.inflight` already counts them), `crates/inkcore/src/emu.rs`.
+- Source: probe-confirmed (`busy`, and `FOO` while busy is `invalid_argument`). Not pinned: the slot a cancelled request holds until the host aborts it.
+
+### 14/net_response_fields, 14/net_response_error_status
+- Contract: a complete answer, with any status, has `ok = true`, `status`, `headers` (lowercase names), `body`, `bytes`, and no `err`, `saved` only with `save`.
+- Core now: the table has no `ok` (it has the 0.1 fields `code` and `error` too).
+- Touch points: `crates/inkcore/src/ctx/net.rs` (`response_table`).
+- Source: contract only.
+
+### 14/net_body_cap
+- Contract: at most 131072 body bytes are kept; a longer body is truncated with `err = "limit_exceeded"` and `ok` stays true; `bytes` is the full size.
+- Core now: the body is delivered whole and `err` stays nil.
+- Touch points: `crates/inkcore/src/ctx/net.rs` (`response_table`).
+- Source: contract only. A body of exactly 131072 bytes is pinned too (green).
+
+### 14/net_save_files_2xx, 14/net_save_storage_2xx, 14/net_save_non_2xx
+- Contract: `save = { to = "files" | "storage", name }` on a 2xx answer replaces the whole file before the callback: `saved = true`, `body = ""`, `bytes` the size, `err` nil. A non-2xx answer leaves the file alone: `saved = false`, the body in `res.body`.
+- Core now: `save` is ignored; the body stays in `res.body` and `saved` is nil.
+- Touch points: `crates/inkcore/src/ctx/net.rs` (`request`, `response_table`), `crates/inkcore/src/ctx/files.rs` (a shared store function for both directories).
+- Source: contract only (the probe could only see `saved = false` after `no_network`).
+
+### 14/net_save_invalid
+- Contract: a `save` that is not a table, a `to` other than `files` or `storage`, a missing `to` or `name`, or a name that is invalid for the target is `nil, "invalid_argument"`.
+- Core now: not validated.
+- Touch points: `crates/inkcore/src/ctx/net.rs` (`request`), `crates/inkcore/src/ctx/files.rs` (name rules).
+- Source: contract only.
+
+### 14/net_save_storage_limit, 14/net_save_files_limit, 14/net_save_files_quota
+- Contract: a save to storage takes up to 262144 bytes, to the app folder up to 8388608; a longer body, or a new file past the 512-file quota, gives `ok = true`, `saved = false`, `body = ""`, `err = "limit_exceeded"` and `bytes` the full size, with no file created.
+- Core now: `save` is ignored.
+- Touch points: `crates/inkcore/src/ctx/net.rs`, `crates/inkcore/src/ctx/files.rs`.
+- Source: contract only. These checks use the runner's `body_repeat` fixture field for the large bodies. Not pinned: the storage total-bytes quota via save, `io_error` on a full card.
+
+### 14/net_keep_wifi
+- Contract: `keep_wifi(ms)` takes an integer from -1 to 2147483647, returns nothing, returns `nil, "invalid_argument"` for another number (-2, 1.5, 2147483648) and raises for a non-number or a missing argument.
+- Core now: it returns one `nil` and accepts every number.
+- Touch points: `crates/inkcore/src/ctx/net.rs` (`keep_wifi`).
+- Source: contract only.
+
+Already green and pinned: `14/net_header_limits_ok`, `14/net_redirect_not_followed`. Not covered: `ctx.net:websocket` (not emulated), `no_network`, `timeout`, `io_error` and `out_of_memory` answers (a fixture cannot express them), unfixtured requests (replay answers `no_fixture`, which the contract does not know), the `content-type` default, and header joining of duplicates.
+
 ## §25 System actions
 
 ### 25/act_refresh
@@ -206,8 +340,107 @@ The refresh kind is not observable today. Proposed: two fields. `Emu.status()["r
 
 Already green and pinned: `25/act_args` (unknown name is `nil, "invalid_argument"` - probe-confirmed; a non-string name raises). Not covered: `act("power_off")` with its confirmation dialog and `busy` (contract only, needs system dialog support).
 
+## §26 Encoding, hashes, random
+
+### 26/hash_sha1, 26/hash_input_limit
+- Contract: `sha1` returns 20 raw bytes; every hash call (and the encoders) takes at most 1048576 bytes, more is `nil, "limit_exceeded"`.
+- Core now: `sha1` returns 40 hex characters (web-emu is already fixing this); no input limit anywhere.
+- Touch points: `crates/inkcore/src/ctx/utils.rs`.
+- Source: probe-confirmed for `sha1` (`abc` gives 20 bytes); the limit is contract only.
+
+### 26/hash_crc32
+- Contract: `crc32` is zlib's value as a signed 32-bit integer; `crc32("a") == -390611389`.
+- Core now: an unsigned single-precision float (`3904355840.0`); web-emu is already fixing this.
+- Touch points: `crates/inkcore/src/ctx/utils.rs`.
+- Source: probe-confirmed for `a` and `abc`; `""` and `123456789` are computed from zlib.
+
+### 26/encoding_input_limit
+- Contract: `hex:encode`, `base64:encode` and `url:encode` take at most 1048576 bytes of input; more is `nil, "limit_exceeded"`.
+- Core now: no limit.
+- Touch points: `crates/inkcore/src/ctx/utils.rs`.
+- Source: contract only.
+
+### 26/base64_url_alphabet, 26/base64_decode
+- Contract: `encode(s, { url = true })` uses `-` and `_` without padding; `decode` accepts both alphabets and missing padding, an illegal character or length is `invalid_argument`.
+- Core now: `opts` is ignored on encode; `decode` rejects the url alphabet and unpadded input.
+- Touch points: `crates/inkcore/src/ctx/utils.rs`.
+- Source: contract only.
+
+### 26/random_bytes
+- Contract: `bytes(n)` takes an integer from 1 to 1024; 0, 1025 and negative values are `nil, "invalid_argument"`.
+- Core now: 0 returns an empty string and 1025 returns bytes.
+- Touch points: `crates/inkcore/src/ctx/utils.rs`.
+- Source: probe-confirmed for 0, 1024 and 1025; `-1` is contract only.
+
+### 26/url_encode_decode
+- Contract: `decode` handles only `%XX` and keeps `+`; a malformed escape is `invalid_argument`.
+- Core now: a malformed escape is passed through unchanged.
+- Touch points: `crates/inkcore/src/ctx/utils.rs`.
+- Source: contract only.
+
+### 26/url_query
+- Contract: `ctx.url:query(t)` joins `key=value` items in byte order of the keys, encoding both, booleans and numbers allowed; an empty table gives `""`.
+- Core now: the method does not exist.
+- Touch points: `crates/inkcore/src/ctx/utils.rs`.
+- Source: contract only. Not pinned: the 64-item cap (the contract does not name the error code).
+
+Already green and pinned: `26/encoding`, `26/hash_hmac_sha256` (the probe's `k`/`m` vector, RFC 4231 cases 2 and 6), `26/hex_decode`, `26/random_uuid`.
+
+## §29 App files
+
+### 29/files_name_illegal, 29/files_name_illegal_calls, 29/files_name_legal
+- Contract: a name is 1 to 128 UTF-8 bytes without control characters or any of `/ \ : * ? " < > | ~`, not starting with `.`, not ending with `.` or a space, and not a device name (`CON`, `PRN`, `AUX`, `NUL`, `COM1-9`, `LPT1-9`, case-insensitive, before the first dot); otherwise `invalid_argument` from every call (`exists` is false). Spaces inside a name and non-ASCII letters are legal.
+- Core now: `ctx.files` uses the storage name rule (any UTF-8 up to 255 bytes, no whitespace), so reserved characters, a trailing dot, device names and 129-byte names are accepted and a space is refused.
+- Touch points: `crates/inkcore/src/ctx/files.rs` (`valid_name`, `target`).
+- Source: contract only (the probe only wrote `f`, `f2`, `f3`).
+
+### 29/files_case_insensitive
+- Contract: `A.txt` and `a.txt` are the same file; `list()` returns the spelling the file was created with.
+- Core now: names are case-sensitive.
+- Touch points: `crates/inkcore/src/ctx/files.rs` (name lookup for the app directory).
+- Source: contract only.
+
+### 29/files_list_items, 29/files_list_empty
+- Contract: `list()` returns `{ name, size }` items in byte order; an empty folder gives an empty table.
+- Core now: bare names (the empty case already matches).
+- Touch points: `crates/inkcore/src/ctx/files.rs` (`list` for the app directory). Not pinned: a user adding more than 512 files (`limit_exceeded` from `list`), since an app cannot create them.
+- Source: contract only.
+
+### 29/files_read_ranges, 29/files_read_default_len, 29/files_read_arg_errors
+- Contract: `read(name, offset, len)` returns at most `len` bytes from `offset` (default 0), the default `len` is 65536, an `offset` at or past the end gives `""`, a negative `offset` or `len` below 1 is `invalid_argument`, a `len` above 65536 is `limit_exceeded`.
+- Core now: `offset` and `len` are ignored (a warning is logged) and the whole file is returned.
+- Touch points: `crates/inkcore/src/ctx/files.rs` (`read`, files only; `storage:read` keeps whole-file reads).
+- Source: probe-confirmed for the default length, `read(name, 65536)` and `read(name, 0, 10)`; the error cases are contract only.
+
+### 29/files_write_limit, 29/files_append
+- Contract: `write` and `append` take at most 262144 bytes per call (`limit_exceeded`, file unchanged); `append` creates a missing file, checks the name and returns true for empty data.
+- Core now: no per-call limit; `append` accepts illegal names.
+- Touch points: `crates/inkcore/src/ctx/files.rs` (`writer`).
+- Source: probe-confirmed for the 262145-byte `write`; `append` is contract only.
+
+### 29/files_count_limit
+- Contract: with 512 files a `write` or `append` that creates a new file returns `nil, "limit_exceeded"`; changing an existing file still works.
+- Core now: refused with `no_space`.
+- Touch points: `crates/inkcore/src/ctx/files.rs` (`writer`).
+- Source: contract only.
+
+### 29/files_no_total_limit
+- Contract: the app folder has no total-bytes limit (only a full card gives `io_error`), so appends keep working past 128 MB.
+- Core now: the 128 MB storage quota also applies to the app folder (`no_space`).
+- Touch points: `crates/inkcore/src/ctx/files.rs` (`writer`, `s.cfg.storage_quota` applies to `storage` only). The check fills 512 full-size files, which takes well under a second.
+- Source: contract only.
+
+### 29/files_missing_and_remove
+- Contract: `remove` of an absent file returns true; `read` and `size` are `not_found`; `exists` is false.
+- Core now: `remove` returns `nil, "not_found"`.
+- Touch points: `crates/inkcore/src/ctx/files.rs` (`remove`).
+- Source: contract only (the probe removed existing files only).
+
+Already green and pinned: `29/files_path_and_separation` (`ctx.files.path` is `/AppFiles/<app_id>`, probe-confirmed; private storage and app files are separate), `29/files_append_past_call_limit`. Not covered: public folders (`ctx.files:folder`, §29 2.31), `io_error` for a subfolder with a file's name, and the opening of files by the reader.
+
 ## Deviations
 
 Deviations these checks rely on (no new ids; D1 and D2 come from the constraints):
 
 - D2: `g:polyline` and `g:polygon` with more than 128 points return `nil, "limit_exceeded"` on the reader, the contract says `invalid_argument`. Check: `06/poly_over_128`. Source: probe-confirmed.
+- No new deviation ids come from the storage, files, hash, random and network checks: every measured value equals the contract. `PUT`, `PATCH`, `DELETE` and the other extra methods are accepted on the reader but their completion was not measured (QEMU has no radio); `14/net_methods_accepted` follows the contract, and Task 7 lists it as note `N1`.

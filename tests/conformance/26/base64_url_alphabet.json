@@ -1,0 +1,61 @@
+{
+  "spec": "§26",
+  "about": "base64:encode with url = true uses the - _ alphabet and drops the padding",
+  "expect": {
+    "url_alphabet": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "-_-_"
+        ]
+      },
+      "spec": "§26"
+    },
+    "url_no_padding_2": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "YWI"
+        ]
+      },
+      "spec": "§26"
+    },
+    "url_no_padding_1": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "YQ"
+        ]
+      },
+      "spec": "§26"
+    },
+    "url_empty": {
+      "value": {
+        "ok": true,
+        "ret": [
+          ""
+        ]
+      },
+      "spec": "§26"
+    },
+    "url_false": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "+/+/"
+        ]
+      },
+      "spec": "§26"
+    },
+    "std_padding_1": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "YQ=="
+        ]
+      },
+      "spec": "§26"
+    }
+  },
+  "errors": []
+}

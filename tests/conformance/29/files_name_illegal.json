@@ -1,0 +1,463 @@
+{
+  "spec": "§29",
+  "about": "an illegal app file name (reserved characters, dots, spaces, device names, length) is invalid_argument on write, exists is false",
+  "expect": {
+    "write.dot_start": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.dot_start": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.slash": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.slash": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.backslash": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.backslash": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.colon": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.colon": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.star": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.star": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.question": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.question": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.quote": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.quote": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.lt": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.lt": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.gt": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.gt": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.pipe": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.pipe": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.tilde": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.tilde": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.dot_end": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.dot_end": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.space_end": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.space_end": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.ctrl": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.ctrl": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.del": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.del": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.empty": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.empty": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.long129": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.long129": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.long_utf8": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.long_utf8": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.con": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.con": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.con_ext": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.con_ext": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.nul_mixed": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.nul_mixed": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.com1": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.com1": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.lpt9_ext": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.lpt9_ext": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.aux": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.aux": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    }
+  },
+  "errors": []
+}

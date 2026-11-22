@@ -1,0 +1,74 @@
+{
+  "spec": "§26",
+  "about": "hex:decode takes either case, an odd length or a non-hex character is invalid_argument",
+  "expect": {
+    "odd": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§26"
+    },
+    "not_hex": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§26"
+    },
+    "half_bad": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§26"
+    },
+    "space": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§26"
+    },
+    "upper": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "abcdef"
+        ]
+      },
+      "spec": "§26"
+    },
+    "mixed": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "abcd"
+        ]
+      },
+      "spec": "§26"
+    },
+    "empty": {
+      "value": {
+        "ok": true,
+        "ret": [
+          ""
+        ]
+      },
+      "spec": "§26"
+    }
+  },
+  "errors": []
+}

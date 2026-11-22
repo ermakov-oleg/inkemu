@@ -1,0 +1,51 @@
+{
+  "spec": "§26",
+  "about": "crc32 is zlib's value as a signed 32-bit integer: values above 0x7FFFFFFF are negative",
+  "expect": {
+    "empty": {
+      "value": {
+        "ok": true,
+        "ret": [
+          0
+        ]
+      },
+      "spec": "§26"
+    },
+    "a": {
+      "value": {
+        "ok": true,
+        "ret": [
+          -390611389
+        ]
+      },
+      "spec": "§26"
+    },
+    "abc": {
+      "value": {
+        "ok": true,
+        "ret": [
+          891568578
+        ]
+      },
+      "spec": "§26"
+    },
+    "check": {
+      "value": {
+        "ok": true,
+        "ret": [
+          -873187034
+        ]
+      },
+      "spec": "§26"
+    },
+    "a_type": {
+      "value": "integer",
+      "spec": "§26"
+    },
+    "abc_type": {
+      "value": "integer",
+      "spec": "§26"
+    }
+  },
+  "errors": []
+}

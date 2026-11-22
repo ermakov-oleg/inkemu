@@ -1,0 +1,84 @@
+{
+  "spec": "§26",
+  "about": "hash input is limited to 1048576 bytes; one more byte is limit_exceeded",
+  "expect": {
+    "sha256_max": {
+      "value": {
+        "ok": true,
+        "ret": [
+          32
+        ]
+      },
+      "spec": "§26"
+    },
+    "sha1_max": {
+      "value": {
+        "ok": true,
+        "ret": [
+          20
+        ]
+      },
+      "spec": "§26"
+    },
+    "md5_max": {
+      "value": {
+        "ok": true,
+        "ret": [
+          16
+        ]
+      },
+      "spec": "§26"
+    },
+    "sha256_over": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§26"
+    },
+    "sha1_over": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§26"
+    },
+    "md5_over": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§26"
+    },
+    "crc32_over": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§26"
+    },
+    "hmac_over": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§26"
+    }
+  },
+  "errors": []
+}

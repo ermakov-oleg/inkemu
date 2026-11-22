@@ -1,0 +1,69 @@
+{
+  "spec": "§14",
+  "about": "the body is kept up to 131072 bytes: more is truncated with err = limit_exceeded, bytes counts everything",
+  "manifest": {
+    "permissions": [
+      "net"
+    ]
+  },
+  "fixtures": [
+    {
+      "method": "GET",
+      "url": "https://cap.test/big",
+      "status": 200,
+      "delay_ms": 10,
+      "body_repeat": [
+        "x",
+        131082
+      ]
+    },
+    {
+      "method": "GET",
+      "url": "https://cap.test/exact",
+      "status": 200,
+      "delay_ms": 10,
+      "body_repeat": [
+        "x",
+        131072
+      ]
+    }
+  ],
+  "steps": [
+    "wait 6s"
+  ],
+  "expect": {
+    "big_ok": {
+      "value": true,
+      "spec": "§14"
+    },
+    "big_status": {
+      "value": 200,
+      "spec": "§14"
+    },
+    "big_len": {
+      "value": 131072,
+      "spec": "§14"
+    },
+    "big_bytes": {
+      "value": 131082,
+      "spec": "§14"
+    },
+    "big_err": {
+      "value": "limit_exceeded",
+      "spec": "§14"
+    },
+    "exact_len": {
+      "value": 131072,
+      "spec": "§14"
+    },
+    "exact_bytes": {
+      "value": 131072,
+      "spec": "§14"
+    },
+    "exact_err": {
+      "value": "nil",
+      "spec": "§14"
+    }
+  },
+  "errors": []
+}

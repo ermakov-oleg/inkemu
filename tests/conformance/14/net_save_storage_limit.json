@@ -1,0 +1,73 @@
+{
+  "spec": "§14",
+  "about": "a save to storage takes 262144 bytes; one more is saved = false with err = limit_exceeded and no file",
+  "manifest": {
+    "permissions": [
+      "net"
+    ]
+  },
+  "fixtures": [
+    {
+      "method": "GET",
+      "url": "https://s.test/max",
+      "status": 200,
+      "delay_ms": 10,
+      "body_repeat": [
+        "x",
+        262144
+      ]
+    },
+    {
+      "method": "GET",
+      "url": "https://s.test/over",
+      "status": 200,
+      "delay_ms": 10,
+      "body_repeat": [
+        "x",
+        262145
+      ]
+    }
+  ],
+  "steps": [
+    "wait 6s"
+  ],
+  "expect": {
+    "max_saved": {
+      "value": true,
+      "spec": "§14"
+    },
+    "max_err": {
+      "value": "nil",
+      "spec": "§14"
+    },
+    "max_size": {
+      "value": 262144,
+      "spec": "§14"
+    },
+    "over_ok": {
+      "value": true,
+      "spec": "§14"
+    },
+    "over_saved": {
+      "value": false,
+      "spec": "§14"
+    },
+    "over_body_len": {
+      "value": 0,
+      "spec": "§14"
+    },
+    "over_bytes": {
+      "value": 262145,
+      "spec": "§14"
+    },
+    "over_err": {
+      "value": "limit_exceeded",
+      "spec": "§14"
+    },
+    "over_exists": {
+      "value": false,
+      "spec": "§14"
+    }
+  },
+  "errors": []
+}

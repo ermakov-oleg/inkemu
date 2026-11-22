@@ -1,0 +1,63 @@
+{
+  "spec": "§26",
+  "about": "base64:decode accepts both alphabets and missing padding; an illegal character or length is invalid_argument",
+  "expect": {
+    "std": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "fbffbf"
+        ]
+      },
+      "spec": "§26"
+    },
+    "url": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "fbffbf"
+        ]
+      },
+      "spec": "§26"
+    },
+    "padded": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "ab"
+        ]
+      },
+      "spec": "§26"
+    },
+    "unpadded": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "ab"
+        ]
+      },
+      "spec": "§26"
+    },
+    "bad_char": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§26"
+    },
+    "bad_length": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§26"
+    }
+  },
+  "errors": []
+}

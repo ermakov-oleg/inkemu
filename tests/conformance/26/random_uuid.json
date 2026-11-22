@@ -1,0 +1,23 @@
+{
+  "spec": "§26",
+  "about": "random:uuid is a lowercase version-4 UUID string and differs between calls",
+  "expect": {
+    "length": {
+      "value": 36,
+      "spec": "§26"
+    },
+    "version4_lowercase": {
+      "value": true,
+      "spec": "§26"
+    },
+    "no_uppercase": {
+      "value": true,
+      "spec": "§26"
+    },
+    "differ": {
+      "value": true,
+      "spec": "§26"
+    }
+  },
+  "errors": []
+}
