@@ -76,7 +76,8 @@ export async function loadCore(moduleUrl) {
       return JSON.parse(resultText(ptr));
     }
 
-    /** The screen in PIL mode "1": rows of ceil(w / 8) bytes, MSB first, set bit = white. */
+    /** PIL mode "1" (rows of ceil(w / 8) bytes, MSB first, set bit = white): the app's own frame, or with
+     * every plate (error, dialog, toast) when `dialog` is true. */
     frame(dialog) {
       const ptr = M._ik_frame(this.#h, dialog ? 1 : 0);
       if (!ptr) throw new Error(`unknown core handle ${this.#h}`);

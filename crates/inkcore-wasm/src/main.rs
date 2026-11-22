@@ -229,6 +229,7 @@ mod abi {
     /// `json` points to `len` readable bytes.
     #[no_mangle]
     pub unsafe extern "C" fn ik_cmd(handle: i32, json: *const u8, len: usize) -> *const u8 {
+        // held while Lua runs: no synchronous JS callback may ever call back into `ik_*`
         let out = CORES.with_borrow_mut(|m| match m.get_mut(&handle) {
             Some(core) => run(core, slice(json, len)),
             None => json!({"ok": false, "error": format!("unknown core handle {handle}")}),
@@ -236,13 +237,19 @@ mod abi {
         set_result(out.to_string().into_bytes())
     }
 
-    /// The screen in PIL mode "1" (rows of `ceil(w / 8)` bytes), with the dialog plate when `dialog` is not 0;
-    /// null for an unknown handle.
+    /// The screen in PIL mode "1" (rows of `ceil(w / 8)` bytes): the app's own frame when `dialog` is 0, with
+    /// every plate (error, dialog, toast) otherwise; null for an unknown handle.
     #[no_mangle]
     pub extern "C" fn ik_frame(handle: i32, dialog: i32) -> *const u8 {
-        let Some(bits) =
-            CORES.with_borrow(|m| m.get(&handle).map(|c| c.frame(dialog != 0).packed()))
-        else {
+        let Some(bits) = CORES.with_borrow(|m| {
+            m.get(&handle).map(|c| {
+                if dialog == 0 {
+                    c.raw_frame().packed()
+                } else {
+                    c.frame(true).packed()
+                }
+            })
+        }) else {
             return std::ptr::null();
         };
         FRAME.with_borrow_mut(|f| {

@@ -108,7 +108,7 @@ jobs:
         with:
           node-version: "22"
       - run: node --version
-      - run: node --test web/tests
+      - run: node --test 'web/tests/**/*.test.mjs'
 
   package:
     runs-on: ubuntu-latest

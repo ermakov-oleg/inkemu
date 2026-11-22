@@ -131,6 +131,72 @@ test('a C stack overflow is an app error and the module keeps working', () => {
   again.destroy();
 });
 
+test('an endless loop in on_input is stopped by the instruction budget', () => {
+  const app = files({
+    'manifest.json': '{"app_id": "testapp", "entry": "index.lua", "api": "2.2"}',
+    'index.lua': 'function on_input(c, ev) while true do end end\nfunction on_draw(c, g) g:clear(0) end\n',
+  });
+  const core = factory.create({ files: app, fixtures: new Map(), fonts: null, config: config() });
+  try {
+    assert.deepEqual(core.cmd({ cmd: 'state' }).errors, []);
+    const t0 = performance.now();
+    const r = core.cmd({ cmd: 'tap', x: 10, y: 10, with_state: true });
+    const ms = performance.now() - t0;
+    assert.ok(ms < 5000, `took ${ms} ms`);
+    assert.equal(r.errors.length, 1);
+    assert.match(r.errors[0], /instruction budget/);
+    assert.equal(r.status.running, false);
+    assert.equal(core.cmd({ cmd: 'reload' }).ok, true);
+  } finally {
+    core.destroy();
+  }
+});
+
+test('frame(false) is the app frame alone, frame(true) adds the plates', () => {
+  const app = files({
+    'manifest.json': '{"app_id": "testapp", "entry": "index.lua", "api": "2.2"}',
+    'index.lua':
+      "function on_draw(c, g) g:clear(0); g:text(10, 10, 'app') end\n" +
+      "function on_input(c, ev) error('boom') end\n",
+  });
+  const core = factory.create({ files: app, fixtures: new Map(), fonts: null, config: config() });
+  const sha = (f) => createHash('sha256').update(f.bits).digest('hex');
+  try {
+    const before = sha(core.frame(false));
+    assert.equal(sha(core.frame(true)), before);
+    const st = core.cmd({ cmd: 'key', name: 'ok', with_state: true });
+    assert.equal(st.errors.length, 1);
+    assert.equal(sha(core.frame(false)), before);
+    assert.notEqual(sha(core.frame(true)), before);
+  } finally {
+    core.destroy();
+  }
+});
+
+test('an app file with NUL and 0xff reaches Lua byte-exact through create and reload', () => {
+  const app = (bin) =>
+    files({
+      'manifest.json': '{"app_id": "testapp", "entry": "index.lua", "api": "2.2"}',
+      'index.lua':
+        "msg = 'none'\n" +
+        "function on_load(c) local s = c.package:read('bin'); msg = #s .. ':' .. s:byte(1) .. ':' .. s:byte(2) end\n" +
+        'function on_draw(c, g) g:clear(0); g:text(0, 0, msg) end\n',
+      'data/bin': new Uint8Array(bin),
+    });
+  const core = factory.create({ files: app([0, 0xff]), fixtures: new Map(), fonts: null, config: config() });
+  try {
+    const st = core.cmd({ cmd: 'state' });
+    assert.deepEqual(st.errors, []);
+    assert.ok(hasText(st, '2:0:255'), JSON.stringify(st.texts));
+    // core.js sends the files as a base64 blob
+    const r = core.cmd({ cmd: 'reload', files: app([0xff, 0]), with_state: true });
+    assert.deepEqual(r.errors, []);
+    assert.ok(hasText(r, '2:255:0'), JSON.stringify(r.texts));
+  } finally {
+    core.destroy();
+  }
+});
+
 test('a fixture body with NUL and 0xff reaches Lua byte-exact', () => {
   const fixture = JSON.stringify({
     request: { method: 'GET', url: 'http://x.test/bin' },
