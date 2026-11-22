@@ -141,3 +141,38 @@ test('the default timers work when called as methods (browsers reject setTimeout
   await new Promise((r) => setTimeout(r, 350));
   assert.deepEqual(sent, ['down', 'up']);
 });
+
+test('a cancelled press sends no tap', () => {
+  const { p, sent, at } = rig();
+  p.down(100, 200);
+  at(50);
+  p.cancel();
+  assert.equal(p.pressed, false);
+  at(2000); // the hold timer is gone too
+  assert.deepEqual(sent, []);
+});
+
+test('a cancelled live press is closed with an up, and a waiting click still goes out', () => {
+  const { p, sent, at } = rig();
+  p.down(100, 200);
+  at(50);
+  p.up(100, 200);
+  at(100);
+  p.down(300, 400); // second press far away: the waiting click goes out at once
+  assert.deepEqual(sent, ['down 100,200', 'up 100,200']);
+  at(200);
+  p.move(340, 400);
+  p.cancel();
+  assert.deepEqual(sent.slice(2), ['down 300,400', 'move 340,400', 'up 340,400']);
+});
+
+test('a cancelled second click lets the first one go out as a tap', () => {
+  const { p, sent, at } = rig();
+  p.down(100, 200);
+  at(50);
+  p.up(100, 200);
+  at(100);
+  p.down(102, 200);
+  p.cancel();
+  assert.deepEqual(sent, ['down 100,200', 'up 100,200']);
+});

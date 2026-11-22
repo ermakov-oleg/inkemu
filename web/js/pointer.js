@@ -86,6 +86,19 @@ export class PointerInput {
     this.#first = first;
   }
 
+  /** The pointer was cancelled or lost: no tap. A press already sent as live is closed where it stands. */
+  cancel() {
+    const c = this.#cur;
+    if (!c) return;
+    this.#cur = null;
+    if (this.#holdTimer) {
+      this.#clearTimer(this.#holdTimer);
+      this.#holdTimer = null;
+    }
+    if (c.live) this.#pointer('up', c.x, c.y);
+    else this.#flushFirst(); // its timer stopped when this press began
+  }
+
   /** A click still waiting for a second one goes out now, so a key pressed right after it lands after it. */
   flush() {
     if (this.#first && !this.#cur) this.#flushFirst();

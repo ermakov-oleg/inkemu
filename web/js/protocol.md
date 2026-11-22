@@ -25,6 +25,8 @@ The worker (`worker.js`) owns the Wasm core; the page (`app.js`) never calls it 
 The worker drains `take_outgoing`, performs each request with `net.js` (`fetch`, `timeout_ms`, default 15 s) and
 delivers the answer through the same path; answers meant for an older core are dropped.
 
+Real time keeps running while a dialog is open (the Tk window froze it); `tick` does not look at dialogs.
+
 ## A crashed core
 
 A Rust panic aborts the whole module (`WebAssembly.RuntimeError`). The worker reports it, drops the module and

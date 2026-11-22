@@ -71,12 +71,18 @@ worker.onmessage = (e) => {
   } else if (m.type === 'frame') {
     draw(m);
     waitingFrame = false;
+    coreFailed = false;
     overlay();
   } else if (m.type === 'state') {
     onState(m);
   } else if (m.type === 'error') {
     if (!ready && /emulator core/.test(m.message)) coreFailed = true;
-    if (/^Could not start the app|^The emulator core/.test(m.message)) waitingFrame = false;
+    if (/^Could not start the app|^The emulator core/.test(m.message)) {
+      waitingFrame = false;
+      // the core's state is gone with it: a stale dialog must not block R and the buttons
+      status = null;
+      showTextField(null);
+    }
     if (/^Could not start the app: fonts:/.test(m.message)) fonts = null;
     logError(m.message);
     overlay();
@@ -99,6 +105,11 @@ const sendIfPending = (cmd, kinds) => {
 const act = (cmd) => {
   touch.flush();
   send(cmd);
+};
+// as the keys ]  }  L  R: nothing goes out while the core has a dialog open
+const actUnlessDialog = (cmd) => {
+  touch.flush();
+  if (!status?.pending) send(cmd);
 };
 const answerIfPending = (ok, kinds) => sendIfPending({ cmd: 'answer', ok }, kinds);
 
@@ -208,12 +219,13 @@ canvas.addEventListener('pointermove', (e) => {
   touch.move(...lastXY);
 });
 
-function release(e) {
-  if (!touch.pressed) return;
-  touch.up(...(e.type === 'pointerup' ? xy(e) : lastXY));
-}
-canvas.addEventListener('pointerup', release);
-canvas.addEventListener('pointercancel', release);
+canvas.addEventListener('pointerup', (e) => {
+  if (touch.pressed) touch.up(...xy(e));
+});
+// a cancelled or lost pointer is not a tap
+const dropPress = () => touch.cancel();
+canvas.addEventListener('pointercancel', dropPress);
+canvas.addEventListener('lostpointercapture', dropPress);
 
 // ---- keyboard: as the window's on_key ------------------------------------------------------------
 
@@ -225,7 +237,7 @@ function inTextField(el) {
 function togglePause() {
   if (status) send({ cmd: 'set_paused', paused: !status.paused });
 }
-const toggleLock = () => status && send({ cmd: status.locked ? 'unlock' : 'lock' });
+const toggleLock = () => status && !status.pending && send({ cmd: status.locked ? 'unlock' : 'lock' });
 
 document.addEventListener('keydown', (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey || inTextField(e.target)) return;
@@ -242,7 +254,7 @@ document.addEventListener('keydown', (e) => {
     // confirm dialogs: Y/N here, or tap the plate's buttons on the screen. The state may not show a dialog the
     // last tap just opened, so the worker decides.
     answerIfPending(is('y'), CONFIRM_KINDS);
-  } else if (!status || status.pending) return;
+  } else if (status?.pending) return;
   else if (KEYMAP[e.key] || e.code === 'NumpadEnter') send({ cmd: 'key', name: KEYMAP[e.key] ?? 'ok' });
   else if (is('l')) toggleLock();
   else if (is('r')) send({ cmd: 'reload' });
@@ -255,16 +267,19 @@ document.addEventListener('keydown', (e) => {
 // ---- controls -------------------------------------------------------------------------------------
 
 for (const b of document.querySelectorAll('[data-wait]')) {
-  b.addEventListener('click', () => act({ cmd: 'wait', ms: Number(b.dataset.wait) }));
+  b.addEventListener('click', () => actUnlessDialog({ cmd: 'wait', ms: Number(b.dataset.wait) }));
 }
 for (const b of document.querySelectorAll('[data-key]')) {
   b.addEventListener('click', () => act({ cmd: 'key', name: b.dataset.key }));
 }
 for (const b of document.querySelectorAll('[data-cmd]')) {
-  b.addEventListener('click', () => act({ cmd: b.dataset.cmd }));
+  b.addEventListener('click', () => actUnlessDialog({ cmd: b.dataset.cmd }));
 }
 $('pause').addEventListener('click', togglePause);
-$('lock').addEventListener('click', toggleLock);
+$('lock').addEventListener('click', () => {
+  touch.flush();
+  toggleLock();
+});
 $('save-png').addEventListener('click', savePng);
 $('log-clear').addEventListener('click', () => logEl.replaceChildren());
 
@@ -292,6 +307,13 @@ $('net-replay').addEventListener('change', (e) => {
 
 $('fonts-btn').addEventListener('click', () => $('fonts-input').click());
 $('fonts-input').addEventListener('change', async (e) => {
+  try {
+    await loadFonts(e);
+  } catch (err) {
+    logError(`Fonts: ${err.message || err}`);
+  }
+});
+async function loadFonts(e) {
   const list = [...e.target.files];
   e.target.value = '';
   const pick = FONT_SLOTS.map((slot) => list.find((f) => f.name.toLowerCase().includes(slot)));
@@ -302,7 +324,7 @@ $('fonts-input').addEventListener('change', async (e) => {
   fonts = await Promise.all(pick.map(async (f) => new Uint8Array(await f.arrayBuffer())));
   logPage(`fonts: ${pick.map((f) => f.name).join(', ')}${app ? ' — the app starts again' : ''}`);
   if (app) start();
-});
+}
 
 $('copy-link').addEventListener('click', async () => {
   if (app?.source.kind !== 'gh') return;
