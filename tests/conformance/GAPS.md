@@ -37,6 +37,34 @@ contract states it and the reader was not measured. File names are relative to t
 - Touch points: `crates/inkcore/src/ctx/stubs.rs` (perf), `crates/inkcore/src/draw/canvas.rs` (counter).
 - Source: contract only.
 
+### Refresh kind: proposed interface
+The refresh kind is not observable today. Proposed: `Emu.status()["refresh"]` is the kind of the last presented app frame, one of `"partial"`, `"full"`, `"gray"` (`"gray"` is the full refresh with the grayscale waveform of a frame that has a `g:image` with `gray = true`). The runner reads it through `observe`, so no runner change is needed. The contract does not classify the first frame of a session; inkemu chooses `"full"` for it (check `05/refresh_first_frame`, an inkemu choice, not a contract rule). The automatic-full checks assume that any full frame resets the partial counter.
+- Touch points: `crates/inkcore/src/emu.rs` (frame presentation, status), `crates/inkemu-py/src/lib.rs` and `src/inkemu/emu.py` (`status`).
+
+### 05/refresh_plain, 05/refresh_full_arg, 05/refresh_full_wins, 05/refresh_full_in_draw
+- Contract: a plain `invalidate()` presents a partial refresh and `invalidate("full")` a full one; if a frame is requested several times, one `"full"` request makes the whole frame full; a request made from `on_draw` (including `"full"`) applies to the next frame.
+- Core now: the argument is ignored and the kind is not recorded.
+- Touch points: `crates/inkcore/src/ctx/mod.rs` (`invalidate`), `crates/inkcore/src/emu.rs` (frame scheduling).
+- Source: contract only.
+
+### 05/refresh_auto_full
+- Contract: the system makes a full refresh after a set number of partial ones; the default is 30, so after 29 partial frames the 30th is full.
+- Core now: every frame is the same kind; nothing counts partial frames.
+- Touch points: `crates/inkcore/src/emu.rs`.
+- Source: contract only.
+
+### 05/refresh_defer_blocks_auto
+- Contract: `defer_full_refresh(ms)` stops the automatic full refresh from happening during the next `ms` milliseconds (the count keeps growing; a forced full comes at twice the interval, not tested here).
+- Core now: the call is accepted and does nothing.
+- Touch points: `crates/inkcore/src/ctx/basic.rs`, `crates/inkcore/src/emu.rs`.
+- Source: contract only.
+
+### 05/defer_args
+- Contract: `defer_full_refresh(ms)` takes an integer from 1 to 60000 and returns nothing; any other value returns `nil, "invalid_argument"`.
+- Core now: any number is accepted and one `nil` is returned.
+- Touch points: `crates/inkcore/src/ctx/basic.rs` (`defer_full_refresh`).
+- Source: contract only.
+
 ## §6 Drawing
 
 ### 06/g_methods
@@ -148,6 +176,28 @@ contract states it and the reader was not measured. File names are relative to t
 - Core now: line heights match, ascents come from the bundled font (16, 19, 23).
 - Touch points: `crates/inkcore/src/draw/text.rs` (`ascent`).
 - Source: probe-confirmed for small (17) and medium (21); large (26) is contract only.
+
+## §25 System actions
+
+### 25/act_refresh
+- Contract: `ctx.system:act("refresh")` returns nothing and makes the next frame a full refresh, like `invalidate("full")`; it is allowed in any callback.
+- Core now: every name returns `nil, "invalid_argument"`.
+- Touch points: `crates/inkcore/src/ctx/stubs.rs` (`act`), `crates/inkcore/src/emu.rs`.
+- Source: probe-confirmed (returns nothing); the full frame is contract only.
+
+### 25/act_inactive
+- Contract: `act("sleep")` and `act("power_off")` return `nil, "inactive"` outside an `on_input` delivering a key up or a pointer up (load, timers, pointer down).
+- Core now: `nil, "invalid_argument"`.
+- Touch points: `crates/inkcore/src/ctx/stubs.rs` (`act`), `crates/inkcore/src/emu.rs` (input dispatch must flag an "up" event in progress).
+- Source: contract only (`sleep` and `power_off` were not called in the probe).
+
+### 25/act_sleep_tap, 25/act_sleep_key
+- Contract: `act("sleep")` from a key up or pointer up returns nothing, ends the session after the callback (calling `on_leave`) and locks the device, like a short power-key press.
+- Core now: not emulated; nothing happens.
+- Touch points: `crates/inkcore/src/ctx/stubs.rs` (`act`), `crates/inkcore/src/emu.rs` (lock path).
+- Source: contract only.
+
+Already green and pinned: `25/act_args` (unknown name is `nil, "invalid_argument"` - probe-confirmed; a non-string name raises). Not covered: `act("power_off")` with its confirmation dialog and `busy` (contract only, needs system dialog support).
 
 ## Deviations
 

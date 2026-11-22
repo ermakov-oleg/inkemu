@@ -1,0 +1,17 @@
+{
+  "spec": "\u00a75",
+  "about": "a plain invalidate presents a partial refresh",
+  "steps": [
+    "wait 1s",
+    "tap 100 100",
+    "wait 1s",
+    "observe s"
+  ],
+  "expect": {
+    "s.refresh": {
+      "value": "partial",
+      "spec": "\u00a75"
+    }
+  },
+  "errors": []
+}

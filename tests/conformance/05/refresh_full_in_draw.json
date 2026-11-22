@@ -1,0 +1,22 @@
+{
+  "spec": "\u00a75",
+  "about": "invalidate(\"full\") called inside on_draw applies to the next frame, not the one being drawn",
+  "steps": [
+    "wait 1s",
+    "tap 100 100",
+    "observe current",
+    "wait 1s",
+    "observe next"
+  ],
+  "expect": {
+    "current.refresh": {
+      "value": "partial",
+      "spec": "\u00a75"
+    },
+    "next.refresh": {
+      "value": "full",
+      "spec": "\u00a75"
+    }
+  },
+  "errors": []
+}

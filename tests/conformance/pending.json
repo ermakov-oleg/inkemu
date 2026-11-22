@@ -3,8 +3,16 @@
   "05/cmd_cap_clear": "g:clear past the cap returns nothing instead of nil, limit_exceeded",
   "05/cmd_cap_text_box_lines": "text_box lines are not counted against the cap and nothing is refused",
   "05/cmd_cap_underline": "underline is not counted as an extra command and nothing is refused",
+  "05/defer_args": "defer_full_refresh returns one nil instead of nothing and accepts values outside 1..60000",
   "05/invalidate_args": "ctx:invalidate accepts any argument and never returns invalid_argument",
   "05/perf_info": "ctx.perf:info() returns an empty table",
+  "05/refresh_auto_full": "status() has no refresh field and no automatic full refresh every 30th frame",
+  "05/refresh_defer_blocks_auto": "status() has no refresh field and defer_full_refresh is ignored",
+  "05/refresh_first_frame": "status() has no refresh field",
+  "05/refresh_full_arg": "status() has no refresh field, invalidate(\"full\") is not distinguished",
+  "05/refresh_full_in_draw": "status() has no refresh field",
+  "05/refresh_full_wins": "status() has no refresh field",
+  "05/refresh_plain": "status() has no refresh field",
   "06/arc_full_turn": "an arc spanning a whole multiple of 360 degrees draws a full ring",
   "06/canvas_inactive": "g keeps working after its callback returned instead of nil, inactive",
   "06/circle_fill_pixels": "circle raster covers pixels at distance r (fill) and misses the outer stroke ring, half a pixel off",
@@ -30,5 +38,9 @@
   "07/text_invalid_utf8": "invalid UTF-8 is accepted by text, text_box and measure; layout is missing",
   "07/text_limit_frame": "no 65536-byte per-frame text limit",
   "07/text_limits_call": "no 8192-byte per-call limit for text, text_box and measure",
-  "07/text_rtl": "right-to-left text is skipped with a warning instead of invalid_argument"
+  "07/text_rtl": "right-to-left text is skipped with a warning instead of invalid_argument",
+  "25/act_inactive": "sleep and power_off return invalid_argument instead of inactive",
+  "25/act_refresh": "act(\"refresh\") returns invalid_argument instead of nothing and requests no full refresh",
+  "25/act_sleep_key": "act(\"sleep\") is not implemented: no on_leave and the device is not locked",
+  "25/act_sleep_tap": "act(\"sleep\") is not implemented: no on_leave and the device is not locked"
 }
