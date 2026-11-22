@@ -90,6 +90,17 @@ export function createSession({ post, load, fetchFn = globalThis.fetch, now = ()
     }
   }
 
+  /** The kind of the dialog open in the core right now, or null; the page's last state may be behind. */
+  function pendingKind() {
+    try {
+      // log_from past the end: no log lines to account for, the cursor stays
+      return core.cmd({ cmd: 'state', log_from: Number.MAX_SAFE_INTEGER }).status?.pending?.kind ?? null;
+    } catch (e) {
+      fatal(e);
+      return null;
+    }
+  }
+
   /** Real time since the last tick reaches the core (the window's 1:1 clock). */
   function catchUp() {
     const t = now();
@@ -150,8 +161,9 @@ export function createSession({ post, load, fetchFn = globalThis.fetch, now = ()
           if (last && (cmd.cmd === 'reload' || cmd.cmd === 'restart')) return start();
           return post({ type: 'error', message: last ? 'The app is stopped; press Reload.' : 'No app is open.' });
         }
+        if (msg.ifPending && !msg.ifPending.includes(pendingKind())) return;
         // as the window's on_release: real time must reach the clock before `up` classifies the gesture
-        if (cmd.cmd === 'pointer' && cmd.phase === 'up') catchUp();
+        if (cmd.cmd === 'pointer' || cmd.cmd === 'double_tap') catchUp();
         if (cmd.cmd === 'set_paused') lastTick = now();
         run(cmd);
         return;

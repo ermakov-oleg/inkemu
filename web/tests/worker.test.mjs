@@ -176,3 +176,39 @@ test('a failed command is reported, the session goes on', async () => {
   await h.s.handle({ type: 'open', files: await helloFiles(), fixtures: new Map(), fonts: [enc.encode('x')], config: config() });
   assert.match(h.errors().at(-1), /^Could not start the app: fonts:/);
 });
+
+test('ifPending: an answer runs only while a dialog of that kind is open, otherwise it is dropped silently', async () => {
+  const h = harness();
+  const app = files({
+    'manifest.json': '{"app_id": "dlg", "entry": "index.lua"}',
+    'index.lua':
+      "msg = 'none'\n" +
+      'function on_input(c, ev)\n' +
+      "  if ev.gesture == 'tap' then c.dialog:confirm({title = 'Sure?'}, function(c, ok) msg = 'ok ' .. tostring(ok); c:invalidate() end) end\n" +
+      "  if ev.gesture == 'double_tap' then msg = 'double'; c:invalidate() end\n" +
+      '  return true\n' +
+      'end\n' +
+      'function on_draw(c, g) g:clear(0); g:text(0, 0, msg) end\n',
+  });
+  await h.s.handle({ type: 'open', files: app, fixtures: new Map(), fonts: null, config: config() });
+  const n = h.msgs.length;
+  await h.s.handle({ type: 'cmd', cmd: { cmd: 'answer', ok: true }, ifPending: ['confirm', 'leave'] });
+  assert.equal(h.msgs.length, n, 'no dialog: nothing runs, nothing is reported');
+
+  // the tap opens the confirm; Y comes before the page has seen that state
+  await h.s.handle({ type: 'cmd', cmd: { cmd: 'tap', x: 10, y: 10 } });
+  await h.s.handle({ type: 'cmd', cmd: { cmd: 'type_text', text: 'x' }, ifPending: ['text', 'edit'] });
+  assert.equal(h.errors().length, 0, 'type_text for a confirm is dropped, not an error');
+  await h.s.handle({ type: 'cmd', cmd: { cmd: 'answer', ok: true }, ifPending: ['confirm', 'leave'] });
+  assert.ok(texts(h.lastState()).includes('ok true'));
+  assert.equal(h.lastState().status.pending, null);
+
+  // the log cursor survived the pending checks: no line came twice
+  const lines = h.log();
+  assert.equal(new Set(lines).size, lines.length);
+
+  await h.s.handle({ type: 'cmd', cmd: { cmd: 'double_tap', x: 10, y: 10 } });
+  // double_tap delivers a tap first (the confirm opens), then the double tap goes to the dialog
+  assert.equal(h.lastState().status.pending.kind, 'confirm');
+  assert.equal(h.errors().length, 0);
+});

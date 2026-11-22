@@ -1,9 +1,11 @@
 // The page: loads apps, sends input to the worker, draws its frames. Input semantics follow src/inkemu/window.py.
 import { parseGitHubUrl, parseShareParams, shareUrl, resolveAndList, loadGitHubApp } from './github.js';
 import { fromZip, fromDirectoryHandle, fromFileList } from './sources.js';
+import { PointerInput } from './pointer.js';
 
 const $ = (id) => document.getElementById(id);
-const HOLD_MS = 600;
+const TEXT_KINDS = ['text', 'edit'];
+const CONFIRM_KINDS = ['confirm', 'leave'];
 const MAX_LOG_LINES = 5000;
 const KEYMAP = {
   ArrowUp: 'up',
@@ -88,6 +90,17 @@ worker.onerror = (e) => {
 
 const post = (msg) => worker.postMessage(msg);
 const send = (cmd) => app && post({ type: 'cmd', cmd });
+/** Runs only if the core has a dialog of one of these kinds open right then; otherwise dropped silently. */
+const sendIfPending = (cmd, kinds) => {
+  touch.flush();
+  if (app) post({ type: 'cmd', cmd, ifPending: kinds });
+};
+/** Keys and buttons: a click still waiting to become a double click goes first. */
+const act = (cmd) => {
+  touch.flush();
+  send(cmd);
+};
+const answerIfPending = (ok, kinds) => sendIfPending({ cmd: 'answer', ok }, kinds);
 
 function syncTicking() {
   post({ type: 'tick', on: document.visibilityState === 'visible' });
@@ -154,19 +167,18 @@ function showTextField(p) {
 
 $('text-form').addEventListener('submit', (e) => {
   e.preventDefault();
-  send({ cmd: 'type_text', text: $('text-input').value });
+  sendIfPending({ cmd: 'type_text', text: $('text-input').value }, TEXT_KINDS);
 });
 $('text-input').addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     e.preventDefault();
-    send({ cmd: 'answer', ok: false });
+    answerIfPending(false, TEXT_KINDS);
   }
 });
 
-// ---- pointer: click = tap, drag = swipe, long press = hold (the core classifies on `up`) ----------------
+// ---- pointer: click = tap, double click = double tap, drag = swipe, long press = hold (pointer.js) -----------
 
-let down = false;
-let holdTimer = null;
+const touch = new PointerInput({ send });
 let lastXY = null;
 
 function xy(e) {
@@ -176,10 +188,8 @@ function xy(e) {
   return [Math.min(Math.max(x, 0), canvas.width - 1), Math.min(Math.max(y, 0), canvas.height - 1)];
 }
 
-const pointer = (phase, [x, y]) => send({ cmd: 'pointer', phase, x, y });
-
 canvas.addEventListener('pointerdown', (e) => {
-  if (e.button !== 0 || !app || down) return; // one pointer at a time: a second finger is ignored
+  if (e.button !== 0 || !app || touch.pressed) return; // one pointer at a time: a second finger is ignored
   e.preventDefault();
   // keys go to the screen again after a click on it
   if (inTextField(document.activeElement)) document.activeElement.blur();
@@ -188,32 +198,19 @@ canvas.addEventListener('pointerdown', (e) => {
   } catch {
     // a pointer the browser no longer tracks; the moves still arrive while over the canvas
   }
-  down = true;
   lastXY = xy(e);
-  pointer('down', lastXY);
-  const at = lastXY;
-  holdTimer = setTimeout(() => {
-    holdTimer = null;
-    if (down) pointer('hold', at);
-  }, HOLD_MS);
+  touch.down(...lastXY);
 });
 
 canvas.addEventListener('pointermove', (e) => {
-  if (!down) return;
-  const p = xy(e);
-  if (p[0] === lastXY[0] && p[1] === lastXY[1]) return;
-  lastXY = p;
-  pointer('move', p);
+  if (!touch.pressed) return;
+  lastXY = xy(e);
+  touch.move(...lastXY);
 });
 
 function release(e) {
-  if (!down) return;
-  down = false;
-  if (holdTimer) {
-    clearTimeout(holdTimer);
-    holdTimer = null;
-  }
-  pointer('up', e.type === 'pointerup' ? xy(e) : lastXY);
+  if (!touch.pressed) return;
+  touch.up(...(e.type === 'pointerup' ? xy(e) : lastXY));
 }
 canvas.addEventListener('pointerup', release);
 canvas.addEventListener('pointercancel', release);
@@ -232,6 +229,7 @@ const toggleLock = () => status && send({ cmd: status.locked ? 'unlock' : 'lock'
 
 document.addEventListener('keydown', (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey || inTextField(e.target)) return;
+  touch.flush();
   // the physical key (any layout), or the character when there is no code (synthetic events)
   const ch = e.key.length === 1 ? e.key.toLowerCase() : '';
   const is = (letter) => e.code === `Key${letter.toUpperCase()}` || ch === letter;
@@ -239,14 +237,13 @@ document.addEventListener('keydown', (e) => {
   const plusMinute = !plusHour && (ch === ']' || e.code === 'BracketRight');
   if (is('p')) togglePause();
   else if (is('s')) savePng();
-  else if (!app || !status) return;
-  else if (status.pending) {
-    // confirm dialogs: Y/N here, or tap the plate's buttons on the screen
-    const textKind = status.pending.kind === 'text' || status.pending.kind === 'edit';
-    if (is('y') && !textKind) send({ cmd: 'answer', ok: true });
-    else if (is('n') && !textKind) send({ cmd: 'answer', ok: false });
-    else return;
-  } else if (KEYMAP[e.key] || e.code === 'NumpadEnter') send({ cmd: 'key', name: KEYMAP[e.key] ?? 'ok' });
+  else if (!app) return;
+  else if ((is('y') || is('n')) && !TEXT_KINDS.includes(status?.pending?.kind)) {
+    // confirm dialogs: Y/N here, or tap the plate's buttons on the screen. The state may not show a dialog the
+    // last tap just opened, so the worker decides.
+    answerIfPending(is('y'), CONFIRM_KINDS);
+  } else if (!status || status.pending) return;
+  else if (KEYMAP[e.key] || e.code === 'NumpadEnter') send({ cmd: 'key', name: KEYMAP[e.key] ?? 'ok' });
   else if (is('l')) toggleLock();
   else if (is('r')) send({ cmd: 'reload' });
   else if (plusMinute) send({ cmd: 'wait', ms: 60000 });
@@ -258,13 +255,13 @@ document.addEventListener('keydown', (e) => {
 // ---- controls -------------------------------------------------------------------------------------
 
 for (const b of document.querySelectorAll('[data-wait]')) {
-  b.addEventListener('click', () => send({ cmd: 'wait', ms: Number(b.dataset.wait) }));
+  b.addEventListener('click', () => act({ cmd: 'wait', ms: Number(b.dataset.wait) }));
 }
 for (const b of document.querySelectorAll('[data-key]')) {
-  b.addEventListener('click', () => send({ cmd: 'key', name: b.dataset.key }));
+  b.addEventListener('click', () => act({ cmd: 'key', name: b.dataset.key }));
 }
 for (const b of document.querySelectorAll('[data-cmd]')) {
-  b.addEventListener('click', () => send({ cmd: b.dataset.cmd }));
+  b.addEventListener('click', () => act({ cmd: b.dataset.cmd }));
 }
 $('pause').addEventListener('click', togglePause);
 $('lock').addEventListener('click', toggleLock);
