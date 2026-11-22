@@ -8,3 +8,4 @@ dist/
 /vendor/
 /target/
 *.so
+/web/core/
