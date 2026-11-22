@@ -24,12 +24,19 @@ export function createSession({ post, load, fetchFn = globalThis.fetch, now = ()
   let timer = null;
   let lastTick = now();
   let queue = Promise.resolve();
+  let readyPosted = false;
 
   const getFactory = () =>
     (factory ??= load().catch((e) => {
       factory = null;
       throw e;
     }));
+
+  function announceReady() {
+    if (readyPosted) return;
+    readyPosted = true;
+    post({ type: 'ready' });
+  }
 
   const say = (line) => extra.push(clock ? `${clock} ${line}` : line);
 
@@ -39,7 +46,7 @@ export function createSession({ post, load, fetchFn = globalThis.fetch, now = ()
     gen++;
     const what = e instanceof WebAssembly.RuntimeError ? 'crashed' : 'failed';
     const message = `The emulator core ${what} (${e?.message ?? e}). The app is stopped; press Reload or open the app again to start it fresh.`;
-    post({ type: 'error', message });
+    post({ type: 'error', kind: 'core', message });
   }
 
   function publish(st) {
@@ -80,7 +87,7 @@ export function createSession({ post, load, fetchFn = globalThis.fetch, now = ()
     if (!core) return null;
     try {
       const r = core.cmd({ ...cmd, with_state: true, log_from: logFrom });
-      if (!r.ok) post({ type: 'error', message: `${cmd.cmd}: ${r.error}` });
+      if (!r.ok) post({ type: 'error', kind: cmd.cmd === 'reload' ? 'load' : 'other', message: `${cmd.cmd}: ${r.error}` });
       drain();
       publish(r);
       return r;
@@ -121,6 +128,7 @@ export function createSession({ post, load, fetchFn = globalThis.fetch, now = ()
 
   async function start() {
     const f = await getFactory();
+    announceReady();
     try {
       core?.destroy();
     } catch {
@@ -138,7 +146,7 @@ export function createSession({ post, load, fetchFn = globalThis.fetch, now = ()
       core = f.create(last);
     } catch (e) {
       if (e instanceof WebAssembly.RuntimeError) return fatal(e);
-      post({ type: 'error', message: `Could not start the app: ${e?.message ?? e}` });
+      post({ type: 'error', kind: /^fonts:/.test(e?.message) ? 'fonts' : 'start', message: `Could not start the app: ${e?.message ?? e}` });
       return;
     }
     run({ cmd: 'state' });
@@ -150,7 +158,7 @@ export function createSession({ post, load, fetchFn = globalThis.fetch, now = ()
         last = { files: msg.files, fixtures: msg.fixtures, fonts: msg.fonts ?? null, config: msg.config };
         return start();
       case 'reload':
-        if (!last) return post({ type: 'error', message: 'No app is open.' });
+        if (!last) return post({ type: 'error', kind: 'other', message: 'No app is open.' });
         last = { ...last, files: msg.files, ...(msg.fixtures ? { fixtures: msg.fixtures } : {}) };
         if (!core) return start();
         run({ cmd: 'reload', files: msg.files, ...(msg.fixtures ? { fixtures: msg.fixtures } : {}) });
@@ -159,7 +167,7 @@ export function createSession({ post, load, fetchFn = globalThis.fetch, now = ()
         const { cmd } = msg;
         if (!core) {
           if (last && (cmd.cmd === 'reload' || cmd.cmd === 'restart')) return start();
-          return post({ type: 'error', message: last ? 'The app is stopped; press Reload.' : 'No app is open.' });
+          return post({ type: 'error', kind: 'other', message: last ? 'The app is stopped; press Reload.' : 'No app is open.' });
         }
         if (msg.ifPending && !msg.ifPending.includes(pendingKind())) return;
         // as the window's on_release: real time must reach the clock before `up` classifies the gesture
@@ -178,7 +186,7 @@ export function createSession({ post, load, fetchFn = globalThis.fetch, now = ()
         }
         return;
       default:
-        post({ type: 'error', message: `unknown message ${msg.type}` });
+        post({ type: 'error', kind: 'other', message: `unknown message ${msg.type}` });
     }
   }
 
@@ -186,13 +194,13 @@ export function createSession({ post, load, fetchFn = globalThis.fetch, now = ()
     /** Loads the module; posts `ready` or an error. */
     init() {
       return getFactory().then(
-        () => post({ type: 'ready' }),
-        (e) => post({ type: 'error', message: `Could not load the emulator core: ${e?.message ?? e}` }),
+        announceReady,
+        (e) => post({ type: 'error', kind: 'core', message: `Could not load the emulator core: ${e?.message ?? e}` }),
       );
     },
     /** Messages run one at a time, in order (open waits for the module). */
     handle(msg) {
-      queue = queue.then(() => handle(msg)).catch((e) => post({ type: 'error', message: String(e?.message ?? e) }));
+      queue = queue.then(() => handle(msg)).catch((e) => post({ type: 'error', kind: 'core', message: `Could not load the emulator core: ${e?.message ?? e}` }));
       return queue;
     },
     tick: catchUp,

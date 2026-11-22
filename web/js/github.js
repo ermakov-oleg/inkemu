@@ -39,13 +39,18 @@ export class NetworkError extends GitHubError {
   }
 }
 
-async function request(fetchFn, url, opts, timeoutMs = 30000) {
+/** `handle(res)` runs under the same timeout, so a stalled body ends as "timed out" too. */
+async function request(fetchFn, url, opts, timeoutMs = 30000, handle = async (r) => r) {
   // Not AbortSignal.timeout: its timer is unref'd and would not keep Node alive.
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
-    return await fetchFn(url, { ...opts, signal: ctl.signal });
+    // the race also ends a body read that ignores the abort
+    const aborted = new Promise((_, reject) => ctl.signal.addEventListener('abort', () => reject(new Error('aborted'))));
+    aborted.catch(() => {});
+    return await Promise.race([aborted, (async () => handle(await fetchFn(url, { ...opts, signal: ctl.signal })))()]);
   } catch (e) {
+    if (e instanceof GitHubError) throw e;
     throw new NetworkError(ctl.signal.aborted, e);
   } finally {
     clearTimeout(timer);
@@ -101,16 +106,16 @@ export function shareUrl(base, { owner, repo, ref, path }) {
 
 async function fetchTree(owner, repo, ref, fetchFn, timeoutMs) {
   const url = `https://api.github.com/repos/${owner}/${repo}/git/trees/${encPath(ref)}?recursive=1`;
-  const res = await request(fetchFn, url, { headers: { Accept: 'application/vnd.github+json' } }, timeoutMs);
-  if (res.status === 404) return null;
-  if ((res.status === 403 || res.status === 429) && res.headers.get('x-ratelimit-remaining') === '0') {
-    const reset = Number(res.headers.get('x-ratelimit-reset'));
-    throw new RateLimited(reset ? new Date(reset * 1000) : null);
-  }
-  if (!res.ok) throw new GitHubError('http', `GitHub API answered ${res.status} for ${owner}/${repo}.`);
-  const body = await res.json().catch((e) => {
-    throw new NetworkError(false, e);
+  const body = await request(fetchFn, url, { headers: { Accept: 'application/vnd.github+json' } }, timeoutMs, async (res) => {
+    if (res.status === 404) return null;
+    if ((res.status === 403 || res.status === 429) && res.headers.get('x-ratelimit-remaining') === '0') {
+      const reset = Number(res.headers.get('x-ratelimit-reset'));
+      throw new RateLimited(reset ? new Date(reset * 1000) : null);
+    }
+    if (!res.ok) throw new GitHubError('http', `GitHub API answered ${res.status} for ${owner}/${repo}.`);
+    return res.json();
   });
+  if (!body) return null;
   if (body.truncated) throw new Truncated();
   return body.tree.filter((e) => e.type === 'blob').map((e) => ({ path: e.path, size: e.size ?? 0 }));
 }
@@ -149,13 +154,11 @@ export async function loadGitHubApp({ owner, repo, ref, path, tree }, fetchFn = 
     throw new NotAnApp(`No manifest.json in ${owner}/${repo}/${appDir}: this is not an app folder.${hint}`);
   }
   const raw = (p) => `https://raw.githubusercontent.com/${owner}/${repo}/${encPath(ref)}/${encPath(p)}`;
-  const readFile = async (p) => {
-    const res = await request(fetchFn, raw(p), {}, timeoutMs);
-    if (!res.ok) throw new GitHubError('http', `Could not download ${p} (HTTP ${res.status}).`);
-    return new Uint8Array(await res.arrayBuffer().catch((e) => {
-      throw new NetworkError(false, e);
-    }));
-  };
+  const readFile = (p) =>
+    request(fetchFn, raw(p), {}, timeoutMs, async (res) => {
+      if (!res.ok) throw new GitHubError('http', `Could not download ${p} (HTTP ${res.status}).`);
+      return new Uint8Array(await res.arrayBuffer());
+    });
   const plan = await planApp({ sizes, appDir, readFile });
   const { files, fixtures } = await readPlan(plan, readFile);
   return { files, fixtures, appId: plan.appId, label: `${owner}/${repo}/${appDir}@${ref}` };

@@ -195,3 +195,16 @@ test('dot segments are rejected', () => {
   assert.equal(parseShareParams(new URLSearchParams('gh=o/r&ref=main&path=a/../b')), null);
   assert.equal(parseShareParams(new URLSearchParams('gh=o/..&ref=main')), null);
 });
+
+test('a body that never arrives ends as a timed-out NetworkError', async () => {
+  const fetchFn = async () => ({
+    status: 200,
+    ok: true,
+    headers: { get: () => null },
+    json: () => new Promise(() => {}),
+  });
+  await assert.rejects(
+    resolveAndList({ owner: 'o', repo: 'r', refAndPath: [] }, fetchFn, { timeoutMs: 50 }),
+    (e) => e instanceof NetworkError && /timed out/.test(e.message),
+  );
+});

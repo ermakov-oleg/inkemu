@@ -76,14 +76,14 @@ worker.onmessage = (e) => {
   } else if (m.type === 'state') {
     onState(m);
   } else if (m.type === 'error') {
-    if (!ready && /emulator core/.test(m.message)) coreFailed = true;
-    if (/^Could not start the app|^The emulator core/.test(m.message)) {
+    if (!ready && m.kind === 'core') coreFailed = true;
+    if (['start', 'core', 'load', 'fonts'].includes(m.kind)) {
       waitingFrame = false;
       // the core's state is gone with it: a stale dialog must not block R and the buttons
       status = null;
       showTextField(null);
     }
-    if (/^Could not start the app: fonts:/.test(m.message)) fonts = null;
+    if (m.kind === 'fonts') fonts = null;
     logError(m.message);
     overlay();
   }

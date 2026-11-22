@@ -101,6 +101,7 @@ jobs:
           version: 7.0.0
       - run: rustup target add wasm32-unknown-emscripten
       - run: scripts/build-web.sh
+      - run: cargo clippy -p inkcore-wasm --target wasm32-unknown-emscripten -- -D warnings
       - name: gzip size of the core module
         run: for f in web/core/*; do echo "$f $(gzip -9c "$f" | wc -c)"; done
       # after emsdk, so this node runs the tests

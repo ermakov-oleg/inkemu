@@ -212,3 +212,14 @@ test('ifPending: an answer runs only while a dialog of that kind is open, otherw
   assert.equal(h.lastState().status.pending.kind, 'confirm');
   assert.equal(h.errors().length, 0);
 });
+
+test('a failed first load is a core error, a retry that works posts ready', async () => {
+  let n = 0;
+  const h = harness({ load: () => (n++ === 0 ? Promise.reject(new Error('no wasm')) : loadCore(MODULE)) });
+  await h.s.init();
+  assert.equal(h.msgs.at(-1).type, 'error');
+  assert.equal(h.msgs.at(-1).kind, 'core');
+  await h.s.handle({ type: 'open', files: await helloFiles(), fixtures: new Map(), fonts: null, config: config() });
+  assert.equal(h.msgs.filter((m) => m.type === 'ready').length, 1);
+  assert.ok(h.lastState());
+});

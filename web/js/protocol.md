@@ -15,10 +15,10 @@ The worker (`worker.js`) owns the Wasm core; the page (`app.js`) never calls it 
 
 | Message | Meaning |
 |---|---|
-| `{type:'ready'}` | The Wasm module is loaded (the page shows "Loading core…" until then). |
+| `{type:'ready'}` | The Wasm module is loaded, also after a retry that followed a failed first load (the page shows "Loading core…" until then). |
 | `{type:'frame', w, h, bits, seq}` | The screen with its plates (core `frame(true)`): rows of `ceil(w/8)` bytes, MSB first, set bit = white. Sent only when `frame_seq` moved. |
 | `{type:'state', status, texts, errors, log}` | `status` as the core's state, `errors` all of them, `log` only the new lines (the core's, then the worker's own, such as the CORS line). Sent when the status (clock to the second), the error count, the frame or the log changed. |
-| `{type:'error', message}` | Plain words for the log: a failed command, a failed start, a missing module. |
+| `{type:'error', kind, message}` | Plain words for the log. `kind`: `start` (the app could not start), `core` (module missing or crashed), `fonts` (bad fonts, a start failure), `load` (a `reload` the core rejected), `other` (a failed command). The page clears "Starting…" for all but `other`. |
 
 ## After every command, tick and delivery
 

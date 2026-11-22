@@ -82,6 +82,8 @@ export async function planApp({ sizes, appDir, readFile }) {
   }
   const pre = appDir ? `${appDir}/` : '';
   if (!sizes.has(`${pre}manifest.json`)) throw new NotAnApp(`No manifest.json in ${appDir || 'the root folder'}.`);
+  const manifestSize = sizes.get(`${pre}manifest.json`);
+  if (manifestSize > MAX_BYTES) throw new TooLarge(manifestSize);
   const appId = readAppId(await readFile(`${pre}manifest.json`));
   const fxDir = findFixtures(paths, appDir, appId);
   const fxPre = fxDir ? `${fxDir}/` : null;

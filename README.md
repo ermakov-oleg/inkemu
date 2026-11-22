@@ -23,11 +23,11 @@ treat inkemu as a development aid, not as a reference of the firmware.
 
 The same core runs as a static page: **<https://ermakov-oleg.github.io/inkemu/>**. It is for trying an InkApp without
 Python or the reader. Open an app by pasting a GitHub folder link (`https://github.com/<owner>/<repo>/tree/<ref>/<path>`),
-loading a zip, or picking a local folder (re-read it after editing). Click = tap, drag = swipe, long press = hold,
-arrows/Enter/Esc = side buttons.
+loading a zip, or picking a local folder (re-read it after editing; "Re-read files" needs a Chromium browser, it uses the File System Access API). Click = tap, drag = swipe, long press = hold,
+arrows/Enter/Esc = side buttons. The app clock stops while the tab is hidden.
 
 - Share link: `?gh=<owner>/<repo>&ref=<ref>&path=<path>`. It always follows the branch, it is never pinned to a commit.
-- Limits: 20 MiB and 2000 files per app; GitHub allows 60 API calls per hour per IP without a token, one per open.
+- Limits: 20 MiB and 2000 files per app; GitHub allows 60 API calls per hour per IP without a token, one call per open for a plain branch name (2–3 when the branch name contains `/`).
 - Fixtures: the nearest `tests/fixtures/<app_id>/` up the tree from the app folder (its `net/` and `reader.json`).
   The default is "fixtures, then the network"; the "fixtures only" toggle replays only.
 - Network: the page calls servers from the browser, so a server without CORS headers answers `no_network`. Record a
@@ -233,7 +233,7 @@ the start with an error. From each file inkemu takes:
   `pointer` = true).
 - `image`, `qr`, `json`, `base64` (`encode`, `decode`), `hex`, `url` (`encode`, `decode`), `zlib`, `random` (`uuid`, `bytes`).
 - `hash`: `sha256`, `md5` and `hmac_sha256` return the raw digest bytes (use `ctx.hex:encode` for text); `sha1` returns the
-  20 raw bytes too; `crc32` returns a signed 32-bit integer (values from 2^31 wrap to negative); all verified on the device.
+  20 raw bytes too; `crc32` returns a signed 32-bit integer (values from 2^31 wrap to negative); all verified in QEMU on firmware 26112001.
 - `screen` (`width`, `height`, `orientation`, `set_orientation`, `gray_levels` = 2, `gray_still` = 4),
   `frontlight` (`get`, `set`, `reset`), `system` (`can_open`, `open`, `act`), `i18n` (`locale`), `perf` (`info` =
   `{}`), `gc`, `budget`, `reader` (answers from `<fixtures dir>/reader.json`), `lockscreen`, `lock`.

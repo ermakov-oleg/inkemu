@@ -232,9 +232,9 @@ def test_codecs_and_hashes(make_app, emu_factory):
     b64 = "0J/RgNC40LLQtdGC/w=="
     sha1 = "a9993e364706816aba3e25717850c26c9cd0d89d"
     sha256 = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-    # sha1 and sha256 return raw digests on 26112001, verified on the device
+    # sha1 and sha256 return raw digests on 26112001, verified in QEMU on firmware 26112001
     assert emu.has_text(f"msg {b64}|ok|00ff61|ok|{sha1}|{sha256}|a%20b%2F%D1%8F%3F|a b/я+|36|nil"), (
-        "26112001: ctx.hash:sha256 returns 32 raw bytes"
+        "26112001: ctx.hash:sha1 and ctx.hash:sha256 return raw bytes"
     )
 
 
