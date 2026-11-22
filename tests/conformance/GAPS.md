@@ -154,6 +154,11 @@ The refresh kind is not observable today. Proposed: two fields. `Emu.status()["r
 - Touch points: `crates/inkcore/src/draw/mod.rs`, `crates/inkcore/src/draw/canvas.rs`, `crates/inkcore/src/ctx/fonts.rs`.
 - Source: contract only.
 
+### Performance: text_box wrapping of a long unbreakable word
+- Not a contract rule. The core wraps one unbreakable word of 8192 bytes in a 100 by 100 box in quadratic time (about 150 s). `07/text_limits_call` therefore uses breakable text for its `text_box` cases; the rule it pins is unchanged.
+- Touch points: `crates/inkcore/src/draw/canvas.rs` (`wrap`, `layout`).
+- Source: measured on this core.
+
 ### 07/measure_bold
 - Contract: `font:measure(text, { bold = true })` is the plain width plus 1 (empty text stays 0); italic, underline and strike do not change the width.
 - Core now: `measure` ignores its options.
