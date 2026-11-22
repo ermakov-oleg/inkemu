@@ -1,0 +1,61 @@
+# Weekly check of the official InkApp API contract against spec/contract.lock.
+# Scheduled runs fire only from the default branch; whether this workflow runs there is the maintainer's call.
+name: spec-sync
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Compare the contract with the lock
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          python3 tools/spec_sync.py --check --json > result.json
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            echo "Contract matches the lock."
+            exit 0
+          fi
+          if [ "$code" -ne 1 ]; then
+            echo "spec_sync failed with exit code $code (network or input error); no issue opened." >&2
+            exit "$code"
+          fi
+          python3 - <<'PY'
+          import json, os
+
+          r = json.load(open("result.json"))
+          if r["tag_old"] != r["tag_new"]:
+              title = f"Official API contract changed: {r['tag_old']} → {r['tag_new']}"
+          else:
+              title = f"Official API contract sections changed ({r['tag_old']})"
+          lines = [f"Tag: `{r['tag_old']}` → `{r['tag_new']}`", ""]
+          for key in ("changed", "added", "removed"):
+              ids = ", ".join(f"`{i}`" for i in r[key]) or "-"
+              lines.append(f"- {key}: {ids}")
+          repo = "https://github.com/linchuanXu/xtapp-studio-mcp-intl"
+          lines += ["", f"Upstream: {repo}/compare/{r['commit_old']}...main", "",
+                    "Next: follow `.claude/skills/spec-sync/SKILL.md`."]
+          open("issue-title.txt", "w", encoding="utf-8").write(title)
+          open("issue-body.md", "w", encoding="utf-8").write("\n".join(lines) + "\n")
+          PY
+          title=$(cat issue-title.txt)
+          gh label create spec-sync --color 0e8a16 --description "Official API contract changed" || true
+          existing=$(gh issue list --label spec-sync --state open --json title | python3 -c 'import json,sys; t=sys.argv[1]; print(sum(1 for i in json.load(sys.stdin) if i["title"]==t))' "$title")
+          if [ "$existing" -gt 0 ]; then
+            echo "An open issue with this title exists; nothing to do."
+            exit 0
+          fi
+          gh issue create --title "$title" --body-file issue-body.md --label spec-sync

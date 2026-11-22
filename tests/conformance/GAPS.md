@@ -535,7 +535,4 @@ Already green and pinned: `29/files_name_refused`, `29/files_name_refused_calls`
 
 ## Deviations
 
-Deviations these checks rely on (no new ids; D1 and D2 come from the constraints):
-
-- D2: `g:polyline` and `g:polygon` with more than 128 points return `nil, "limit_exceeded"` on the reader, the contract says `invalid_argument`. Check: `06/poly_over_128`. Source: probe-confirmed.
-- No new deviation ids come from the storage, files, hash, random and network checks: every measured value equals the contract. `PUT`, `PATCH`, `DELETE` and the other extra methods are accepted on the reader but their completion was not measured (QEMU has no radio); `14/net_methods_accepted` follows the contract, and Task 7 lists it as note `N1`.
+Deviations (D1, D2) and the note N1 are listed in `spec/deviations.md`. `06/poly_over_128` above is red only because the core does not follow the reader yet.

@@ -93,7 +93,7 @@ fields you mean.
 ```
 
 - `spec` names the main section; every `expect` entry names its own `spec`, or a `deviation` id plus the
-  contract's `spec_value` when inkemu follows a measured reader instead; `spec/deviations.md` will list them.
+  contract's `spec_value` when inkemu follows a measured reader instead; `spec/deviations.md` lists them.
 - `expect` keys are record names, or `<label>.<field>` of an `observe <label>` step, which captures `Emu.status()`
   (nested objects are flattened as well: `s.pending.kind`). A name recorded more than once keeps its last value; a
   missing record fails; records nobody expects are ignored.

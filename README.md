@@ -264,6 +264,14 @@ offset_minutes revision valid`.
   Time spent inside C functions such as `string.rep` or pattern matching is not counted.
 - Lua `__gc` finalizers run outside the instruction budget, so a finalizer that loops forever hangs the emulator.
 
+## Conformance
+
+`tests/conformance/` holds one small Lua app plus JSON expectations per rule of the official API contract.
+`uv run python tools/conformance.py [SECTION ...]` runs them and `uv run pytest -q tests/test_conformance.py` does the
+same under pytest. Known core gaps are listed in `tests/conformance/GAPS.md`; places where inkemu follows a measured
+reader instead of the contract are in `spec/deviations.md`. `uv run python tools/spec_sync.py` compares the contract
+with the lock in `spec/contract.lock` (the lock keeps only hashes, no contract text).
+
 ## Development
 
 Building needs a Rust toolchain (rustup) and `curl`. `scripts/vendor-lua.sh` downloads Lua 5.5 with the 32-bit number
