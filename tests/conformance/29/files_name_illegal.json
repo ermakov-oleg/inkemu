@@ -1,6 +1,6 @@
 {
   "spec": "§29",
-  "about": "an illegal app file name (reserved characters, dots, spaces, device names, length) is invalid_argument on write, exists is false",
+  "about": "an illegal app file name (reserved characters, leading or trailing dot, device names, length) is invalid_argument on write, exists is false",
   "expect": {
     "write.dot_start": {
       "value": {
@@ -13,44 +13,6 @@
       "spec": "§29"
     },
     "exists.dot_start": {
-      "value": {
-        "ok": true,
-        "ret": [
-          false
-        ]
-      },
-      "spec": "§29"
-    },
-    "write.slash": {
-      "value": {
-        "ok": true,
-        "ret": [
-          null,
-          "invalid_argument"
-        ]
-      },
-      "spec": "§29"
-    },
-    "exists.slash": {
-      "value": {
-        "ok": true,
-        "ret": [
-          false
-        ]
-      },
-      "spec": "§29"
-    },
-    "write.backslash": {
-      "value": {
-        "ok": true,
-        "ret": [
-          null,
-          "invalid_argument"
-        ]
-      },
-      "spec": "§29"
-    },
-    "exists.backslash": {
       "value": {
         "ok": true,
         "ret": [
@@ -222,82 +184,6 @@
       "spec": "§29"
     },
     "exists.dot_end": {
-      "value": {
-        "ok": true,
-        "ret": [
-          false
-        ]
-      },
-      "spec": "§29"
-    },
-    "write.space_end": {
-      "value": {
-        "ok": true,
-        "ret": [
-          null,
-          "invalid_argument"
-        ]
-      },
-      "spec": "§29"
-    },
-    "exists.space_end": {
-      "value": {
-        "ok": true,
-        "ret": [
-          false
-        ]
-      },
-      "spec": "§29"
-    },
-    "write.ctrl": {
-      "value": {
-        "ok": true,
-        "ret": [
-          null,
-          "invalid_argument"
-        ]
-      },
-      "spec": "§29"
-    },
-    "exists.ctrl": {
-      "value": {
-        "ok": true,
-        "ret": [
-          false
-        ]
-      },
-      "spec": "§29"
-    },
-    "write.del": {
-      "value": {
-        "ok": true,
-        "ret": [
-          null,
-          "invalid_argument"
-        ]
-      },
-      "spec": "§29"
-    },
-    "exists.del": {
-      "value": {
-        "ok": true,
-        "ret": [
-          false
-        ]
-      },
-      "spec": "§29"
-    },
-    "write.empty": {
-      "value": {
-        "ok": true,
-        "ret": [
-          null,
-          "invalid_argument"
-        ]
-      },
-      "spec": "§29"
-    },
-    "exists.empty": {
       "value": {
         "ok": true,
         "ret": [

@@ -1,6 +1,6 @@
 {
   "spec": "§14",
-  "about": "keep_wifi takes an integer from -1 to 2147483647 and returns nothing; other numbers are invalid_argument, non-numbers raise",
+  "about": "keep_wifi takes an integer from -1 to 2147483647 and returns nothing; other numbers are invalid_argument",
   "manifest": {
     "permissions": [
       "net"
@@ -63,14 +63,6 @@
           "invalid_argument"
         ]
       },
-      "spec": "§14"
-    },
-    "string_raises": {
-      "value": true,
-      "spec": "§14"
-    },
-    "missing_raises": {
-      "value": true,
       "spec": "§14"
     }
   },

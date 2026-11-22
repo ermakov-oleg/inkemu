@@ -1,0 +1,25 @@
+{
+  "spec": "§26",
+  "about": "base64:decode also takes the url alphabet and input without padding",
+  "expect": {
+    "url": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "fbffbf"
+        ]
+      },
+      "spec": "§26"
+    },
+    "unpadded": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "ab"
+        ]
+      },
+      "spec": "§26"
+    }
+  },
+  "errors": []
+}

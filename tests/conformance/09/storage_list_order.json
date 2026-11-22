@@ -1,6 +1,6 @@
 {
   "spec": "§9",
-  "about": "list is an array of names in byte order (digits, then - . 0, then _ then letters)",
+  "about": "list is an array of names in byte order (a hyphen sorts before a dot, a dot before a digit, a digit before an underscore)",
   "expect": {
     "list_empty": {
       "value": {

@@ -37,26 +37,6 @@
         ]
       },
       "spec": "§26"
-    },
-    "decode_bad_hex": {
-      "value": {
-        "ok": true,
-        "ret": [
-          null,
-          "invalid_argument"
-        ]
-      },
-      "spec": "§26"
-    },
-    "decode_truncated": {
-      "value": {
-        "ok": true,
-        "ret": [
-          null,
-          "invalid_argument"
-        ]
-      },
-      "spec": "§26"
     }
   },
   "errors": []

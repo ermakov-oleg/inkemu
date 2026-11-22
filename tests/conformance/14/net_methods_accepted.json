@@ -1,32 +1,12 @@
 {
   "spec": "§14",
-  "about": "all 13 methods are accepted in uppercase and a fixture for each reaches the callback",
+  "about": "PUT, PATCH, DELETE, HEAD, OPTIONS and the WebDAV methods are accepted in uppercase and a fixture for each reaches the callback",
   "manifest": {
     "permissions": [
       "net"
     ]
   },
   "fixtures": [
-    {
-      "method": "GET",
-      "url": "https://m.test/GET",
-      "status": 200,
-      "body": "ok",
-      "headers": {
-        "X-Method": "GET"
-      },
-      "delay_ms": 10
-    },
-    {
-      "method": "POST",
-      "url": "https://m.test/POST",
-      "status": 200,
-      "body": "ok",
-      "headers": {
-        "X-Method": "POST"
-      },
-      "delay_ms": 10
-    },
     {
       "method": "PUT",
       "url": "https://m.test/PUT",
@@ -139,33 +119,9 @@
     }
   ],
   "steps": [
-    "wait 20s"
+    "wait 14s"
   ],
   "expect": {
-    "started_GET": {
-      "value": true,
-      "spec": "§14"
-    },
-    "status_GET": {
-      "value": 200,
-      "spec": "§14"
-    },
-    "header_GET": {
-      "value": "GET",
-      "spec": "§14"
-    },
-    "started_POST": {
-      "value": true,
-      "spec": "§14"
-    },
-    "status_POST": {
-      "value": 200,
-      "spec": "§14"
-    },
-    "header_POST": {
-      "value": "POST",
-      "spec": "§14"
-    },
     "started_PUT": {
       "value": true,
       "spec": "§14"

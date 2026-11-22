@@ -1,8 +1,6 @@
 local T = require("conformance")
 
 local methods = {
-  "GET",
-  "POST",
   "PUT",
   "PATCH",
   "DELETE",

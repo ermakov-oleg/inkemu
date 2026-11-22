@@ -1,25 +1,7 @@
 {
   "spec": "§26",
-  "about": "random:bytes takes an integer from 1 to 1024, anything else is invalid_argument",
+  "about": "random:bytes of 0 or 1025 is invalid_argument",
   "expect": {
-    "one": {
-      "value": {
-        "ok": true,
-        "ret": [
-          1
-        ]
-      },
-      "spec": "§26"
-    },
-    "max": {
-      "value": {
-        "ok": true,
-        "ret": [
-          1024
-        ]
-      },
-      "spec": "§26"
-    },
     "zero": {
       "value": {
         "ok": true,
@@ -38,20 +20,6 @@
           "invalid_argument"
         ]
       },
-      "spec": "§26"
-    },
-    "negative": {
-      "value": {
-        "ok": true,
-        "ret": [
-          null,
-          "invalid_argument"
-        ]
-      },
-      "spec": "§26"
-    },
-    "differ": {
-      "value": true,
       "spec": "§26"
     }
   },

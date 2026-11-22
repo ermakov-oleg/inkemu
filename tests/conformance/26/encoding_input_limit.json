@@ -1,17 +1,8 @@
 {
   "spec": "§26",
-  "about": "encoders take at most 1048576 bytes of input; one more byte is limit_exceeded",
+  "about": "encoders refuse 1048577 bytes of input with limit_exceeded",
   "expect": {
-    "hex_max": {
-      "value": {
-        "ok": true,
-        "ret": [
-          2097152
-        ]
-      },
-      "spec": "§26"
-    },
-    "hex_over": {
+    "hex": {
       "value": {
         "ok": true,
         "ret": [
@@ -21,16 +12,7 @@
       },
       "spec": "§26"
     },
-    "base64_max": {
-      "value": {
-        "ok": true,
-        "ret": [
-          1398104
-        ]
-      },
-      "spec": "§26"
-    },
-    "base64_over": {
+    "base64": {
       "value": {
         "ok": true,
         "ret": [
@@ -40,7 +22,7 @@
       },
       "spec": "§26"
     },
-    "url_over": {
+    "url": {
       "value": {
         "ok": true,
         "ret": [

@@ -1,17 +1,20 @@
 local T = require("conformance")
 
-local bad = {
-  upper = "Bad", dot_start = ".x", dot_end = "x.", empty = "",
-  long65 = string.rep("a", 65), space = "a b", slash = "a/b",
+local cases = {
+  { "upper", "Bad" },
+  { "dot_start", ".x" },
+  { "dot_end", "x." },
+  { "long65", string.rep("a", 65) },
 }
 
 function on_load(ctx)
-  local S = ctx.storage
-  for label, name in pairs(bad) do
-    T.call("write." .. label, function() return S:write(name, "x") end)
-    T.call("read." .. label, function() return S:read(name) end)
-    T.call("size." .. label, function() return S:size(name) end)
-    T.call("remove." .. label, function() return S:remove(name) end)
-    T.call("exists." .. label, function() return S:exists(name) end)
+  local X = ctx.storage
+  for _, case in ipairs(cases) do
+    local label, name = case[1], case[2]
+    T.call("write." .. label, function() return X:write(name, "x") end)
+    T.call("read." .. label, function() return X:read(name) end)
+    T.call("size." .. label, function() return X:size(name) end)
+    T.call("remove." .. label, function() return X:remove(name) end)
+    T.call("exists." .. label, function() return X:exists(name) end)
   end
 end

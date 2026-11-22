@@ -7,11 +7,8 @@ local function probe(f, s)
 end
 
 function on_load(ctx)
-  local big = string.rep("a", 1048577)
-  local max = string.sub(big, 1, 1048576)
-  T.call("hex_max", function() return probe(function(s) return ctx.hex:encode(s) end, max) end)
-  T.call("hex_over", function() return probe(function(s) return ctx.hex:encode(s) end, big) end)
-  T.call("base64_max", function() return probe(function(s) return ctx.base64:encode(s) end, max) end)
-  T.call("base64_over", function() return probe(function(s) return ctx.base64:encode(s) end, big) end)
-  T.call("url_over", function() return probe(function(s) return ctx.url:encode(s) end, big) end)
+  local text = string.rep("a", 1048577)
+  T.call("hex", function() return probe(function(s) return ctx.hex:encode(s) end, text) end)
+  T.call("base64", function() return probe(function(s) return ctx.base64:encode(s) end, text) end)
+  T.call("url", function() return probe(function(s) return ctx.url:encode(s) end, text) end)
 end

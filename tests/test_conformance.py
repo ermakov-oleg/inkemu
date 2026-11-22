@@ -292,6 +292,14 @@ def test_selection_helpers_and_json(tmp_path, capsys):
             {
                 "spec": "§1",
                 "pixels": [[0, 0, 0]],
+                "fixtures": [{"method": "GET", "url": "https://x.test/a", "body_repeat": ["abcd", 5 * 1024 * 1024]}],
+            },
+            "at most 16 MiB",
+        ),
+        (
+            {
+                "spec": "§1",
+                "pixels": [[0, 0, 0]],
                 "fixtures": [
                     {"method": "GET", "url": "https://x.test/a"},
                     {"method": "get", "url": "https://x.test/a"},

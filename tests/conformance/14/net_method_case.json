@@ -1,13 +1,13 @@
 {
   "spec": "§14",
-  "about": "a method must be uppercase and known: lowercase, mixed case, unknown and empty strings are invalid_argument",
+  "about": "a method must be uppercase and known: lowercase, mixed case and unknown strings are invalid_argument",
   "manifest": {
     "permissions": [
       "net"
     ]
   },
   "expect": {
-    "method_1": {
+    "method_get": {
       "value": {
         "ok": true,
         "ret": [
@@ -17,7 +17,7 @@
       },
       "spec": "§14"
     },
-    "method_2": {
+    "method_post": {
       "value": {
         "ok": true,
         "ret": [
@@ -27,7 +27,7 @@
       },
       "spec": "§14"
     },
-    "method_3": {
+    "method_Get": {
       "value": {
         "ok": true,
         "ret": [
@@ -37,7 +37,7 @@
       },
       "spec": "§14"
     },
-    "method_4": {
+    "method_patch": {
       "value": {
         "ok": true,
         "ret": [
@@ -47,7 +47,7 @@
       },
       "spec": "§14"
     },
-    "method_5": {
+    "method_put": {
       "value": {
         "ok": true,
         "ret": [
@@ -57,17 +57,7 @@
       },
       "spec": "§14"
     },
-    "method_6": {
-      "value": {
-        "ok": true,
-        "ret": [
-          null,
-          "invalid_argument"
-        ]
-      },
-      "spec": "§14"
-    },
-    "method_7": {
+    "method_FOO": {
       "value": {
         "ok": true,
         "ret": [

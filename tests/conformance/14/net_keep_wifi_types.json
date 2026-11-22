@@ -1,0 +1,20 @@
+{
+  "spec": "§14",
+  "about": "keep_wifi raises a Lua error for a non-number or a missing argument",
+  "manifest": {
+    "permissions": [
+      "net"
+    ]
+  },
+  "expect": {
+    "string_raises": {
+      "value": true,
+      "spec": "§14"
+    },
+    "missing_raises": {
+      "value": true,
+      "spec": "§14"
+    }
+  },
+  "errors": []
+}

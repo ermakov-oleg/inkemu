@@ -1,0 +1,15 @@
+{
+  "spec": "§12",
+  "about": "revision is an integer and now() gives one snapshot within a callback",
+  "expect": {
+    "revision_type": {
+      "value": "integer",
+      "spec": "§12"
+    },
+    "same_snapshot": {
+      "value": true,
+      "spec": "§12"
+    }
+  },
+  "errors": []
+}

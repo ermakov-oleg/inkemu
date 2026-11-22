@@ -38,6 +38,18 @@
     "existing_file": {
       "value": "hello",
       "spec": "§14"
+    },
+    "new_ok": {
+      "value": true,
+      "spec": "§14"
+    },
+    "new_bytes": {
+      "value": 5,
+      "spec": "§14"
+    },
+    "new_body_len": {
+      "value": 0,
+      "spec": "§14"
     }
   },
   "errors": []

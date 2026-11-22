@@ -1,0 +1,39 @@
+{
+  "spec": "§26",
+  "about": "random:bytes gives 1 and 1024 bytes, refuses a negative count and differs between calls",
+  "expect": {
+    "one": {
+      "value": {
+        "ok": true,
+        "ret": [
+          1
+        ]
+      },
+      "spec": "§26"
+    },
+    "max": {
+      "value": {
+        "ok": true,
+        "ret": [
+          1024
+        ]
+      },
+      "spec": "§26"
+    },
+    "negative": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§26"
+    },
+    "differ": {
+      "value": true,
+      "spec": "§26"
+    }
+  },
+  "errors": []
+}

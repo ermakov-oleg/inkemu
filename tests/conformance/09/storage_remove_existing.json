@@ -1,0 +1,25 @@
+{
+  "spec": "§9",
+  "about": "remove deletes an existing file and returns true",
+  "expect": {
+    "remove_existing": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§9"
+    },
+    "exists_after": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§9"
+    }
+  },
+  "errors": []
+}

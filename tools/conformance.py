@@ -281,9 +281,10 @@ def _fixture_problem(f: object) -> str | None:
             and rep[0]
             and isinstance(rep[1], int)
             and not isinstance(rep[1], bool)
-            and 0 <= rep[1] <= 16 * 1024 * 1024
+            and rep[1] >= 0
+            and len(rep[0].encode("utf-8")) * rep[1] <= 16 * 1024 * 1024
         ):
-            return 'body_repeat must be ["text", count] with count up to 16 MiB'
+            return 'body_repeat must be ["text", count] making at most 16 MiB'
     if "body_hex" in f:
         try:
             bytes.fromhex(f["body_hex"])

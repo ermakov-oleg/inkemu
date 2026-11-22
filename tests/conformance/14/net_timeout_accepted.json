@@ -1,0 +1,40 @@
+{
+  "spec": "§14",
+  "about": "timeout_ms 1000 and 60000 are accepted",
+  "manifest": {
+    "permissions": [
+      "net"
+    ]
+  },
+  "fixtures": [
+    {
+      "method": "GET",
+      "url": "https://t.test/a",
+      "status": 200,
+      "body": "ok",
+      "delay_ms": 10
+    }
+  ],
+  "steps": [
+    "wait 5s"
+  ],
+  "expect": {
+    "min_started": {
+      "value": true,
+      "spec": "§14"
+    },
+    "min_status": {
+      "value": 200,
+      "spec": "§14"
+    },
+    "max_started": {
+      "value": true,
+      "spec": "§14"
+    },
+    "max_status": {
+      "value": 200,
+      "spec": "§14"
+    }
+  },
+  "errors": []
+}

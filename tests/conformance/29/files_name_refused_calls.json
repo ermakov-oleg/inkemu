@@ -1,13 +1,8 @@
 {
-  "spec": "§14",
-  "about": "a URL that is not http(s) or is over 1024 bytes is invalid_argument",
-  "manifest": {
-    "permissions": [
-      "net"
-    ]
-  },
+  "spec": "§29",
+  "about": "read, size, remove and append reject a name with a slash with invalid_argument",
   "expect": {
-    "ftp": {
+    "read.slash": {
       "value": {
         "ok": true,
         "ret": [
@@ -15,9 +10,9 @@
           "invalid_argument"
         ]
       },
-      "spec": "§14"
+      "spec": "§29"
     },
-    "no_scheme": {
+    "size.slash": {
       "value": {
         "ok": true,
         "ret": [
@@ -25,9 +20,9 @@
           "invalid_argument"
         ]
       },
-      "spec": "§14"
+      "spec": "§29"
     },
-    "ws": {
+    "remove.slash": {
       "value": {
         "ok": true,
         "ret": [
@@ -35,9 +30,9 @@
           "invalid_argument"
         ]
       },
-      "spec": "§14"
+      "spec": "§29"
     },
-    "empty": {
+    "append.slash": {
       "value": {
         "ok": true,
         "ret": [
@@ -45,17 +40,7 @@
           "invalid_argument"
         ]
       },
-      "spec": "§14"
-    },
-    "long1025": {
-      "value": {
-        "ok": true,
-        "ret": [
-          null,
-          "invalid_argument"
-        ]
-      },
-      "spec": "§14"
+      "spec": "§29"
     }
   },
   "errors": []

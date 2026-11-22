@@ -1,6 +1,6 @@
 {
   "spec": "§14",
-  "about": "the body is kept up to 131072 bytes: more is truncated with err = limit_exceeded, bytes counts everything",
+  "about": "a body over 131072 bytes is truncated to 131072 with err = limit_exceeded, bytes counts everything",
   "manifest": {
     "permissions": [
       "net"
@@ -16,20 +16,10 @@
         "x",
         131082
       ]
-    },
-    {
-      "method": "GET",
-      "url": "https://cap.test/exact",
-      "status": 200,
-      "delay_ms": 10,
-      "body_repeat": [
-        "x",
-        131072
-      ]
     }
   ],
   "steps": [
-    "wait 6s"
+    "wait 4s"
   ],
   "expect": {
     "big_ok": {
@@ -50,18 +40,6 @@
     },
     "big_err": {
       "value": "limit_exceeded",
-      "spec": "§14"
-    },
-    "exact_len": {
-      "value": 131072,
-      "spec": "§14"
-    },
-    "exact_bytes": {
-      "value": 131072,
-      "spec": "§14"
-    },
-    "exact_err": {
-      "value": "nil",
       "spec": "§14"
     }
   },

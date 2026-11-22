@@ -1,0 +1,24 @@
+{
+  "spec": "§14",
+  "about": "a method other than GET and HEAD may carry a body",
+  "manifest": {
+    "permissions": [
+      "net"
+    ]
+  },
+  "fixtures": [
+    {
+      "method": "PUT",
+      "url": "https://b.test/p",
+      "status": 200,
+      "delay_ms": 10
+    }
+  ],
+  "expect": {
+    "put_body_started": {
+      "value": true,
+      "spec": "§14"
+    }
+  },
+  "errors": []
+}

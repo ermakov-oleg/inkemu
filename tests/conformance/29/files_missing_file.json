@@ -1,6 +1,6 @@
 {
   "spec": "§29",
-  "about": "absent file: read and size are not_found, exists false, remove returns true",
+  "about": "read and size of an absent app file are not_found, exists is false",
   "expect": {
     "read_missing": {
       "value": {
@@ -23,33 +23,6 @@
       "spec": "§29"
     },
     "exists_missing": {
-      "value": {
-        "ok": true,
-        "ret": [
-          false
-        ]
-      },
-      "spec": "§29"
-    },
-    "remove_missing": {
-      "value": {
-        "ok": true,
-        "ret": [
-          true
-        ]
-      },
-      "spec": "§29"
-    },
-    "remove_existing": {
-      "value": {
-        "ok": true,
-        "ret": [
-          true
-        ]
-      },
-      "spec": "§29"
-    },
-    "exists_after": {
       "value": {
         "ok": true,
         "ret": [

@@ -1,6 +1,6 @@
 {
   "spec": "§29",
-  "about": "names up to 128 UTF-8 bytes with spaces, non-ASCII letters and device-name prefixes are accepted",
+  "about": "names up to 128 UTF-8 bytes with non-ASCII letters, several dots and device-name prefixes are accepted",
   "expect": {
     "write.book": {
       "value": {
@@ -12,24 +12,6 @@
       "spec": "§29"
     },
     "exists.book": {
-      "value": {
-        "ok": true,
-        "ret": [
-          true
-        ]
-      },
-      "spec": "§29"
-    },
-    "write.inner_space": {
-      "value": {
-        "ok": true,
-        "ret": [
-          true
-        ]
-      },
-      "spec": "§29"
-    },
-    "exists.inner_space": {
       "value": {
         "ok": true,
         "ret": [

@@ -42,46 +42,6 @@
       },
       "spec": "§29"
     },
-    "read.slash": {
-      "value": {
-        "ok": true,
-        "ret": [
-          null,
-          "invalid_argument"
-        ]
-      },
-      "spec": "§29"
-    },
-    "size.slash": {
-      "value": {
-        "ok": true,
-        "ret": [
-          null,
-          "invalid_argument"
-        ]
-      },
-      "spec": "§29"
-    },
-    "remove.slash": {
-      "value": {
-        "ok": true,
-        "ret": [
-          null,
-          "invalid_argument"
-        ]
-      },
-      "spec": "§29"
-    },
-    "append.slash": {
-      "value": {
-        "ok": true,
-        "ret": [
-          null,
-          "invalid_argument"
-        ]
-      },
-      "spec": "§29"
-    },
     "read.con": {
       "value": {
         "ok": true,

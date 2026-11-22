@@ -9,6 +9,4 @@ function on_load(ctx)
   T.call("below", function() return N:keep_wifi(-2) end)
   T.call("fraction", function() return N:keep_wifi(1.5) end)
   T.call("above", function() return N:keep_wifi(2147483648) end)
-  T.value("string_raises", not pcall(function() N:keep_wifi("5") end))
-  T.value("missing_raises", not pcall(function() N:keep_wifi() end))
 end
