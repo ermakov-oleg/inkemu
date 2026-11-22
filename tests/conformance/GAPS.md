@@ -1,0 +1,144 @@
+# Core gaps against API 2.33
+
+Every entry below is a rule of the API 2.33 contract that the Rust core does not follow yet. Each one is pinned by a
+conformance check listed in `pending.json`; when the core is fixed the check turns green and its pending entry goes.
+Source: `probe-confirmed` means the behaviour was measured on the reader (firmware 26112001); `contract only` means the
+contract states it and the reader was not measured. File names are relative to the repository root.
+
+## §5 Presenting a frame
+
+### 05/cmd_cap_1025, 05/cmd_cap_clear
+- Contract: a frame holds 1024 commands; the call that would be command 1025 (and `g:clear` past the cap) returns `nil, "limit_exceeded"` and is not recorded; earlier commands stay.
+- Core now: every call returns nothing; commands past the cap are silently dropped at record time and a warning is logged.
+- Touch points: `crates/inkcore/src/draw/mod.rs` (method wrapper), `crates/inkcore/src/draw/canvas.rs` (`record`).
+- Source: probe-confirmed.
+
+### 05/cmd_cap_text_box_lines
+- Contract: each line `g:text_box` draws is one command; a call that would pass the cap is refused whole and does not count.
+- Core now: a `text_box` is one command whatever its line count, and nothing is refused.
+- Touch points: `crates/inkcore/src/draw/canvas.rs` (`record`, `layout`), `crates/inkcore/src/draw/mod.rs`.
+- Source: contract only.
+
+### 05/cmd_cap_underline
+- Contract: in packages of 2.28 and later an underline or strikethrough line counts as one extra command.
+- Core now: not counted, since the styles are not drawn.
+- Touch points: `crates/inkcore/src/draw/canvas.rs`, `crates/inkcore/src/draw/text.rs`.
+- Source: contract only.
+
+### 05/invalidate_args
+- Contract: `ctx:invalidate()` and `ctx:invalidate("full")` return nothing; any other argument returns `nil, "invalid_argument"`.
+- Core now: every argument is accepted.
+- Touch points: `crates/inkcore/src/ctx/mod.rs` (`invalidate`).
+- Source: probe-confirmed for `"bogus"`; the number case is contract only.
+
+### 05/perf_info
+- Contract: `ctx.perf:info()` returns integer fields `tick_us`, `draw_us`, `cmd_count`, `image_count`, `asset_hit`, `asset_miss`, `draw_frame`; `cmd_count` is the commands accepted in the latest frame.
+- Core now: an empty table.
+- Touch points: `crates/inkcore/src/ctx/stubs.rs` (perf), `crates/inkcore/src/draw/canvas.rs` (counter).
+- Source: contract only.
+
+## §6 Drawing
+
+### 06/g_methods
+- Contract: `g` has exactly `size clear line rect circle arc polyline polygon pattern text text_box image`.
+- Core now: also exposes `round_rect`, `measure`, `measure_text`, `fill_pattern`, `pattern_rect` (0.1 leftovers).
+- Touch points: `crates/inkcore/src/draw/mod.rs` (`SPECS`, `new_g`).
+- Source: probe-confirmed.
+
+### 06/canvas_inactive
+- Contract: `g` is valid only during its callback; afterwards every call returns `nil, "inactive"`.
+- Core now: a stored `g` keeps recording.
+- Touch points: `crates/inkcore/src/draw/mod.rs`, `crates/inkcore/src/emu.rs` (frame end), `crates/inkcore/src/ctx/layers.rs`.
+- Source: contract only.
+
+### 06/polyline_points, 06/polygon_points
+- Contract: `polyline` takes 2 to 128 points, `polygon` 3 to 128; a wrong count or an odd array is `nil, "invalid_argument"`.
+- Core now: too few points draw nothing and return nothing; an odd array makes the frame fail with a Lua error.
+- Touch points: `crates/inkcore/src/draw/mod.rs` (`points`, `command`).
+- Source: probe-confirmed.
+
+### 06/poly_over_128 (deviation D2)
+- Reader: more than 128 points returns `nil, "limit_exceeded"` (the contract says `invalid_argument`); inkemu follows the reader.
+- Core now: draws and returns nothing.
+- Touch points: `crates/inkcore/src/draw/mod.rs` (`points`).
+- Source: probe-confirmed.
+
+### 06/pattern_invalid_args
+- Contract: an unknown `kind` or a `density` outside 0..100 returns `nil, "invalid_argument"` and draws nothing.
+- Core now: an unknown kind is skipped silently, density is not range-checked and is drawn.
+- Touch points: `crates/inkcore/src/draw/mod.rs` (`command`, "pattern"), `crates/inkcore/src/draw/pattern.rs`.
+- Source: probe-confirmed (kind `bogus`, density 101); density -1 is contract only.
+
+### 06/arc_full_turn
+- Contract: when start and end differ by a whole multiple of 360 degrees nothing is drawn.
+- Core now: draws a full ring.
+- Touch points: `crates/inkcore/src/draw/raster.rs`.
+- Source: contract only.
+
+### 06/circle_fill_pixels
+- Contract: a filled circle covers pixel centers strictly closer than `r` to `(cx + 0.5, cy + 0.5)`; a stroke is the ring of pixels at distance `r - line_width` or more inside it.
+- Core now: fill includes pixels at distance exactly `r`, and a one-pixel stroke misses the outermost ring (half a pixel off).
+- Touch points: `crates/inkcore/src/draw/raster.rs`.
+- Source: contract only.
+
+### 06/image_invalid_value
+- Contract: `g:image` with anything but an image object returns `nil, "invalid_argument"`.
+- Core now: draws nothing and returns nothing.
+- Touch points: `crates/inkcore/src/draw/mod.rs` (`image_command`).
+- Source: contract only.
+
+### 06/image_layer_self
+- Contract: drawing a layer into itself returns `nil, "invalid_argument"`.
+- Core now: returns nothing.
+- Touch points: `crates/inkcore/src/ctx/layers.rs`, `crates/inkcore/src/draw/mod.rs`.
+- Source: contract only.
+
+## §7 Text and fonts
+
+### 07/text_invalid_utf8, 07/text_rtl
+- Contract: text that is not valid UTF-8, or that holds a right-to-left character, returns `nil, "invalid_argument"` from `g:text` and `g:text_box`; invalid UTF-8 is also `invalid_argument` for `font:measure` and `font:layout`.
+- Core now: invalid bytes are converted lossily and drawn; right-to-left text is skipped with a warning; both return nothing.
+- Touch points: `crates/inkcore/src/draw/mod.rs` (`text_of`, `command`), `crates/inkcore/src/draw/canvas.rs` (`layout`), `crates/inkcore/src/ctx/fonts.rs`.
+- Source: contract only.
+
+### 07/text_limits_call, 07/text_limit_frame, 07/layout_limit
+- Contract: `g:text`, `g:text_box`, `font:measure` take at most 8192 bytes per call, all text in a frame at most 65536 bytes, `font:layout` at most 65536 bytes per call; beyond that `nil, "limit_exceeded"`.
+- Core now: no limits; `font:layout` does not exist.
+- Touch points: `crates/inkcore/src/draw/mod.rs`, `crates/inkcore/src/draw/canvas.rs`, `crates/inkcore/src/ctx/fonts.rs`.
+- Source: contract only.
+
+### 07/measure_bold
+- Contract: `font:measure(text, { bold = true })` is the plain width plus 1 (empty text stays 0); italic, underline and strike do not change the width.
+- Core now: `measure` ignores its options.
+- Touch points: `crates/inkcore/src/ctx/fonts.rs`, `crates/inkcore/src/draw/text.rs`.
+- Source: contract only.
+
+### 07/measure_control_chars
+- Contract: a tab measures as one space; `\n` and other control characters have width 0.
+- Core now: they are measured as glyphs of the bundled font.
+- Touch points: `crates/inkcore/src/draw/text.rs`.
+- Source: contract only.
+
+### 07/layout_results, 07/layout_paging, 07/layout_matches_text_box, 07/font_object
+- Contract: `font:layout(text, w, h, opts)` returns `lines, height, consumed` as integers (height `n * line_height + (n - 1) * line_gap`, `consumed` on a code-point boundary including a trailing newline), follows the `text_box` rules, and its line count equals the commands `text_box` takes.
+- Core now: font objects have no `layout` method.
+- Touch points: `crates/inkcore/src/ctx/fonts.rs`, `crates/inkcore/src/draw/canvas.rs` (`wrap`, `layout`).
+- Source: probe-confirmed that `layout` exists and returns three integers; the rules are contract only.
+
+### 07/fonts_size_range, 07/fonts_size_sample
+- Contract: `ctx.fonts:size(px, sample)` takes an integer `px` from 8 to 96, else `nil, "invalid_argument"`; `sample` is nil or text, and invalid UTF-8, NUL or right-to-left text is `invalid_argument`; a value that is neither string nor nil raises a Lua error.
+- Core now: any `px` is accepted and `sample` is ignored.
+- Touch points: `crates/inkcore/src/ctx/fonts.rs` (`size`).
+- Source: probe-confirmed for 7 and 97; the rest is contract only.
+
+### 07/font_metrics
+- Contract and reader: system font line heights 20, 24, 30 and ascents 17, 21, 26 on x4_pro.
+- Core now: line heights match, ascents come from the bundled font (16, 19, 23).
+- Touch points: `crates/inkcore/src/draw/text.rs` (`ascent`).
+- Source: probe-confirmed for small (17) and medium (21); large (26) is contract only.
+
+## Deviations
+
+New ids introduced by these checks (the constraints define D1 and D2 up front):
+
+- D2: `g:polyline` and `g:polygon` with more than 128 points return `nil, "limit_exceeded"` on the reader, the contract says `invalid_argument`. Check: `06/poly_over_128`. Source: probe-confirmed.

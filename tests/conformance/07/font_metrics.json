@@ -1,0 +1,31 @@
+{
+  "spec": "§7",
+  "about": "x4_pro system fonts: line heights 20, 24, 30 and ascents 17, 21, 26",
+  "expect": {
+    "small.line_height": {
+      "value": 20,
+      "spec": "§7"
+    },
+    "medium.line_height": {
+      "value": 24,
+      "spec": "§7"
+    },
+    "large.line_height": {
+      "value": 30,
+      "spec": "§7"
+    },
+    "small.ascent": {
+      "value": 17,
+      "spec": "§7"
+    },
+    "medium.ascent": {
+      "value": 21,
+      "spec": "§7"
+    },
+    "large.ascent": {
+      "value": 26,
+      "spec": "§7"
+    }
+  },
+  "errors": []
+}

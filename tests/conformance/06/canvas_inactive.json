@@ -1,0 +1,20 @@
+{
+  "spec": "§6",
+  "about": "g works only inside the callback that received it; afterwards every call returns nil, inactive",
+  "steps": [
+    "wait 1s"
+  ],
+  "expect": {
+    "rect_after_draw": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "inactive"
+        ]
+      },
+      "spec": "§6"
+    }
+  },
+  "errors": []
+}

@@ -1,0 +1,48 @@
+{
+  "spec": "§6",
+  "about": "angles run clockwise from due right: 0 to 90 inks the lower-right quarter of the ring",
+  "expect": {},
+  "pixels": [
+    [
+      148,
+      101,
+      1
+    ],
+    [
+      101,
+      148,
+      1
+    ],
+    [
+      135,
+      135,
+      1
+    ],
+    [
+      52,
+      101,
+      0
+    ],
+    [
+      101,
+      52,
+      0
+    ],
+    [
+      65,
+      135,
+      0
+    ],
+    [
+      135,
+      65,
+      0
+    ],
+    [
+      100,
+      100,
+      0
+    ]
+  ],
+  "errors": []
+}

@@ -1,0 +1,19 @@
+{
+  "spec": "§7",
+  "about": "paging by consumed walks the whole text, always on a code-point boundary, three lines per page at most",
+  "expect": {
+    "paging": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true,
+          true,
+          true,
+          true
+        ]
+      },
+      "spec": "§7"
+    }
+  },
+  "errors": []
+}

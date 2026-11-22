@@ -1,0 +1,37 @@
+{
+  "spec": "§6",
+  "about": "g:image takes only an image object; any other value is invalid_argument",
+  "expect": {
+    "number": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§6"
+    },
+    "string": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§6"
+    },
+    "plain_table": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§6"
+    }
+  },
+  "errors": []
+}

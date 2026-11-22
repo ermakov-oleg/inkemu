@@ -1,0 +1,33 @@
+{
+  "spec": "§6",
+  "about": "an arc whose angles differ by a whole multiple of 360 draws nothing",
+  "expect": {},
+  "pixels": [
+    [
+      148,
+      101,
+      0
+    ],
+    [
+      52,
+      101,
+      0
+    ],
+    [
+      298,
+      101,
+      0
+    ],
+    [
+      202,
+      101,
+      0
+    ],
+    [
+      435,
+      135,
+      0
+    ]
+  ],
+  "errors": []
+}

@@ -1,0 +1,61 @@
+{
+  "spec": "§7",
+  "about": "g:text, g:text_box and font:measure take up to 8192 bytes per call; one more byte is limit_exceeded",
+  "expect": {
+    "text_8192": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§7"
+    },
+    "text_8193": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§7"
+    },
+    "box_8192": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§7"
+    },
+    "box_8193": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§7"
+    },
+    "measure_8192": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "number",
+          null
+        ]
+      },
+      "spec": "§7"
+    },
+    "measure_8193": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "nil",
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§7"
+    }
+  },
+  "errors": []
+}

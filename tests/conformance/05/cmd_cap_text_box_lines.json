@@ -1,0 +1,41 @@
+{
+  "spec": "§5",
+  "about": "each line g:text_box draws is one command; a text_box that would pass the cap is refused whole and does not count",
+  "expect": {
+    "box_three_lines": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§5"
+    },
+    "rect_1023": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§5"
+    },
+    "rect_1024": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§5"
+    },
+    "rect_1025": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§5"
+    }
+  },
+  "errors": []
+}

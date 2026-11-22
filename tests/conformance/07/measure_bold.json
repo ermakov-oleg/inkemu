@@ -1,0 +1,70 @@
+{
+  "spec": "§7",
+  "about": "a bold line measures one pixel wider than the plain one, empty text stays 0, and italic/underline/strike change no width",
+  "expect": {
+    "bold_delta_small": {
+      "value": {
+        "ok": true,
+        "ret": [
+          1
+        ]
+      },
+      "spec": "§7"
+    },
+    "bold_delta_medium": {
+      "value": {
+        "ok": true,
+        "ret": [
+          1
+        ]
+      },
+      "spec": "§7"
+    },
+    "bold_delta_large": {
+      "value": {
+        "ok": true,
+        "ret": [
+          1
+        ]
+      },
+      "spec": "§7"
+    },
+    "bold_empty": {
+      "value": {
+        "ok": true,
+        "ret": [
+          0
+        ]
+      },
+      "spec": "§7"
+    },
+    "bold_false": {
+      "value": {
+        "ok": true,
+        "ret": [
+          0
+        ]
+      },
+      "spec": "§7"
+    },
+    "plain_opts": {
+      "value": {
+        "ok": true,
+        "ret": [
+          0
+        ]
+      },
+      "spec": "§7"
+    },
+    "italic_ignored": {
+      "value": {
+        "ok": true,
+        "ret": [
+          0
+        ]
+      },
+      "spec": "§7"
+    }
+  },
+  "errors": []
+}

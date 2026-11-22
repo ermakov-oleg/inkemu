@@ -1,0 +1,75 @@
+{
+  "spec": "§6",
+  "about": "g offers exactly the twelve listed methods; the 0.1 extras do not exist on the reader",
+  "expect": {
+    "has.size": {
+      "value": "function",
+      "spec": "§6"
+    },
+    "has.clear": {
+      "value": "function",
+      "spec": "§6"
+    },
+    "has.line": {
+      "value": "function",
+      "spec": "§6"
+    },
+    "has.rect": {
+      "value": "function",
+      "spec": "§6"
+    },
+    "has.circle": {
+      "value": "function",
+      "spec": "§6"
+    },
+    "has.arc": {
+      "value": "function",
+      "spec": "§6"
+    },
+    "has.polyline": {
+      "value": "function",
+      "spec": "§6"
+    },
+    "has.polygon": {
+      "value": "function",
+      "spec": "§6"
+    },
+    "has.pattern": {
+      "value": "function",
+      "spec": "§6"
+    },
+    "has.text": {
+      "value": "function",
+      "spec": "§6"
+    },
+    "has.text_box": {
+      "value": "function",
+      "spec": "§6"
+    },
+    "has.image": {
+      "value": "function",
+      "spec": "§6"
+    },
+    "absent.round_rect": {
+      "value": "nil",
+      "spec": "§6"
+    },
+    "absent.measure": {
+      "value": "nil",
+      "spec": "§6"
+    },
+    "absent.measure_text": {
+      "value": "nil",
+      "spec": "§6"
+    },
+    "absent.fill_pattern": {
+      "value": "nil",
+      "spec": "§6"
+    },
+    "absent.pattern_rect": {
+      "value": "nil",
+      "spec": "§6"
+    }
+  },
+  "errors": []
+}

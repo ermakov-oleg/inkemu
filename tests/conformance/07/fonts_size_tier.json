@@ -1,0 +1,88 @@
+{
+  "spec": "§7",
+  "about": "without a TTF, fonts:size returns the system font whose line height is closest to px (first wins), with no px field",
+  "expect": {
+    "tier_8": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§7"
+    },
+    "tier_16": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§7"
+    },
+    "tier_20": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§7"
+    },
+    "tier_24": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§7"
+    },
+    "tier_30": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§7"
+    },
+    "tier_40": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§7"
+    },
+    "tier_96": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§7"
+    },
+    "size_24_is_medium": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§7"
+    },
+    "same_object": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§7"
+    }
+  },
+  "errors": []
+}
