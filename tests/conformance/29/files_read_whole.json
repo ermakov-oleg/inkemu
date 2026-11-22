@@ -1,0 +1,26 @@
+{
+  "spec": "§29",
+  "about": "read without offset and length of a short file returns it whole; a missing file is not_found",
+  "expect": {
+    "whole": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "0123456789"
+        ]
+      },
+      "spec": "§29"
+    },
+    "missing": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "not_found"
+        ]
+      },
+      "spec": "§29"
+    }
+  },
+  "errors": []
+}

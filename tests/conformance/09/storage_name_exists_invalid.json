@@ -1,0 +1,43 @@
+{
+  "spec": "§9",
+  "about": "exists answers false for names that are not legal private file names",
+  "expect": {
+    "exists.upper": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§9"
+    },
+    "exists.dot_start": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§9"
+    },
+    "exists.dot_end": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§9"
+    },
+    "exists.long65": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§9"
+    }
+  },
+  "errors": []
+}

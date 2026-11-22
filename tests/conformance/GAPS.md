@@ -211,7 +211,7 @@ The refresh kind is not observable today. Proposed: two fields. `Emu.status()["r
 
 ### 09/storage_remove_missing
 - Contract: `remove` returns true for a file that does not exist.
-- Core now: `nil, "not_found"`. Removing an existing file is pinned apart (`09/storage_remove_existing`, green).
+- Core now: `nil, "not_found"`. Removing an existing file is pinned apart (`09/storage_remove_existing`, `09/storage_name_exists_invalid`, green).
 - Touch points: `crates/inkcore/src/ctx/files.rs` (`remove`).
 - Source: probe-confirmed.
 
@@ -372,7 +372,7 @@ Already green and pinned: `25/act_args` (unknown name is `nil, "invalid_argument
 - Source: contract only.
 
 ### 26/random_bytes
-- Contract: `bytes(n)` takes an integer from 1 to 1024; 0 and 1025 are `nil, "invalid_argument"` (1, 1024 and a negative count are `26/random_bytes_range`, green).
+- Contract: `bytes(n)` takes an integer from 1 to 1024; 0 and 1025 are `nil, "invalid_argument"` (1, 1024 and a negative count are `26/random_bytes_range`, `26/base64_encode_std`, green).
 - Core now: 0 returns an empty string and 1025 returns bytes.
 - Touch points: `crates/inkcore/src/ctx/utils.rs`.
 - Source: probe-confirmed.
@@ -441,7 +441,7 @@ Already green and pinned: `26/encoding`, `26/hash_input_max`, `26/encoding_input
 - Touch points: `crates/inkcore/src/ctx/files.rs` (`remove`).
 - Source: contract only (the probe removed existing files only).
 
-Already green and pinned: `29/files_name_refused`, `29/files_name_refused_calls`, `29/files_name_accepted`, `29/files_missing_file`, `29/files_write_max`, `29/files_append`, `29/files_path_and_separation` (`ctx.files.path` is `/AppFiles/<app_id>`, probe-confirmed; private storage and app files are separate), `29/files_append_past_call_limit`. Not covered: public folders (`ctx.files:folder`, §29 2.31), `io_error` for a subfolder with a file's name, and the opening of files by the reader.
+Already green and pinned: `29/files_name_refused`, `29/files_name_refused_calls`, `29/files_name_accepted`, `29/files_missing_file`, `29/files_write_max`, `29/files_write_replaces`, `29/files_read_whole`, `29/files_remove_existing`, `29/files_append`, `29/files_path_and_separation` (`ctx.files.path` is `/AppFiles/<app_id>`, probe-confirmed; private storage and app files are separate), `29/files_append_past_call_limit`. Not covered: public folders (`ctx.files:folder`, §29 2.31), `io_error` for a subfolder with a file's name, and the opening of files by the reader.
 
 ## Deviations
 

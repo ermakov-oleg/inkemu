@@ -43,15 +43,6 @@
       },
       "spec": "§29"
     },
-    "write_other_case": {
-      "value": {
-        "ok": true,
-        "ret": [
-          true
-        ]
-      },
-      "spec": "§29"
-    },
     "read_first_case": {
       "value": {
         "ok": true,

@@ -15,6 +15,5 @@ function on_load(ctx)
     T.call("read." .. label, function() return X:read(name) end)
     T.call("size." .. label, function() return X:size(name) end)
     T.call("remove." .. label, function() return X:remove(name) end)
-    T.call("exists." .. label, function() return X:exists(name) end)
   end
 end

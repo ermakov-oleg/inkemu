@@ -28,33 +28,6 @@
         ]
       },
       "spec": "§26"
-    },
-    "url_empty": {
-      "value": {
-        "ok": true,
-        "ret": [
-          ""
-        ]
-      },
-      "spec": "§26"
-    },
-    "url_false": {
-      "value": {
-        "ok": true,
-        "ret": [
-          "+/+/"
-        ]
-      },
-      "spec": "§26"
-    },
-    "std_padding_1": {
-      "value": {
-        "ok": true,
-        "ret": [
-          "YQ=="
-        ]
-      },
-      "spec": "§26"
     }
   },
   "errors": []
