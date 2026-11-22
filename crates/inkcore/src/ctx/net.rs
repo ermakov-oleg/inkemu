@@ -429,7 +429,25 @@ fn first_step(
             );
             return Next::Done(Some((job, None)));
         }
-        if s.cfg.net_mode != NetMode::Replay {
+        let sha = red.body_sha(&method, &body);
+        let mut warnings = Vec::new();
+        let found = if s.cfg.net_mode == NetMode::Live || s.cfg.net_mode == NetMode::Record {
+            None
+        } else {
+            s.net
+                .fixtures
+                .clone()
+                .find(&method, &shown, sha.as_deref(), &mut |w| warnings.push(w))
+        };
+        for w in warnings {
+            s.warn(&w);
+        }
+        let goes_out = match s.cfg.net_mode {
+            NetMode::Replay => false,
+            NetMode::FixturesThenLive => found.is_none(),
+            NetMode::Live | NetMode::Record => true,
+        };
+        if goes_out {
             s.net.next_id += 1;
             let id = s.net.next_id;
             let out = OutRequest {
@@ -446,16 +464,6 @@ fn first_step(
             s.net.outbox.push(out);
             s.net.waiting.insert(id, job.clone());
             return Next::Done(Some((job, Some(id))));
-        }
-        let sha = red.body_sha(&method, &body);
-        let mut warnings = Vec::new();
-        let found = s
-            .net
-            .fixtures
-            .clone()
-            .find(&method, &shown, sha.as_deref(), &mut |w| warnings.push(w));
-        for w in warnings {
-            s.warn(&w);
         }
         let resp = match found {
             Some(r) => {
