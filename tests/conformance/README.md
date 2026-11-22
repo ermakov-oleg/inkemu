@@ -10,7 +10,7 @@ core.
 ```sh
 uv run python tools/conformance.py              # every check
 uv run python tools/conformance.py 06 12        # sections, also as 6 or §6
-uv run python tools/conformance.py tests/conformance/06/color_threshold.lua
+uv run python tools/conformance.py tests/conformance/03/color_threshold.lua
 uv run python tools/conformance.py --json       # machine-readable results, with every record
 uv run python tools/conformance.py --strict     # pending checks count as failures
 uv run pytest -q tests/test_conformance.py      # the same checks, one pytest case each
@@ -41,8 +41,10 @@ The runner builds a fresh app in a temp directory for every check:
 - `conformance.lua`: the prelude.
 - the `files` map: app path -> helper file next to the check, e.g. `{"lib/util.lua": "globals_absent.util.lua"}`.
 
-It starts `Emu` with `fresh=True`, `net="replay"`, its own state and fixtures directories and
-`start_time` = the check's `start_time` or `2026-11-20T09:00:00`, then runs `steps` and evaluates.
+It starts `Emu` with `fresh=True`, `net="replay"`, `firmware_api=(2, 33)`, its own state and fixtures directories
+and `start_time` = the check's `start_time` or `2026-11-20T09:00:00`, then runs `steps` and evaluates. Besides the
+constructor it only touches `wait`, `tap`, `key`, `answer`, `lock`, `unlock`, `restart`, `reload`, `status()`,
+`shot(dialog=False)`, `log` and `errors`, which both cores have.
 
 ## The prelude
 
@@ -57,11 +59,15 @@ T.hex(bytes)                                          -- lowercase hex, without 
 ```
 
 Each record goes to the log at once as `@conformance <name> <json>`, through `ctx.log:info` when `ctx.log` is a
-table and `ctx:log` otherwise; the prelude finds `ctx` as a global. It is plain Lua and writes its own JSON:
+table and `ctx:log` otherwise. The prelude reaches `ctx` as a global: the contract only hands it to callbacks, but both
+inkemu cores also set the global. Record names are one word (no
+spaces); anything else raises a Lua error. The prelude is plain Lua and writes its own JSON:
 sequences (including `{}`) become arrays, other tables objects with sorted string keys, functions and other host
 values `{"$type": "function"}`. Strings must be valid UTF-8: a binary string shows up as
-`{"invalid_utf8_hex": "..."}`, so hex-encode digests with `T.hex`. Do not record host tables whole (they may be
-proxies); record the fields you mean.
+`{"invalid_utf8_hex": "..."}`, so hex-encode digests with `T.hex`. Floats are printed with `%.17g`, which shows
+the core's own precision (a single-precision `0.1` is `0.10000000149011612`), so expect integers or floats that
+are exact in binary, such as `0.5` or `1.25`. Do not record host tables whole (they may be proxies); record the
+fields you mean.
 
 ## The JSON
 
@@ -87,7 +93,7 @@ proxies); record the fields you mean.
 ```
 
 - `spec` names the main section; every `expect` entry names its own `spec`, or a `deviation` id plus the
-  contract's `spec_value` when inkemu follows a measured reader instead (see `spec/deviations.md`).
+  contract's `spec_value` when inkemu follows a measured reader instead; `spec/deviations.md` will list them.
 - `expect` keys are record names, or `<label>.<field>` of an `observe <label>` step, which captures `Emu.status()`
   (nested objects are flattened as well: `s.pending.kind`). A name recorded more than once keeps its last value; a
   missing record fails; records nobody expects are ignored.
@@ -99,7 +105,8 @@ proxies); record the fields you mean.
 - `pixels`: `[x, y, 1]` for ink and `[x, y, 0]` for paper on the final frame, taken with `shot(dialog=False)`.
 - `fixtures`: replayed network answers, written in the 0.1 fixture format (`net/METHOD_host_hash.json` plus a
   `.body` file). Optional fields: `body_hex` for binary bodies, `delay_ms`, `match` (`exact`, `prefix`, `glob`) and
-  `request_body` for a POST matched by its body.
+  `request_body` for a POST matched by its body. The core serves the first fixture that matches a request, so
+  two fixtures for the same request (same method, URL, body and `match`) are refused as a malformed check.
 - Steps: `wait <n>[ms|s|m|h]`, `tap <x> <y>`, `key up|down|left|right|ok|back`, `answer yes|no`, `lock`, `unlock`,
   `restart`, `reload`, `observe <label>`.
 

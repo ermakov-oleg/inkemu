@@ -1,6 +1,6 @@
 {
   "spec": "§3",
-  "about": "the x4_pro profile: portrait size, two gray levels in normal frames, four in gray frames, docked keyboard height",
+  "about": "the x4_pro profile: portrait size, two gray levels in normal frames, docked keyboard height; gray_still 4 is the reader's panel value, which the contract leaves to the device",
   "expect": {
     "device.model": {"value": "x4_pro", "spec": "§3"},
     "screen.width": {"value": 480, "spec": "§3"},

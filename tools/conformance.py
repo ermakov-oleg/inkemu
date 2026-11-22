@@ -1,7 +1,8 @@
 """Run the InkApp API conformance checks of tests/conformance against `inkemu.Emu`.
 
 Each check is a tiny app plus a JSON file of expected values; see tests/conformance/README.md. The runner only
-uses the `Emu` members that both the pure-Python and the Rust core have, so it can pin either one. See `--help`.
+uses the `Emu` members that both the pure-Python and the Rust core have (`firmware_api=(2, 33)` included), so it
+can pin either one. See `--help`.
 """
 
 from __future__ import annotations
@@ -106,11 +107,18 @@ def _validate(path: Path, d: object) -> None:
             raise _fail(path, f"bad files entry {dest!r}")
         if not (path.parent / src).is_file():
             raise _fail(path, f"files entry {dest!r}: {src} not found next to the check")
-    for f in d.get("fixtures", []):
-        if not isinstance(f, dict) or set(f) - FIXTURE_KEYS:
-            raise _fail(path, f"bad fixture {f!r}")
-        if not isinstance(f.get("method"), str) or not isinstance(f.get("url"), str):
-            raise _fail(path, "a fixture needs string method and url")
+    fixtures = d.get("fixtures", [])
+    if not isinstance(fixtures, list):
+        raise _fail(path, '"fixtures" must be a list')
+    seen_keys = set()
+    for f in fixtures:
+        if problem := _fixture_problem(f):
+            raise _fail(path, f"fixture {f!r}: {problem}")
+        key = (fixture_key(f["method"], f["url"], f.get("request_body", "").encode()), f.get("match", "exact"))
+        if key in seen_keys:
+            # the core serves the first match, so a second fixture for the same request would never be used
+            raise _fail(path, f"two fixtures answer {key[0]!r}")
+        seen_keys.add(key)
     if not isinstance(d.get("start_time", DEFAULT_START), str):
         raise _fail(path, '"start_time" must be a string')
     steps = d.get("steps", [])
@@ -230,14 +238,53 @@ def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def fixture_stem(method: str, url: str, request_body: bytes = b"") -> str:
-    """The 0.1 recorder's file name: METHOD_host_<8 hex of the fixture key>."""
+def _number(v: object) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def _fixture_problem(f: object) -> str | None:
+    """Why a fixture entry of a check cannot be written, or None."""
+    if not isinstance(f, dict):
+        return "must be an object"
+    if unknown := set(f) - FIXTURE_KEYS:
+        return f"unknown keys {sorted(unknown)}"
+    if not isinstance(f.get("method"), str) or not f["method"] or not isinstance(f.get("url"), str):
+        return "needs string method and url"
+    if "status" in f and not (isinstance(f["status"], int) and not isinstance(f["status"], bool)):
+        return "status must be an integer"
+    if "delay_ms" in f and not (_number(f["delay_ms"]) and 0 <= f["delay_ms"] < math.inf):
+        return "delay_ms must be a number >= 0"
+    if f.get("match", "exact") not in ("exact", "prefix", "glob"):
+        return "match must be exact, prefix or glob"
+    for k in ("body", "body_hex", "request_body"):
+        if k in f and not isinstance(f[k], str):
+            return f"{k} must be a string"
+    if "body" in f and "body_hex" in f:
+        return "give body or body_hex, not both"
+    if "body_hex" in f:
+        try:
+            bytes.fromhex(f["body_hex"])
+        except ValueError:
+            return "body_hex is not hex"
+    headers = f.get("headers", {})
+    if not isinstance(headers, dict) or not all(isinstance(v, str) for v in headers.values()):
+        return "headers must map names to strings"
+    return None
+
+
+def fixture_key(method: str, url: str, request_body: bytes = b"") -> str:
+    """The 0.1 request key: method, URL and, for a POST with a body, the body's SHA-256."""
     method = method.upper()
     key = f"{method} {url}"
     if method == "POST" and request_body:
         key += " " + _sha(request_body)
+    return key
+
+
+def fixture_stem(method: str, url: str, request_body: bytes = b"") -> str:
+    """The 0.1 recorder's file name: METHOD_host_<8 hex of the fixture key>."""
     host = re.sub(r"[^A-Za-z0-9.-]", "_", urlsplit(url).netloc.rpartition("@")[2]) or "nohost"
-    return f"{method}_{host}_{_sha(key.encode())[:8]}"
+    return f"{method.upper()}_{host}_{_sha(fixture_key(method, url, request_body).encode())[:8]}"
 
 
 def write_fixtures(fixtures: list[dict], fixtures_dir: Path) -> list[Path]:
@@ -249,10 +296,8 @@ def write_fixtures(fixtures: list[dict], fixtures_dir: Path) -> list[Path]:
         method = f["method"].upper()
         req_body = f.get("request_body", "").encode("utf-8")
         stem = fixture_stem(method, f["url"], req_body)
-        n = 1
-        while (net / f"{stem}.json").exists():
-            n += 1
-            stem = f"{fixture_stem(method, f['url'], req_body)}_{n}"
+        if f.get("match", "exact") != "exact":
+            stem += "_" + f["match"]
         body = bytes.fromhex(f["body_hex"]) if "body_hex" in f else f.get("body", "").encode("utf-8")
         (net / f"{stem}.body").write_bytes(body)
         response = {
@@ -390,10 +435,11 @@ def run_check(check: Check) -> Result:
     result = Result(check.id, check.section, check.data["spec"], passed=False)
     with tempfile.TemporaryDirectory(prefix="inkemu-conformance-") as tmp:
         t = Path(tmp)
-        build_app(check, t / "app")
-        write_fixtures(check.data.get("fixtures", []), t / "fixtures")
-        emu, observed, image, step = None, {}, None, "start"
+        emu, observed, image, step = None, {}, None, "build"
         try:
+            build_app(check, t / "app")
+            write_fixtures(check.data.get("fixtures", []), t / "fixtures")
+            step = "start"
             emu = Emu(
                 t / "app",
                 state_dir=t / "state",
@@ -401,6 +447,7 @@ def run_check(check: Check) -> Result:
                 net="replay",
                 start_time=check.data.get("start_time", DEFAULT_START),
                 fresh=True,
+                firmware_api=(2, 33),
             )
             for step in check.data.get("steps", []):
                 observed.update(_run_steps(emu, [step]))

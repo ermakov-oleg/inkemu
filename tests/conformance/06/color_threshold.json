@@ -1,6 +1,0 @@
-{
-  "spec": "§6",
-  "about": "with two gray levels, colors 0..7 come out as paper and 8..15 as ink (the §3 step rule)",
-  "pixels": [[5, 5, 0], [20, 20, 0], [50, 20, 1], [80, 20, 1]],
-  "errors": []
-}

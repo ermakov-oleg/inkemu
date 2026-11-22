@@ -70,7 +70,7 @@ def test_prelude_encodes_values_calls_and_types(tmp_path):
     lua = r"""
 local T = require("conformance")
 function on_load(ctx)
-  T.value("nested", { a = { 1, 2, { b = false } }, z = "q\"\\\n\1я" })
+  T.value("nested", { a = { 1, 2, { b = false } }, z = "q\"\\\n\1\u{44F}" })
   T.value("empty", {})
   T.value("sparse", { [1] = "a", [3] = "c" })
   T.value("float", 1.5)
@@ -88,7 +88,7 @@ function on_load(ctx)
 end
 """
     want = {
-        "nested": {"a": [1, 2, {"b": False}], "z": 'q"\\\n\x01я'},
+        "nested": {"a": [1, 2, {"b": False}], "z": 'q"\\\n\x01\u044f'},
         "empty": [],
         "sparse": {"1": "a", "3": "c"},
         "float": 1.5,
@@ -232,6 +232,66 @@ def test_selection_helpers_and_json(tmp_path, capsys):
         ({"spec": "§1", "expect": {}, "typo": 1}, "unknown keys"),
         ({"spec": "§1"}, "expects nothing"),
         ({"spec": "§1", "files": {"a.lua": "absent.lua"}, "pixels": [[0, 0, 0]]}, "not found"),
+        (
+            {
+                "spec": "§1",
+                "pixels": [[0, 0, 0]],
+                "fixtures": [{"method": "GET", "url": "https://x.test/a", "body_hex": "zz"}],
+            },
+            "body_hex is not hex",
+        ),
+        (
+            {
+                "spec": "§1",
+                "pixels": [[0, 0, 0]],
+                "fixtures": [{"method": "GET", "url": "https://x.test/a", "headers": ["a"]}],
+            },
+            "headers must map",
+        ),
+        (
+            {
+                "spec": "§1",
+                "pixels": [[0, 0, 0]],
+                "fixtures": [{"method": "GET", "url": "https://x.test/a", "status": True}],
+            },
+            "status must be an integer",
+        ),
+        (
+            {
+                "spec": "§1",
+                "pixels": [[0, 0, 0]],
+                "fixtures": [{"method": "GET", "url": "https://x.test/a", "delay_ms": -1}],
+            },
+            "delay_ms",
+        ),
+        (
+            {
+                "spec": "§1",
+                "pixels": [[0, 0, 0]],
+                "fixtures": [{"method": "GET", "url": "https://x.test/a", "match": "regex"}],
+            },
+            "match must be",
+        ),
+        (
+            {
+                "spec": "§1",
+                "pixels": [[0, 0, 0]],
+                "fixtures": [{"method": "GET", "url": "https://x.test/a", "body": "a", "body_hex": "00"}],
+            },
+            "not both",
+        ),
+        (
+            {
+                "spec": "§1",
+                "pixels": [[0, 0, 0]],
+                "fixtures": [
+                    {"method": "GET", "url": "https://x.test/a"},
+                    {"method": "get", "url": "https://x.test/a"},
+                ],
+            },
+            "two fixtures",
+        ),
+        ({"spec": "§1", "pixels": [[0, 0, 0]], "fixtures": {"method": "GET"}}, "must be a list"),
     ],
 )
 def test_malformed_checks_are_rejected(tmp_path, data, msg):
@@ -370,3 +430,52 @@ end
     root = make_root(tmp_path, {"15/lock": (VALUE_LUA, data)}, helpers={"15/lock.lockscreen.lua": lock})
     result = conformance.run_check(conformance.all_checks(root)[0])
     assert result.passed, result.diffs
+
+
+def test_bad_fixture_exits_2_with_a_message(tmp_path, capsys):
+    data = {
+        "spec": "§14",
+        "pixels": [[0, 0, 0]],
+        "fixtures": [{"method": "GET", "url": "https://x.test/", "body_hex": "q"}],
+    }
+    root = make_root(tmp_path, {"14/bad": (VALUE_LUA, data)})
+    code, out, err = run_cli(capsys, root)
+    assert code == 2 and out == ""
+    assert err.startswith("error: 14/bad.json: fixture ") and "body_hex is not hex" in err
+
+
+def test_fixtures_differing_only_in_match_or_post_body_are_kept_apart(tmp_path):
+    fixtures = [
+        {"method": "GET", "url": "https://x.test/a"},
+        {"method": "GET", "url": "https://x.test/a", "match": "prefix"},
+        {"method": "POST", "url": "https://x.test/a", "request_body": "1"},
+        {"method": "POST", "url": "https://x.test/a", "request_body": "2"},
+    ]
+    root = make_root(tmp_path, {"14/ok": (VALUE_LUA, {"spec": "§14", "pixels": [[0, 0, 0]], "fixtures": fixtures})})
+    conformance.all_checks(root)
+    assert len({p.name for p in conformance.write_fixtures(fixtures, tmp_path / "fx")}) == 4
+
+
+def test_prelude_refuses_record_names_with_spaces(tmp_path):
+    lua = 'local T = require("conformance")\nfunction on_load(ctx) T.value("a b", 1) end\n'
+    data = {"spec": "§1", "errors": ["record name must be a non-empty string without spaces"]}
+    root = make_root(tmp_path, {"01/names": (lua, data)})
+    result = conformance.run_check(conformance.all_checks(root)[0])
+    assert result.passed, result.diffs
+    assert result.records == {}
+
+
+def test_emu_gets_the_documented_constructor_arguments(tmp_path, monkeypatch):
+    import inkemu
+
+    seen = {}
+
+    def fake(app, **kw):
+        seen.update(kw)
+        raise RuntimeError("stop")
+
+    monkeypatch.setattr(inkemu, "Emu", fake)
+    root = make_root(tmp_path, {"06/a": value_check(1, "§6")})
+    conformance.run_check(conformance.all_checks(root)[0])
+    assert set(seen) == {"state_dir", "fixtures_dir", "net", "start_time", "fresh", "firmware_api"}
+    assert (seen["net"], seen["fresh"], seen["firmware_api"]) == ("replay", True, (2, 33))

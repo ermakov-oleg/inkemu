@@ -73,6 +73,10 @@ end
 T.encode = encode
 
 local function emit(name, json)
+  -- the runner reads `@conformance <name> <json>`, so a name must be one word
+  if type(name) ~= "string" or name == "" or string.find(name, "%s") then
+    error("conformance: record name must be a non-empty string without spaces, got " .. tostring(name), 3)
+  end
   local c = ctx
   local line = "@conformance " .. tostring(name) .. " " .. json
   if type(c) ~= "table" and type(c) ~= "userdata" then
