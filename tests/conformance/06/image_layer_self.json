@@ -1,6 +1,6 @@
 {
   "spec": "§6",
-  "about": "drawing a layer into itself is invalid_argument",
+  "about": "a layer used as the source of its own g:image is invalid_argument",
   "expect": {
     "self_draw": {
       "value": {

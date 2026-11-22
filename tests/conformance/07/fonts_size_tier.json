@@ -1,6 +1,6 @@
 {
   "spec": "§7",
-  "about": "without a TTF, fonts:size returns the system font whose line height is closest to px (first wins), with no px field",
+  "about": "without a TTF, fonts:size picks the system font with the line height nearest to px (first on a tie), and has no px field",
   "expect": {
     "tier_8": {
       "value": {

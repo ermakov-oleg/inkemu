@@ -1,6 +1,6 @@
 {
   "spec": "§14",
-  "about": "a method other than GET and HEAD may carry a body",
+  "about": "every method except GET and HEAD may carry a body",
   "manifest": {
     "permissions": [
       "net"

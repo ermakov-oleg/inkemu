@@ -1,6 +1,6 @@
 {
   "spec": "§5",
-  "about": "the call that would be command 1025 returns nil, limit_exceeded and is not drawn; the first 1024 commands stay",
+  "about": "command 1025 returns nil, limit_exceeded and is not drawn; the first 1024 stay",
   "expect": {
     "cmd_1025": {
       "value": {

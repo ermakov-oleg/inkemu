@@ -1,6 +1,6 @@
 {
   "spec": "\u00a715",
-  "about": "a wake before net_interval_sec has passed since the last networked session has lock.net false and no ctx.net",
+  "about": "a wake earlier than net_interval_sec after the last networked session has lock.net false and no ctx.net",
   "manifest": {
     "permissions": [
       "net"

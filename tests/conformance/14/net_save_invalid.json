@@ -1,6 +1,6 @@
 {
   "spec": "§14",
-  "about": "a save that is not a table, has another target or an invalid name is invalid_argument",
+  "about": "a save that is not a table, has another target or has a bad name is invalid_argument",
   "manifest": {
     "permissions": [
       "net"

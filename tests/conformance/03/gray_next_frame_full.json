@@ -1,6 +1,6 @@
 {
   "spec": "\u00a73",
-  "about": "the first normal frame after a gray frame is a full refresh; the one after it is partial again",
+  "about": "after a gray frame the next ordinary frame is full and the one following it is partial again",
   "steps": [
     "wait 1s",
     "tap 100 100",

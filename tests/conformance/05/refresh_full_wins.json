@@ -1,6 +1,6 @@
 {
   "spec": "\u00a75",
-  "about": "when one frame is requested several times, a single full request makes the whole frame full",
+  "about": "several requests for one frame: a single full request among them turns the whole frame full",
   "steps": [
     "wait 1s",
     "tap 100 100",

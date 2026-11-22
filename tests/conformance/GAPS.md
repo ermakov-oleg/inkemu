@@ -12,7 +12,7 @@ A frame is gray when one of its `g:image` calls sets `gray = true` (outside `lay
 - Touch points: `crates/inkcore/src/draw/canvas.rs` and `crates/inkcore/src/draw/image.rs` (frame buffer and `g:image` options), `crates/inkcore/src/emu.rs` (frame presentation, `frame`), `crates/inkemu-py/src/lib.rs` and `src/inkemu/emu.py` (`_image`, `shot`).
 
 ### 03/gray_frame_refresh, 03/gray_next_frame_full, 03/gray_layer_ignored
-- Contract: a frame with a `g:image` that sets `gray = true` is presented as a gray frame (a full refresh with the gray waveform); the first normal frame after it is a full refresh and the one after that is partial again; `gray = true` inside a `layer:draw` callback has no effect.
+- Contract: `gray = true` on a `g:image` makes the frame a gray one, shown with the full-refresh gray waveform; the next ordinary frame is full again and the one after goes back to partial; `gray = true` inside `layer:draw` is ignored.
 - Core now: `gray` is ignored and no refresh kind is recorded.
 - Touch points: `crates/inkcore/src/draw/image.rs`, `crates/inkcore/src/ctx/layers.rs`, `crates/inkcore/src/emu.rs`.
 - Source: contract only.
@@ -38,13 +38,13 @@ A frame is gray when one of its `g:image` calls sets `gray = true` (outside `lay
 - Source: contract only.
 
 ### 05/cmd_cap_underline
-- Contract: in packages of 2.28 and later an underline or strikethrough line counts as one extra command.
+- Contract: from API 2.28 on, each underline or strikethrough stroke costs one more command of the 1024.
 - Core now: not counted, since the styles are not drawn.
 - Touch points: `crates/inkcore/src/draw/canvas.rs`, `crates/inkcore/src/draw/text.rs`.
 - Source: contract only.
 
 ### 05/invalidate_args
-- Contract: `ctx:invalidate()` and `ctx:invalidate("full")` return nothing; any other argument returns `nil, "invalid_argument"`.
+- Contract: `ctx:invalidate()` and `ctx:invalidate("full")` return nothing; every other argument gives `nil, "invalid_argument"`.
 - Core now: every argument is accepted.
 - Touch points: `crates/inkcore/src/ctx/mod.rs` (`invalidate`).
 - Source: probe-confirmed for `"bogus"`; the number case is contract only.
@@ -73,7 +73,7 @@ The refresh kind is not observable today. Proposed: two fields. `Emu.status()["r
 - Source: contract only.
 
 ### 05/refresh_auto_full
-- Contract: the system makes a full refresh after a set number of partial ones; the default is 30, so after 29 partial frames the 30th is full.
+- Contract: the host inserts a full refresh every N frames (default 30), so 29 partial frames are followed by a full one.
 - Core now: every frame is the same kind; nothing counts partial frames.
 - Touch points: `crates/inkcore/src/emu.rs`.
 - Source: contract only.
@@ -85,7 +85,7 @@ The refresh kind is not observable today. Proposed: two fields. `Emu.status()["r
 - Source: contract only.
 
 ### 05/defer_args
-- Contract: `defer_full_refresh(ms)` takes an integer from 1 to 60000 and returns nothing; any other value returns `nil, "invalid_argument"`.
+- Contract: `defer_full_refresh(ms)` takes an integer 1..60000 and returns nothing; anything outside that is `nil, "invalid_argument"`.
 - Core now: any number is accepted and one `nil` is returned.
 - Touch points: `crates/inkcore/src/ctx/basic.rs` (`defer_full_refresh`).
 - Source: contract only.
@@ -143,7 +143,7 @@ Already green and pinned (the valid cases of the rules above): `05/cmd_cap_text_
 - Source: contract only.
 
 ### 06/image_layer_self
-- Contract: drawing a layer into itself returns `nil, "invalid_argument"`.
+- Contract: `g:image` with the layer being drawn as its own source is `nil, "invalid_argument"`.
 - Core now: returns nothing.
 - Touch points: `crates/inkcore/src/ctx/layers.rs`, `crates/inkcore/src/draw/mod.rs`.
 - Source: contract only.
@@ -274,7 +274,7 @@ All network checks use replay fixtures on `.test` hosts, so they pass the same w
 - Source: probe-confirmed that `GET`, `PUT`, `PATCH` and `DELETE` return a job synchronously; the other methods and every completion are contract only.
 
 ### 14/net_method_case
-- Contract: a method is compared byte for byte and must be uppercase; lowercase, mixed case and unknown strings return `nil, "invalid_argument"`.
+- Contract: the method string must match exactly and in upper case; lower or mixed case and unknown names give `nil, "invalid_argument"`.
 - Core now: the method is upper-cased, so `get`, `post`, `patch` and `put` start a request, and an unknown method starts one that never answers. An empty method is already refused (`14/net_method_empty`, green).
 - Touch points: `crates/inkcore/src/ctx/net.rs` (`request`).
 - Source: probe-confirmed for `patch` and `FOO`; the other spellings and the empty string are contract only.
@@ -328,7 +328,7 @@ All network checks use replay fixtures on `.test` hosts, so they pass the same w
 - Source: contract only (the probe could only see `saved = false` after `no_network`).
 
 ### 14/net_save_invalid
-- Contract: a `save` that is not a table, a `to` other than `files` or `storage`, or an invalid name for the target is `nil, "invalid_argument"`.
+- Contract: `save` must be a table whose `to` is `files` or `storage` and whose name is valid for that target; otherwise `nil, "invalid_argument"`.
 - Core now: not validated.
 - Touch points: `crates/inkcore/src/ctx/net.rs` (`request`), `crates/inkcore/src/ctx/files.rs` (name rules).
 - Source: contract only. A missing `to` or `name` is inferred to be `invalid_argument` as well (the contract could also read it as a type error).
@@ -364,7 +364,7 @@ Lock-screen frames count as app frames in `status()["refresh"]` and `status()["r
 - Source: contract only (not in the task list; the guide and §15 both state it).
 
 ### 15/lock_net_interval_blocks, 15/lock_net_interval_clamp, 15/lock_net_interval_clamp_low
-- Contract: `lockscreen.net_interval_sec` defaults to `interval_sec` and is limited to 30-3600. `ctx.lock.net` is true in the first session and in a later session only once `net_interval_sec` seconds have gone by since the last session that had it; when it is false `ctx.net` is nil. The clamp check uses `interval_sec` 600 and `net_interval_sec` 100000 and expects the sequence true, five times false, true (the wake of 3600 s). The low bound is pinned by `15/lock_net_interval_clamp_low`: locked at 09:00:50 the first wake comes 10 s later, and `net_interval_sec` 10 is raised to 30, so that wake has no network (it also depends on the alignment rule).
+- Contract: `lockscreen.net_interval_sec` defaults to `interval_sec` and is limited to 30-3600. `ctx.lock.net` is true in the first session; later it turns true again only after `net_interval_sec` seconds since the previous networked session, and `ctx.net` is nil while it is false. The clamp check uses `interval_sec` 600 and `net_interval_sec` 100000 and expects the sequence true, five times false, true (the wake of 3600 s). The low bound is pinned by `15/lock_net_interval_clamp_low`: locked at 09:00:50 the first wake comes 10 s later, and `net_interval_sec` 10 is raised to 30, so that wake has no network (it also depends on the alignment rule).
 - Core now: `net_interval_sec` is not read; `lock.net` follows the manifest's `net` flag in every session. Default, elapsed interval and the undeclared case are pinned in `15/lock_net_interval_default`, `15/lock_net_interval_elapsed`, `15/lock_net_first`, `15/lock_net_undeclared` (green).
 - Touch points: `crates/inkcore/src/lockscreen.rs` (`enter`, `LockCtx`), `crates/inkcore/src/ctx/lock.rs`, `crates/inkcore/src/ctx/net.rs` (`ctx.net` must follow `lock.net`).
 - Source: contract only. Not modelled: battery below 20% and the three failed Wi-Fi connections.
@@ -388,7 +388,7 @@ Lock-screen frames count as app frames in `status()["refresh"]` and `status()["r
 - Source: contract only.
 
 ### 15/lock_gray_then_normal
-- Contract: a lock session can present a gray frame (any session); a gray frame is a full refresh, and the next normal frame, even in a later session (the timer wake), is a full refresh too. Expected kinds after lock and one wake: full (app start), gray, full.
+- Contract: a lock session may show a gray frame in any session; it is a full refresh, and the next ordinary frame is full as well, also across a timer wake. Expected kinds after lock and one wake: full (app start), gray, full.
 - Core now: nothing is gray and no kind is recorded.
 - Touch points: as for the gray frames in §3, plus `crates/inkcore/src/lockscreen.rs`.
 - Source: contract only.
@@ -422,13 +422,13 @@ Already green and pinned: `15/lock_reason_timer`, `15/lock_elapsed_first`, `15/l
 - Source: probe-confirmed (returns nothing); the full frame is contract only.
 
 ### 25/act_inactive
-- Contract: `act("sleep")` and `act("power_off")` return `nil, "inactive"` outside an `on_input` delivering a key up or a pointer up (load, timers, pointer down).
+- Contract: `act("sleep")` and `act("power_off")` return `nil, "inactive"` anywhere except inside `on_input` for a key release or pointer release (not in load, timers or pointer press).
 - Core now: `nil, "invalid_argument"`.
 - Touch points: `crates/inkcore/src/ctx/stubs.rs` (`act`), `crates/inkcore/src/emu.rs` (input dispatch must flag an "up" event in progress).
 - Source: contract only (`sleep` and `power_off` were not called in the probe).
 
 ### 25/act_sleep_tap, 25/act_sleep_key
-- Contract: `act("sleep")` from a key up or pointer up returns nothing, ends the session after the callback (calling `on_leave`) and locks the device, like a short power-key press.
+- Contract: `act("sleep")` from a key up or pointer up returns nothing; once the callback ends the session is closed (`on_leave` runs) and the device locks, as with a short power-key press.
 - Core now: the call returns `nil, "invalid_argument"` (logged as not emulated); there is no `on_leave` and no lock.
 - Touch points: `crates/inkcore/src/ctx/stubs.rs` (`act`), `crates/inkcore/src/emu.rs` (lock path).
 - Source: contract only.
@@ -490,7 +490,7 @@ Already green and pinned: `26/encoding`, `26/hash_input_max`, `26/encoding_input
 - Source: contract only (the probe only wrote `f`, `f2`, `f3`).
 
 ### 29/files_case_insensitive
-- Contract: `A.txt` and `a.txt` are the same file; `list()` returns the spelling the file was created with.
+- Contract: names differing only in case address one file; `list()` keeps the case used at creation.
 - Core now: names are case-sensitive.
 - Touch points: `crates/inkcore/src/ctx/files.rs` (name lookup for the app directory).
 - Source: contract only.
@@ -514,7 +514,7 @@ Already green and pinned: `26/encoding`, `26/hash_input_max`, `26/encoding_input
 - Source: probe-confirmed for the 262145-byte `write`; `append` is contract only.
 
 ### 29/files_count_limit
-- Contract: with 512 files a `write` or `append` that creates a new file returns `nil, "limit_exceeded"`; changing an existing file still works.
+- Contract: once 512 files exist, creating another through `write` or `append` is `nil, "limit_exceeded"`, while existing files can still change.
 - Core now: refused with `no_space`.
 - Touch points: `crates/inkcore/src/ctx/files.rs` (`writer`).
 - Source: contract only.

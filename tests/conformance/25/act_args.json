@@ -1,6 +1,6 @@
 {
   "spec": "\u00a725",
-  "about": "an unknown action name is invalid_argument; a name that is not a string raises a Lua error",
+  "about": "an unknown action name is invalid_argument; a non-string argument raises a Lua error",
   "expect": {
     "unknown": {
       "value": {
