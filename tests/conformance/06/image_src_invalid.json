@@ -1,0 +1,88 @@
+{
+  "spec": "§6",
+  "about": "an image src region must be four integers inside the image, in named or positional (2.33) form; otherwise invalid_argument",
+  "expect": {
+    "src_named_ok": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§6"
+    },
+    "src_positional_ok": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§6"
+    },
+    "src_edge_ok": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§6"
+    },
+    "src_too_big": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§6"
+    },
+    "src_overhang": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§6"
+    },
+    "src_negative_x": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§6"
+    },
+    "src_zero_w": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§6"
+    },
+    "src_fraction": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§6"
+    },
+    "src_positional_bad": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§6"
+    }
+  },
+  "errors": []
+}

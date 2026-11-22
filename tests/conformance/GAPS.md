@@ -93,6 +93,18 @@ contract states it and the reader was not measured. File names are relative to t
 - Touch points: `crates/inkcore/src/ctx/layers.rs`, `crates/inkcore/src/draw/mod.rs`.
 - Source: contract only.
 
+### 06/image_src_invalid
+- Contract: `opts.src` of `g:image` is four integers (named `x y w h` or, since the 2.33 host fix, positional) with `x, y >= 0`, `w, h >= 1`, inside the image; anything else returns `nil, "invalid_argument"`.
+- Core now: `src` is ignored entirely, so no error is returned (and the region is not extracted).
+- Touch points: `crates/inkcore/src/draw/mod.rs` (`image_command`), `crates/inkcore/src/draw/canvas.rs`.
+- Source: contract only.
+
+### 06/image_released
+- Contract: `layer:release()` returns true (repeatedly); afterwards `layer:draw` and any `g:image` using the layer return `nil, "invalid_handle"`.
+- Core now: `release` returns nothing, `layer:draw` raises a Lua error and `g:image` fails the whole frame.
+- Touch points: `crates/inkcore/src/ctx/image.rs`, `crates/inkcore/src/ctx/layers.rs`, `crates/inkcore/src/draw/mod.rs` (`image_command`).
+- Source: contract only.
+
 ## §7 Text and fonts
 
 ### 07/text_invalid_utf8, 07/text_rtl
@@ -139,6 +151,6 @@ contract states it and the reader was not measured. File names are relative to t
 
 ## Deviations
 
-New ids introduced by these checks (the constraints define D1 and D2 up front):
+Deviations these checks rely on (no new ids; D1 and D2 come from the constraints):
 
 - D2: `g:polyline` and `g:polygon` with more than 128 points return `nil, "limit_exceeded"` on the reader, the contract says `invalid_argument`. Check: `06/poly_over_128`. Source: probe-confirmed.

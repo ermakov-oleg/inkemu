@@ -4,15 +4,15 @@
   "expect": {
     "small.line_height": {
       "value": 20,
-      "spec": "§7"
+      "spec": "§3"
     },
     "medium.line_height": {
       "value": 24,
-      "spec": "§7"
+      "spec": "§3"
     },
     "large.line_height": {
       "value": 30,
-      "spec": "§7"
+      "spec": "§3"
     },
     "small.ascent": {
       "value": 17,

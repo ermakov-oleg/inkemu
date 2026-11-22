@@ -10,7 +10,7 @@ local function nearest(ctx, px)
 end
 
 function on_load(ctx)
-  for _, px in ipairs({ 8, 16, 20, 24, 30, 40, 96 }) do
+  for _, px in ipairs({ 8, 16, 20, 22, 24, 27, 30, 40, 96 }) do
     T.call("tier_" .. px, function()
       local f = ctx.fonts:size(px)
       local want = nearest(ctx, px)

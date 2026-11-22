@@ -3,8 +3,6 @@ local function fill(g, n)
   for _ = 1, n do g:rect(0, 0, 1, 1, { fill = true, color = 0 }) end
 end
 
-local function nret(...) return select("#", ...) end
-
 function on_draw(ctx, g)
   fill(g, 1022)
   -- three lines would make command 1025: refused as a whole, so the counter stays at 1022

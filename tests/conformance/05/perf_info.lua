@@ -12,8 +12,8 @@ function on_draw(ctx, g)
     for _, k in ipairs({ "tick_us", "draw_us", "cmd_count", "image_count", "asset_hit", "asset_miss", "draw_frame" }) do
       T.type("perf." .. k, p[k])
     end
-    T.value("perf.cmd_count", p.cmd_count)
-    T.value("perf.image_count", p.image_count)
+    T.value("perf.cmd_count_value", p.cmd_count)
+    T.value("perf.image_count_value", p.image_count)
     T.value("perf.drawn", type(p.draw_frame) == "number" and p.draw_frame >= 1)
   end)
 end

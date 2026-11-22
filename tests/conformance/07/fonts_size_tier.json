@@ -29,7 +29,25 @@
       },
       "spec": "§7"
     },
+    "tier_22": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§7"
+    },
     "tier_24": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§7"
+    },
+    "tier_27": {
       "value": {
         "ok": true,
         "ret": [

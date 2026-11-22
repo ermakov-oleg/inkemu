@@ -14,6 +14,16 @@
         ]
       },
       "spec": "§6"
+    },
+    "size_after_draw": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "inactive"
+        ]
+      },
+      "spec": "§6"
     }
   },
   "errors": []

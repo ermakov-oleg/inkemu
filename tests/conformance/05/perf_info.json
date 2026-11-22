@@ -14,11 +14,11 @@
       "spec": "§5"
     },
     "perf.cmd_count": {
-      "value": 3,
+      "value": "integer",
       "spec": "§5"
     },
     "perf.image_count": {
-      "value": 0,
+      "value": "integer",
       "spec": "§5"
     },
     "perf.asset_hit": {
@@ -31,6 +31,14 @@
     },
     "perf.draw_frame": {
       "value": "integer",
+      "spec": "§5"
+    },
+    "perf.cmd_count_value": {
+      "value": 3,
+      "spec": "§5"
+    },
+    "perf.image_count_value": {
+      "value": 0,
       "spec": "§5"
     },
     "perf.drawn": {

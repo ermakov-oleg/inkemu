@@ -11,6 +11,8 @@
   "06/g_methods": "g still exposes round_rect, measure, measure_text, fill_pattern and pattern_rect",
   "06/image_invalid_value": "g:image with a non-image value returns nothing instead of invalid_argument",
   "06/image_layer_self": "drawing a layer into itself returns nothing instead of invalid_argument",
+  "06/image_released": "layer:release returns nothing, layer:draw raises and g:image fails the frame instead of nil, invalid_handle",
+  "06/image_src_invalid": "g:image ignores src: no invalid_argument for a malformed or out-of-image region",
   "06/pattern_invalid_args": "unknown pattern kind returns nothing and density outside 0..100 is drawn",
   "06/poly_over_128": "polyline/polygon with 129 points return nothing instead of limit_exceeded",
   "06/polygon_points": "too few points return nothing and an odd array raises a frame error instead of invalid_argument",
