@@ -74,6 +74,8 @@ worker.onmessage = (e) => {
     onState(m);
   } else if (m.type === 'error') {
     if (!ready && /emulator core/.test(m.message)) coreFailed = true;
+    if (/^Could not start the app|^The emulator core/.test(m.message)) waitingFrame = false;
+    if (/^Could not start the app: fonts:/.test(m.message)) fonts = null;
     logError(m.message);
     overlay();
   }
@@ -177,7 +179,7 @@ function xy(e) {
 const pointer = (phase, [x, y]) => send({ cmd: 'pointer', phase, x, y });
 
 canvas.addEventListener('pointerdown', (e) => {
-  if (e.button !== 0 || !app) return;
+  if (e.button !== 0 || !app || down) return; // one pointer at a time: a second finger is ignored
   e.preventDefault();
   // keys go to the screen again after a click on it
   if (inTextField(document.activeElement)) document.activeElement.blur();
@@ -219,7 +221,8 @@ canvas.addEventListener('pointercancel', release);
 // ---- keyboard: as the window's on_key ------------------------------------------------------------
 
 function inTextField(el) {
-  return el instanceof Element && !!el.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]');
+  const fields = 'input:not([type="checkbox"]):not([type="file"]), textarea, select, [contenteditable=""], [contenteditable="true"]';
+  return el instanceof Element && !!el.closest(fields);
 }
 
 function togglePause() {
