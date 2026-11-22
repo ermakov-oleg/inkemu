@@ -1,6 +1,6 @@
 {
   "spec": "\u00a75",
-  "about": "after 29 partial refreshes the 30th frame is a full refresh (default interval 30), counted from an explicit full frame",
+  "about": "after 29 partial refreshes the 30th frame is a full refresh (default interval 30), counted from an explicit full frame; 31 taps are load-bearing: the first is the explicit full anchor, the next 30 are the counted frames",
   "steps": [
     "wait 1s",
     "tap 100 100",

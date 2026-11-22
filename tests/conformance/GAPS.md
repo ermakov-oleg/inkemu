@@ -38,11 +38,18 @@ contract states it and the reader was not measured. File names are relative to t
 - Source: contract only.
 
 ### Refresh kind: proposed interface
-The refresh kind is not observable today. Proposed: `Emu.status()["refresh"]` is the kind of the last presented app frame, one of `"partial"`, `"full"`, `"gray"` (`"gray"` is the full refresh with the grayscale waveform of a frame that has a `g:image` with `gray = true`). The runner reads it through `observe`, so no runner change is needed. The contract does not classify the first frame of a session; inkemu chooses `"full"` for it (check `05/refresh_first_frame`, an inkemu choice, not a contract rule). The automatic-full checks assume that any full frame resets the partial counter.
+The refresh kind is not observable today. Proposed: two fields. `Emu.status()["refresh"]` is the kind of the last presented app frame and `Emu.status()["refreshes"]` is the list of kinds of all app frames presented this session, oldest first (a single `tap` or `wait` step can present more than one frame, so a check that needs a middle frame reads the list). A kind is one of `"partial"`, `"full"`, `"gray"` (`"gray"` is the full refresh with the grayscale waveform of a frame that has a `g:image` with `gray = true`). The runner reads it through `observe`, so no runner change is needed. The contract does not classify the first frame of a session; inkemu chooses `"full"` for it (see below). The automatic-full checks assume that any full frame resets the partial counter.
 - Touch points: `crates/inkcore/src/emu.rs` (frame presentation, status), `crates/inkemu-py/src/lib.rs` and `src/inkemu/emu.py` (`status`).
 
+### 05/refresh_first_frame (inkemu choice)
+- Contract: silent about the first frame of a session.
+- inkemu choice: the first frame is `"full"` (the screen is blank before it). Not a contract rule; change the check if the choice changes.
+- Core now: no refresh kind is recorded.
+- Touch points: `crates/inkcore/src/emu.rs`.
+- Source: inkemu choice.
+
 ### 05/refresh_plain, 05/refresh_full_arg, 05/refresh_full_wins, 05/refresh_full_in_draw
-- Contract: a plain `invalidate()` presents a partial refresh and `invalidate("full")` a full one; if a frame is requested several times, one `"full"` request makes the whole frame full; a request made from `on_draw` (including `"full"`) applies to the next frame.
+- Contract: a plain `invalidate()` presents a partial refresh and `invalidate("full")` a full one; if a frame is requested several times, one `"full"` request makes the whole frame full; a request made from `on_draw` (including `"full"`) applies to the next frame. `05/refresh_full_in_draw` expects `refreshes == ["full", "partial", "full"]` (session start, the frame that asks, the deferred frame) and `refresh == "full"`.
 - Core now: the argument is ignored and the kind is not recorded.
 - Touch points: `crates/inkcore/src/ctx/mod.rs` (`invalidate`), `crates/inkcore/src/emu.rs` (frame scheduling).
 - Source: contract only.
@@ -193,7 +200,7 @@ The refresh kind is not observable today. Proposed: `Emu.status()["refresh"]` is
 
 ### 25/act_sleep_tap, 25/act_sleep_key
 - Contract: `act("sleep")` from a key up or pointer up returns nothing, ends the session after the callback (calling `on_leave`) and locks the device, like a short power-key press.
-- Core now: not emulated; nothing happens.
+- Core now: the call returns `nil, "invalid_argument"` (logged as not emulated); there is no `on_leave` and no lock.
 - Touch points: `crates/inkcore/src/ctx/stubs.rs` (`act`), `crates/inkcore/src/emu.rs` (lock path).
 - Source: contract only.
 

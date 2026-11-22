@@ -10,7 +10,7 @@
   "05/refresh_defer_blocks_auto": "status() has no refresh field and defer_full_refresh is ignored",
   "05/refresh_first_frame": "status() has no refresh field",
   "05/refresh_full_arg": "status() has no refresh field, invalidate(\"full\") is not distinguished",
-  "05/refresh_full_in_draw": "status() has no refresh field",
+  "05/refresh_full_in_draw": "status() has no refresh and refreshes fields",
   "05/refresh_full_wins": "status() has no refresh field",
   "05/refresh_plain": "status() has no refresh field",
   "06/arc_full_turn": "an arc spanning a whole multiple of 360 degrees draws a full ring",

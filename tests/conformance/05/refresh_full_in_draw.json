@@ -1,19 +1,22 @@
 {
   "spec": "\u00a75",
-  "about": "invalidate(\"full\") called inside on_draw applies to the next frame, not the one being drawn",
+  "about": "invalidate(\"full\") called inside on_draw applies to the next frame, not the one being drawn; one step can present both frames, so the kinds of all frames are compared (the first entry is the session-start frame, an inkemu choice)",
   "steps": [
     "wait 1s",
     "tap 100 100",
-    "observe current",
     "wait 1s",
-    "observe next"
+    "observe s"
   ],
   "expect": {
-    "current.refresh": {
-      "value": "partial",
+    "s.refreshes": {
+      "value": [
+        "full",
+        "partial",
+        "full"
+      ],
       "spec": "\u00a75"
     },
-    "next.refresh": {
+    "s.refresh": {
       "value": "full",
       "spec": "\u00a75"
     }
