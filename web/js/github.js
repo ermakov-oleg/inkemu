@@ -29,6 +29,29 @@ export class Truncated extends GitHubError {
   }
 }
 
+export class NetworkError extends GitHubError {
+  constructor(timedOut, cause) {
+    super('network', timedOut
+      ? 'Could not reach GitHub: the request timed out.'
+      : 'Could not reach GitHub (offline, blocked, or a network error). Check the connection and try again.');
+    this.name = 'NetworkError';
+    this.cause = cause;
+  }
+}
+
+async function request(fetchFn, url, opts, timeoutMs = 30000) {
+  // Not AbortSignal.timeout: its timer is unref'd and would not keep Node alive.
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    return await fetchFn(url, { ...opts, signal: ctl.signal });
+  } catch (e) {
+    throw new NetworkError(ctl.signal.aborted, e);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 const NAME = /^[A-Za-z0-9_.-]+$/;
 const dec = (s) => {
   try {
@@ -38,13 +61,14 @@ const dec = (s) => {
   }
 };
 const encPath = (p) => p.split('/').map(encodeURIComponent).join('/');
+const DOTS = (segs) => segs.some((x) => x === '.' || x === '..');
 const MANIFEST = /(^|\/)manifest\.json$/;
 
 export function parseGitHubUrl(text) {
   const m = /^(?:https?:\/\/)?(?:www\.)?github\.com\/(.+)$/i.exec(String(text).trim().split(/[?#]/)[0]);
   if (!m) return null;
   const seg = m[1].split('/').filter(Boolean).map(dec);
-  if (seg.length < 2) return null;
+  if (seg.length < 2 || DOTS(seg)) return null;
   const owner = seg[0];
   const repo = seg[1].replace(/\.git$/, '');
   if (!NAME.test(owner) || !NAME.test(repo)) return null;
@@ -61,8 +85,11 @@ export function parseGitHubUrl(text) {
 export function parseShareParams(params) {
   const gh = params.get('gh');
   const m = gh && /^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)$/.exec(gh);
-  if (!m) return null;
-  return { owner: m[1], repo: m[2], ref: params.get('ref') || 'HEAD', path: params.get('path') || '' };
+  if (!m || m[1] === '.' || m[1] === '..' || m[2] === '.' || m[2] === '..') return null;
+  const ref = params.get('ref') || 'HEAD';
+  const path = params.get('path') || '';
+  if (DOTS(ref.split('/')) || DOTS(path.split('/'))) return null;
+  return { owner: m[1], repo: m[2], ref, path };
 }
 
 export function shareUrl(base, { owner, repo, ref, path }) {
@@ -72,36 +99,41 @@ export function shareUrl(base, { owner, repo, ref, path }) {
   return url;
 }
 
-async function fetchTree(owner, repo, ref, fetchFn) {
+async function fetchTree(owner, repo, ref, fetchFn, timeoutMs) {
   const url = `https://api.github.com/repos/${owner}/${repo}/git/trees/${encPath(ref)}?recursive=1`;
-  const res = await fetchFn(url, { headers: { Accept: 'application/vnd.github+json' } });
+  const res = await request(fetchFn, url, { headers: { Accept: 'application/vnd.github+json' } }, timeoutMs);
   if (res.status === 404) return null;
   if ((res.status === 403 || res.status === 429) && res.headers.get('x-ratelimit-remaining') === '0') {
     const reset = Number(res.headers.get('x-ratelimit-reset'));
     throw new RateLimited(reset ? new Date(reset * 1000) : null);
   }
   if (!res.ok) throw new GitHubError('http', `GitHub API answered ${res.status} for ${owner}/${repo}.`);
-  const body = await res.json();
+  const body = await res.json().catch((e) => {
+    throw new NetworkError(false, e);
+  });
   if (body.truncated) throw new Truncated();
   return body.tree.filter((e) => e.type === 'blob').map((e) => ({ path: e.path, size: e.size ?? 0 }));
 }
 
-export async function resolveAndList({ owner, repo, refAndPath }, fetchFn = globalThis.fetch) {
-  // A branch name may contain '/', so try the longest ref first (3 calls at most).
-  const candidates = refAndPath.length ? Array.from({ length: Math.min(refAndPath.length, 3) }, (_, i) => Math.min(refAndPath.length, 3) - i) : [0];
-  for (const n of candidates) {
-    const ref = n === 0 ? 'HEAD' : refAndPath.slice(0, n).join('/');
-    const tree = await fetchTree(owner, repo, ref, fetchFn);
+export async function resolveAndList({ owner, repo, refAndPath }, fetchFn = globalThis.fetch, { timeoutMs } = {}) {
+  // Git forbids refs `a` and `a/b` together, so the shortest existing prefix is the ref (3 calls at most).
+  if (refAndPath.length === 0) {
+    const tree = await fetchTree(owner, repo, 'HEAD', fetchFn, timeoutMs);
+    if (tree) return { ref: 'HEAD', path: '', tree };
+  }
+  for (let n = 1; n <= Math.min(refAndPath.length, 3); n++) {
+    const ref = refAndPath.slice(0, n).join('/');
+    const tree = await fetchTree(owner, repo, ref, fetchFn, timeoutMs);
     if (tree) return { ref, path: refAndPath.slice(n).join('/'), tree };
   }
   throw new NotFound(`${owner}/${repo}${refAndPath.length ? `@${refAndPath.join('/')}` : ''}`);
 }
 
 /** `tree` (from resolveAndList) is optional and saves the second trees call. */
-export async function loadGitHubApp({ owner, repo, ref, path, tree }, fetchFn = globalThis.fetch) {
+export async function loadGitHubApp({ owner, repo, ref, path, tree }, fetchFn = globalThis.fetch, { timeoutMs } = {}) {
   path = (path || '').replace(/^\/+|\/+$/g, '');
   if (!tree) {
-    tree = await fetchTree(owner, repo, ref, fetchFn);
+    tree = await fetchTree(owner, repo, ref, fetchFn, timeoutMs);
     if (!tree) throw new NotFound(`${owner}/${repo}@${ref}`);
   }
   const sizes = new Map(tree.map((e) => [e.path, e.size]));
@@ -118,9 +150,11 @@ export async function loadGitHubApp({ owner, repo, ref, path, tree }, fetchFn = 
   }
   const raw = (p) => `https://raw.githubusercontent.com/${owner}/${repo}/${encPath(ref)}/${encPath(p)}`;
   const readFile = async (p) => {
-    const res = await fetchFn(raw(p));
+    const res = await request(fetchFn, raw(p), {}, timeoutMs);
     if (!res.ok) throw new GitHubError('http', `Could not download ${p} (HTTP ${res.status}).`);
-    return new Uint8Array(await res.arrayBuffer());
+    return new Uint8Array(await res.arrayBuffer().catch((e) => {
+      throw new NetworkError(false, e);
+    }));
   };
   const plan = await planApp({ sizes, appDir, readFile });
   const { files, fixtures } = await readPlan(plan, readFile);

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  parseGitHubUrl, parseShareParams, shareUrl, resolveAndList, loadGitHubApp, RateLimited, NotFound, Truncated,
+  parseGitHubUrl, parseShareParams, shareUrl, resolveAndList, loadGitHubApp, RateLimited, NotFound, Truncated, NetworkError,
 } from '../js/github.js';
 import { TooManyFiles, NotAnApp } from '../js/sources.js';
 
@@ -85,6 +85,14 @@ test('resolves a branch with a slash through the longer prefix', async () => {
   assert.equal(calls.length, 2);
 });
 
+test('a plain branch costs one API call', async () => {
+  const { fetchFn, calls } = mockGitHub(repo());
+  const r = await resolveAndList({ owner: 'o', repo: 'r', refAndPath: ['main', 'apps', 'foo'] }, fetchFn);
+  assert.equal(r.ref, 'main');
+  assert.equal(r.path, 'apps/foo');
+  assert.equal(calls.length, 1);
+});
+
 test('unknown ref is NotFound after at most 3 calls', async () => {
   const { fetchFn, calls } = mockGitHub(repo());
   await assert.rejects(resolveAndList({ owner: 'o', repo: 'r', refAndPath: ['a', 'b', 'c', 'd', 'e'] }, fetchFn), NotFound);
@@ -151,4 +159,39 @@ test('downloads at most 8 files at a time', async () => {
   const r = await loadGitHubApp({ owner: 'o', repo: 'r', ref: 'main', path: '' }, slow);
   assert.equal(r.files.size, 41);
   assert.ok(peak <= 8 && peak > 1, `peak ${peak}`);
+});
+
+test('a failing file stops the other downloads', async () => {
+  const files = { 'manifest.json': MANIFEST };
+  for (let i = 0; i < 40; i++) files[`f${i}`] = 'x';
+  const { fetchFn } = mockGitHub({ main: files });
+  let started = 0;
+  const flaky = async (url, o) => {
+    if (!url.includes('raw.') || url.endsWith('manifest.json')) return fetchFn(url, o);
+    const k = ++started;
+    await new Promise((r) => setTimeout(r, 2));
+    if (k === 3) throw new TypeError('boom');
+    return fetchFn(url, o);
+  };
+  await assert.rejects(loadGitHubApp({ owner: 'o', repo: 'r', ref: 'main', path: '' }, flaky), NetworkError);
+  assert.ok(started <= 10, `started ${started}`);
+});
+
+test('network failures and timeouts become NetworkError', async () => {
+  const offline = async () => {
+    throw new TypeError('Failed to fetch');
+  };
+  await assert.rejects(resolveAndList({ owner: 'o', repo: 'r', refAndPath: ['main'] }, offline),
+    (e) => e instanceof NetworkError && e.kind === 'network' && /Could not reach GitHub/.test(e.message));
+  const stalled = (url, { signal }) => new Promise((_, rej) => signal.addEventListener('abort', () => rej(new Error('aborted'))));
+  await assert.rejects(resolveAndList({ owner: 'o', repo: 'r', refAndPath: ['main'] }, stalled, { timeoutMs: 20 }),
+    (e) => e instanceof NetworkError && /timed out/.test(e.message));
+});
+
+test('dot segments are rejected', () => {
+  assert.equal(parseGitHubUrl('https://github.com/o/r/tree/main/../x'), null);
+  assert.equal(parseGitHubUrl('https://github.com/../r'), null);
+  assert.equal(parseGitHubUrl('https://github.com/o/./tree/main/x'), null);
+  assert.equal(parseShareParams(new URLSearchParams('gh=o/r&ref=main&path=a/../b')), null);
+  assert.equal(parseShareParams(new URLSearchParams('gh=o/..&ref=main')), null);
 });

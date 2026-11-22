@@ -70,3 +70,14 @@ test('fromFileList uses webkitRelativePath', async () => {
   assert.equal(r.label, 'folder: myapp');
   assert.deepEqual([...r.files.keys()].sort(), ['index.lua', 'manifest.json']);
 });
+
+test('fromZip skips absolute and parent-relative names', async () => {
+  const zip = zipSync({
+    'manifest.json': manifest,
+    '/etc/x': enc.encode('x'),
+    'a/../../evil.lua': enc.encode('x'),
+    'ok.lua': enc.encode('x'),
+  });
+  const r = await fromZip(zip);
+  assert.deepEqual([...r.files.keys()].sort(), ['manifest.json', 'ok.lua']);
+});

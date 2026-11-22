@@ -110,10 +110,16 @@ export async function readPlan(plan, readFile, limit = 8) {
   const fixtures = new Map();
   const jobs = [...plan.app.map((e) => [files, ...e]), ...plan.fix.map((e) => [fixtures, ...e])];
   let next = 0;
+  let failed = false;
   const worker = async () => {
-    while (next < jobs.length) {
+    while (next < jobs.length && !failed) {
       const [map, key, path] = jobs[next++];
-      map.set(key, await readFile(path));
+      try {
+        map.set(key, await readFile(path));
+      } catch (e) {
+        failed = true;
+        throw e;
+      }
     }
   };
   await Promise.all(Array.from({ length: Math.min(limit, jobs.length) }, worker));
@@ -132,7 +138,8 @@ export async function fromZip(arrayBuffer, name) {
   const sizes = new Map();
   unzipSync(data, {
     filter(f) {
-      if (!f.name.endsWith('/')) sizes.set(f.name, f.originalSize);
+      const unsafe = f.name.startsWith('/') || /^[A-Za-z]:/.test(f.name) || f.name.split('/').includes('..');
+      if (!unsafe && !f.name.endsWith('/')) sizes.set(f.name, f.originalSize);
       return false;
     },
   });
