@@ -138,33 +138,23 @@ fn hashes_are_raw_digests() {
          return {#h:sha256(''),\n\
            h:sha256('') == ctx.hex:decode('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'),\n\
            #h:md5('a\\0b'), h:md5('') == ctx.hex:decode('d41d8cd98f00b204e9800998ecf8427e'),\n\
-           math.type(h:crc32('abc')), h:crc32('abc') == 0x352441c0 + 0.0,\n\
+           math.type(h:crc32('abc')), h:crc32('abc') == 891568578, h:crc32('a') == -390611389,\n\
            #h:hmac_sha256('k', 'm'),\n\
            h:hmac_sha256('key', 'The quick brown fox jumps over the lazy dog') ==\n\
              ctx.hex:decode('f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8'),\n\
            h:sha256(big) == ctx.hex:decode('a1f0f20c1dfc3b39665260b64051b1b50168dd415bd59f7e278b65207e9e65f6'),\n\
            h:md5(big) == ctx.hex:decode('e11602758c6ad817e5db08377a82ef11'),\n\
-           h:crc32(big) == 3660180992.0,\n\
+           h:crc32(big) == -634786208,\n\
            h:hmac_sha256('k', big) ==\n\
              ctx.hex:decode('c453329e9a04f350f7592095c299fa74279ddca0f711001bf6d05073f5ca4128'),\n\
-           h:sha1('abc')}",
+           #h:sha1(''), h:sha1('') == ctx.hex:decode('da39a3ee5e6b4b0d3255bfef95601890afd80709'),\n\
+           h:sha1('abc') == ctx.hex:decode('a9993e364706816aba3e25717850c26c9cd0d89d')}",
     );
     assert_eq!(
         got,
         json!([
-            32,
-            true,
-            16,
-            true,
-            "float",
-            true,
-            32,
-            true,
-            true,
-            true,
-            true,
-            true,
-            "a9993e364706816aba3e25717850c26c9cd0d89d"
+            32, true, 16, true, "integer", true, true, 32, true, true, true, true, true, 20, true,
+            true
         ])
     );
 }
