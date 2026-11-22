@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>inkemu</title>
+<link rel="stylesheet" href="style.css">
+<script type="module" src="js/app.js"></script>
+</head>
+<body>
+<header class="source">
+  <form id="gh-form" class="row">
+    <input id="gh-url" type="text" placeholder="https://github.com/owner/repo/tree/branch/path/to/app" autocomplete="off" spellcheck="false" aria-label="GitHub link to an app folder">
+    <button id="gh-open" type="submit">Open</button>
+  </form>
+  <div class="row">
+    <button id="zip-btn" type="button">Zip…</button>
+    <input id="zip-input" type="file" accept=".zip,application/zip" hidden>
+    <button id="folder-btn" type="button">Folder…</button>
+    <input id="folder-input" type="file" webkitdirectory multiple hidden>
+    <button id="reread-btn" type="button" hidden>Re-read files</button>
+    <button id="copy-link" type="button" hidden>Copy link</button>
+    <span id="source-label" class="muted"></span>
+  </div>
+</header>
+
+<main>
+  <section class="screen-col">
+    <div class="screen-wrap">
+      <canvas id="screen" width="480" height="800"></canvas>
+      <div id="overlay" class="overlay">Loading core…</div>
+    </div>
+    <form id="text-form" class="text-form" hidden>
+      <label id="text-label" for="text-input"></label>
+      <input id="text-input" type="text" autocomplete="off" spellcheck="false">
+      <span class="muted">Enter: OK · Esc: cancel</span>
+    </form>
+  </section>
+
+  <section class="side">
+    <div class="row">
+      <span id="clock" class="clock">--:--:--</span>
+      <button data-wait="60000" type="button" title="]">+1m</button>
+      <button data-wait="3600000" type="button" title="}">+1h</button>
+      <button id="pause" type="button" title="P">Pause</button>
+      <span id="flags" class="muted"></span>
+    </div>
+    <div class="row">
+      <button id="lock" type="button" title="L">Lock</button>
+      <button data-cmd="reload" type="button" title="R">Reload</button>
+      <button data-cmd="restart" type="button">Restart</button>
+      <button id="save-png" type="button" title="S">Save PNG</button>
+    </div>
+    <div class="row keys">
+      <button data-key="up" type="button" title="↑">▲</button>
+      <button data-key="down" type="button" title="↓">▼</button>
+      <button data-key="left" type="button" title="←">◀</button>
+      <button data-key="right" type="button" title="→">▶</button>
+      <button data-key="ok" type="button" title="Enter">OK</button>
+      <button data-key="back" type="button" title="Esc">Back</button>
+    </div>
+    <div class="row">
+      <label><input id="net-replay" type="checkbox"> fixtures only</label>
+      <button id="fonts-btn" type="button">Fonts…</button>
+      <input id="fonts-input" type="file" accept=".bdf" multiple hidden>
+    </div>
+    <p class="muted note">The reader's own fonts are not included; the page draws with DejaVu Sans. "Fonts…" takes
+      your three BDF files (small, medium, large) and starts the app again with them.</p>
+    <p class="muted note">Click = tap, drag = swipe, long press = hold. Keys: arrows, Enter = OK, Esc = Back,
+      L lock, R reload, ] +1 min, } +1 h, P pause, S save PNG, Y/N answer a confirm.</p>
+    <div class="log-head">
+      <strong>Log</strong>
+      <button id="log-clear" type="button">Clear</button>
+    </div>
+    <div id="log" class="log" role="log" aria-live="polite"></div>
+  </section>
+</main>
+</body>
+</html>
