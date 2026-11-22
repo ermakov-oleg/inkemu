@@ -1,0 +1,16 @@
+local T = require("conformance")
+local util = require("lib.util")
+
+function on_load(ctx)
+  T.type("global.load", load)
+  T.type("global.loadstring", loadstring)
+  T.type("global.dofile", dofile)
+  T.type("global.loadfile", loadfile)
+  T.type("global.collectgarbage", collectgarbage)
+  T.type("global.print", print)
+  T.type("global.io", io)
+  T.type("global.os", os)
+  T.type("global.debug", debug)
+  T.value("require.helper", util.name)
+  T.value("require.cached", rawequal(require("lib.util"), util))
+end

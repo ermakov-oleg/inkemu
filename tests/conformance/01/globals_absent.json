@@ -1,0 +1,19 @@
+{
+  "spec": "§1",
+  "about": "the sandbox has no loaders, print, gc control, io, os or debug; require maps dots to slashes and caches",
+  "files": {"lib/util.lua": "globals_absent.util.lua"},
+  "expect": {
+    "global.load": {"value": "nil", "spec": "§1"},
+    "global.loadstring": {"value": "nil", "spec": "§1"},
+    "global.dofile": {"value": "nil", "spec": "§1"},
+    "global.loadfile": {"value": "nil", "spec": "§1"},
+    "global.collectgarbage": {"value": "nil", "spec": "§1"},
+    "global.print": {"value": "nil", "spec": "§1"},
+    "global.io": {"value": "nil", "spec": "§1"},
+    "global.os": {"value": "nil", "spec": "§1"},
+    "global.debug": {"value": "nil", "spec": "§1"},
+    "require.helper": {"value": "lib/util", "spec": "§1"},
+    "require.cached": {"value": true, "spec": "§1"}
+  },
+  "errors": []
+}
