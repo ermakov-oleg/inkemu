@@ -118,11 +118,14 @@ class Emu:
         self._run(self._s.key, name)
 
     def type_text(self, text: str) -> None:
-        """Answer a pending `input:text` with OK, or type into a pending `input:edit` and press enter."""
+        """Answer a pending `input:text` with OK, or type into a pending `input:edit` and press the confirm key.
+
+        A newline is the confirm key too; with `enter = "newline"` it inserts a line break and the edit stays open.
+        """
         self._run(self._s.type_text, str(text))
 
     def answer(self, ok: bool) -> None:
-        """Answer the pending dialog: confirm yes/no, leave yes/no, text OK/cancel."""
+        """Answer the pending dialog: confirm yes/no, leave yes/no, text OK/cancel, edit confirm key/Back."""
         self._run(self._s.answer, bool(ok))
 
     # ---- time and lifecycle -----------------------------------------------------------------

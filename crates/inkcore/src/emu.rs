@@ -739,12 +739,13 @@ impl Core {
         self.run(|h| h.key(name))
     }
 
-    /// Answers a pending `input:text` with OK, or types into a pending `input:edit` and presses enter.
+    /// Answers a pending `input:text` with OK, or types into a pending `input:edit` and presses the confirm key
+    /// (a newline is the confirm key too; with `enter = "newline"` it inserts a line break and the edit stays open).
     pub fn type_text(&mut self, text: &str) -> Result<(), String> {
         self.run(|h| h.type_text(text))
     }
 
-    /// Answers the pending dialog: confirm yes/no, leave yes/no, text OK/cancel.
+    /// Answers the pending dialog: confirm yes/no, leave yes/no, text OK/cancel, edit confirm key/Back.
     pub fn answer(&mut self, ok: bool) -> Result<(), String> {
         self.run(|h| h.answer(ok))
     }

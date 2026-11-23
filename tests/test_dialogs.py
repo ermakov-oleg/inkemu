@@ -75,7 +75,22 @@ def test_edit_dialog_cancel_button(make_app, emu_factory):
     )
     assert {"Note", "OK", "Cancel"} <= set(words(emu)) and "" not in words(emu)
     emu.tap_text("Cancel")
-    assert emu.has_text("ended cancel")
+    assert emu.has_text("ended back"), (
+        "API 2.33.1 contract §4 says otherwise: how is back, not cancel (H4, 16/field_edit)"
+    )
+
+
+def test_back_key_ends_edit(make_app, emu_factory):
+    emu = emu_factory(
+        make_app(
+            "ended = 'no'\nfunction on_load(c) c.input:edit({text='hi', "
+            "on_end=function(c, s, why) ended = s .. ':' .. why; c:invalidate() end}) end\n"
+            "function on_input(c, e) ended = 'app got ' .. e.key; c:invalidate() return false end\n"
+            "function on_draw(c, g) g:clear(0); g:text(0, 0, 'ended ' .. ended) end\n"
+        )
+    )
+    emu.key("back")
+    assert emu.pending is None and emu.has_text("ended hi:back")
 
 
 def test_leave_dialog_is_drawn(make_app, emu_factory):

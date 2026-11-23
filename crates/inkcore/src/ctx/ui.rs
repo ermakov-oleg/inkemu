@@ -1,13 +1,13 @@
 //! `ctx.dialog` and `ctx.input`: dialogs, text input, toasts (0.1 `ctx_ui.install`, dialog part).
-use std::cell::{Cell, OnceCell, RefCell};
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use mlua::{IntoLuaMulti, Lua, MultiValue, Table, Value};
 
 use super::object::{method, new_object};
-use super::{arg, check_arg, opt_str};
+use super::{arg, check_arg, nil, opt_str, soft_fail};
 use crate::dialog::Handler;
-use crate::emu::{Host, Shared};
+use crate::emu::{with, Host, Shared};
 
 pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
     let text = {
@@ -19,6 +19,9 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
             let (Value::Table(opts), Value::Function(f)) = (arg(&a, 0), arg(&a, 1).clone()) else {
                 unreachable!()
             };
+            if busy(&Host { lua, st: &st }) {
+                return soft_fail(lua, "busy");
+            }
             let default = opt_str(opts, "text")?;
             let done = Rc::new(move |h: &Host, text: &str| {
                 h.clear_pending();
@@ -33,6 +36,7 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
                     }
                 }),
                 type_text: Some(done),
+                ok_keeps_open: false,
             };
             Host { lua, st: &st }.set_pending("text", opt_str(opts, "title")?, default, handler);
             Ok(MultiValue::new())
@@ -46,49 +50,89 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
             let Value::Table(opts) = arg(&a, 0) else {
                 unreachable!()
             };
+            let h = Host { lua, st: &st };
+            let screen = with(&st, |s| (s.canvas.w, s.canvas.h));
+            let Some(o) = edit_opts(opts, screen)? else {
+                return soft_fail(lua, "invalid_argument");
+            };
+            if busy(&h) {
+                return soft_fail(lua, "busy");
+            }
             let ed = Rc::new(Edit {
-                text: RefCell::new(opt_str(opts, "text")?),
-                obj: OnceCell::new(),
+                text: RefCell::new(o.text),
                 id: Cell::new(0),
-                on_change: opts.get("on_change")?,
-                on_end: opts.get("on_end")?,
+                max_chars: o.max_chars,
+                multiline: o.multiline,
+                newline: o.newline,
+                on_change: o.on_change,
+                on_end: o.on_end,
             });
             let set_text = {
                 let (st, ed) = (st.clone(), ed.clone());
                 method(move |lua, args| {
-                    let a = args.into_vec();
-                    check_arg("set_text", 1, arg(&a, 0), "string")?;
-                    let Value::String(s) = arg(&a, 0) else {
-                        unreachable!()
+                    let h = Host { lua, st: &st };
+                    if !ed.active(&h) {
+                        return soft_fail(lua, "inactive");
+                    }
+                    let text = match args.into_iter().next() {
+                        Some(Value::String(s)) => String::from_utf8(s.as_bytes().to_vec()).ok(),
+                        _ => None,
                     };
-                    ed.sync(&Host { lua, st: &st }, s.to_string_lossy());
-                    Ok(MultiValue::new())
+                    match text.filter(|t| text_ok(t, ed.max_chars, ed.multiline)) {
+                        Some(t) => {
+                            ed.sync(&h, t);
+                            true.into_lua_multi(lua)
+                        }
+                        None => soft_fail(lua, "invalid_argument"),
+                    }
+                })
+            };
+            let text = {
+                let (st, ed) = (st.clone(), ed.clone());
+                method(move |lua, _| {
+                    if !ed.active(&Host { lua, st: &st }) {
+                        return Ok(nil());
+                    }
+                    let text = ed.text.borrow().clone();
+                    text.into_lua_multi(lua)
                 })
             };
             let close = {
                 let (st, ed) = (st.clone(), ed.clone());
                 method(move |lua, _| {
                     let h = Host { lua, st: &st };
-                    if h.is_pending(ed.id.get()) {
-                        h.clear_pending();
+                    if !ed.active(&h) {
+                        return Ok(nil());
                     }
-                    Ok(MultiValue::new())
+                    h.clear_pending();
+                    let text = ed.text.borrow().clone();
+                    text.into_lua_multi(lua)
                 })
             };
-            let obj = new_object(lua, "edit", &[("set_text", set_text), ("close", close)])?;
-            obj.raw_set("text", ed.text.borrow().as_str())?;
-            let _ = ed.obj.set(obj.clone());
+            let obj = new_object(
+                lua,
+                "edit",
+                &[("set_text", set_text), ("text", text), ("close", close)],
+            )?;
             let (on_answer, on_type) = (ed.clone(), ed.clone());
             let handler = Handler {
-                answer: Rc::new(move |h, ok| {
-                    on_answer.finish(h, if ok { "enter" } else { "cancel" })
+                answer: Rc::new(move |h, ok| match ok {
+                    true if on_answer.newline => {
+                        on_answer.insert(h, '\n');
+                    }
+                    true => on_answer.finish(h, "enter"),
+                    false => on_answer.finish(h, "back"),
                 }),
                 type_text: Some(Rc::new(move |h, s| on_type.type_text(h, s))),
+                ok_keeps_open: ed.newline,
             };
             let text = ed.text.borrow().clone();
-            let id =
-                Host { lua, st: &st }.set_pending("edit", opt_str(opts, "title")?, text, handler);
-            ed.id.set(id);
+            ed.id
+                .set(h.set_pending("edit", opt_str(opts, "title")?, text, handler));
+            if let Some((x, y, w, rh)) = o.rect {
+                let msg = format!("edit rect {x},{y} {w}x{rh}: its text area is not drawn");
+                with(&st, |s| s.log_line(&msg));
+            }
             obj.into_lua_multi(lua)
         })
     };
@@ -101,14 +145,19 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
             let (Value::Table(opts), Value::Function(f)) = (arg(&a, 0), arg(&a, 1).clone()) else {
                 unreachable!()
             };
+            let h = Host { lua, st: &st };
+            if h.pending_kind() == Some("edit") {
+                return soft_fail(lua, "busy");
+            }
             let handler = Handler {
                 answer: Rc::new(move |h, ok| {
                     h.protected(&f, (h.ctx(), ok), "ctx.dialog:confirm callback");
                 }),
                 type_text: None,
+                ok_keeps_open: false,
             };
             let (title, text) = (opt_str(opts, "title")?, opt_str(opts, "text")?);
-            Host { lua, st: &st }.set_pending("confirm", title, text, handler);
+            h.set_pending("confirm", title, text, handler);
             Ok(MultiValue::new())
         })
     };
@@ -135,22 +184,143 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
     Ok(())
 }
 
-/// One `ctx.input:edit` session: the text so far and the dialog it belongs to.
+/// An open text input, docked input or confirm makes another of them `busy` (§4).
+fn busy(h: &Host) -> bool {
+    h.pending_kind()
+        .is_some_and(|k| matches!(k, "text" | "edit" | "confirm"))
+}
+
+/// The `ctx.input:edit` options the emulation uses, after the §4 checks.
+struct EditOpts {
+    text: String,
+    max_chars: usize,
+    multiline: bool,
+    newline: bool,
+    rect: Option<(i64, i64, i64, i64)>,
+    on_change: Value,
+    on_end: Value,
+}
+
+/// An integer, or a float with an integral value in the device's 32-bit range.
+fn int(v: &Value) -> Option<i64> {
+    match v {
+        Value::Integer(i) => Some(i64::from(*i)),
+        Value::Number(n) if n.fract() == 0.0 && n.abs() <= i32::MAX as f32 => Some(*n as i64),
+        _ => None,
+    }
+}
+
+/// An optional UTF-8 string option; Err for any other value.
+fn opt_utf8(v: Value) -> Result<Option<String>, ()> {
+    match v {
+        Value::Nil => Ok(None),
+        Value::String(s) => String::from_utf8(s.as_bytes().to_vec())
+            .map(Some)
+            .map_err(drop),
+        _ => Err(()),
+    }
+}
+
+fn text_ok(text: &str, max_chars: usize, multiline: bool) -> bool {
+    text.chars().count() <= max_chars && (multiline || !text.contains('\n'))
+}
+
+/// The options checked against the §4 table; None when one breaks its rule.
+fn edit_opts(opts: &Table, (sw, sh): (u32, u32)) -> mlua::Result<Option<EditOpts>> {
+    let max_chars = match opts.get::<Value>("max_chars")? {
+        Value::Nil => 128,
+        v => match int(&v) {
+            Some(n @ 1..=512) => n as usize,
+            _ => return Ok(None),
+        },
+    };
+    let multiline = match opts.get::<Value>("multiline")? {
+        Value::Nil => false,
+        Value::Boolean(b) => b,
+        _ => return Ok(None),
+    };
+    let Ok(text) = opt_utf8(opts.get("text")?) else {
+        return Ok(None);
+    };
+    let text = text.unwrap_or_default();
+    let Ok(placeholder) = opt_utf8(opts.get("placeholder")?) else {
+        return Ok(None);
+    };
+    let (Ok(kind), Ok(enter)) = (opt_utf8(opts.get("kind")?), opt_utf8(opts.get("enter")?)) else {
+        return Ok(None);
+    };
+    let kind_ok = matches!(
+        kind.as_deref(),
+        None | Some("text" | "number" | "secret" | "letters")
+    );
+    let enter = enter.as_deref();
+    let enter_ok = match enter {
+        None | Some("done" | "save" | "next" | "search") => true,
+        Some("newline") => multiline,
+        Some(_) => false,
+    };
+    let fits = text_ok(&text, max_chars, multiline);
+    if !(kind_ok && enter_ok && fits && placeholder.map_or(0, |p| p.len()) <= 128) {
+        return Ok(None);
+    }
+    let rect = match opts.get::<Value>("rect")? {
+        Value::Nil => None,
+        Value::Table(t) => {
+            let mut r = [0; 4];
+            for (v, k) in r.iter_mut().zip(["x", "y", "w", "h"]) {
+                match int(&t.get::<Value>(k)?) {
+                    Some(n) => *v = n,
+                    None => return Ok(None),
+                }
+            }
+            let [x, y, w, h] = r;
+            let on_screen = x >= 0 && y >= 0 && x + w <= i64::from(sw) && y + h <= i64::from(sh);
+            if w < 1 || h < 1 || !on_screen {
+                return Ok(None);
+            }
+            Some((x, y, w, h))
+        }
+        _ => return Ok(None),
+    };
+    let (on_change, on_end) = (
+        opts.get::<Value>("on_change")?,
+        opts.get::<Value>("on_end")?,
+    );
+    let callback = |v: &Value| matches!(v, Value::Nil | Value::Function(_));
+    if !callback(&on_change) || !callback(&on_end) {
+        return Ok(None);
+    }
+    Ok(Some(EditOpts {
+        text,
+        max_chars,
+        multiline,
+        newline: enter == Some("newline"),
+        rect,
+        on_change,
+        on_end,
+    }))
+}
+
+/// One `ctx.input:edit` session: the committed text and the dialog it belongs to.
 struct Edit {
     text: RefCell<String>,
-    obj: OnceCell<Table>,
     id: Cell<u64>,
+    max_chars: usize,
+    multiline: bool,
+    /// `enter = "newline"`: the confirm key inserts a line break instead of ending editing.
+    newline: bool,
     on_change: Value,
     on_end: Value,
 }
 
 impl Edit {
+    fn active(&self, h: &Host) -> bool {
+        h.is_pending(self.id.get())
+    }
+
     fn sync(&self, h: &Host, text: String) {
-        if let Some(obj) = self.obj.get() {
-            let _ = obj.raw_set("text", text.as_str());
-        }
-        if h.is_pending(self.id.get()) {
-            crate::emu::with(h.st, |s| {
+        if self.active(h) {
+            with(h.st, |s| {
                 if let Some(p) = s.pending.as_mut() {
                     p.text = text.clone();
                 }
@@ -159,33 +329,42 @@ impl Edit {
         *self.text.borrow_mut() = text;
     }
 
-    fn finish(&self, h: &Host, reason: &str) {
-        if h.is_pending(self.id.get()) {
+    fn finish(&self, h: &Host, how: &str) {
+        if self.active(h) {
             h.clear_pending();
         }
         if !self.on_end.is_nil() {
             let text = self.text.borrow().clone();
-            h.protected_value(
-                &self.on_end,
-                (h.ctx(), text, reason),
-                "ctx.input:edit on_end",
-            );
+            h.protected_value(&self.on_end, (h.ctx(), text, how), "ctx.input:edit on_end");
         }
     }
 
-    fn type_text(&self, h: &Host, s: &str) {
-        for ch in s.chars() {
-            let next = format!("{}{ch}", self.text.borrow());
-            self.sync(h, next);
-            if !self.on_change.is_nil() {
-                let text = self.text.borrow().clone();
-                h.protected_value(&self.on_change, (h.ctx(), text), "ctx.input:edit on_change");
-            }
-            // closed by on_change, or the app failed
-            if !h.is_pending(self.id.get()) {
-                return;
-            }
+    /// Types one character; false once editing has ended. A newline is the confirm key.
+    fn insert(&self, h: &Host, ch: char) -> bool {
+        if ch == '\n' && !self.newline {
+            self.finish(h, "enter");
+            return false;
         }
-        self.finish(h, "enter");
+        let next = {
+            let text = self.text.borrow();
+            (text.chars().count() < self.max_chars).then(|| format!("{text}{ch}"))
+        };
+        let Some(next) = next else {
+            return true;
+        };
+        self.sync(h, next);
+        if !self.on_change.is_nil() {
+            let text = self.text.borrow().clone();
+            h.protected_value(&self.on_change, (h.ctx(), text), "ctx.input:edit on_change");
+        }
+        // closed by on_change, or the app failed
+        self.active(h)
+    }
+
+    /// Types `s`, then presses the confirm key unless it inserts line breaks.
+    fn type_text(&self, h: &Host, s: &str) {
+        if s.chars().all(|ch| self.insert(h, ch)) && !self.newline {
+            self.finish(h, "enter");
+        }
     }
 }

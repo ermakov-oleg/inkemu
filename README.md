@@ -117,7 +117,8 @@ Every input advances virtual time by 350 ms. Daemon discovery goes through `<sta
 
 An open dialog (`ctx.dialog:confirm`, `ctx.input:text`/`edit`, the host's "Leave app?") is drawn as a plate with its
 title, text or field and `Yes`/`No` or `OK`/`Cancel`, so it shows in shots and `texts`. While it is open, input does
-not reach the app (the log says so); tapping a button (`tap-text Yes`) answers it, as do `answer` and `type`.
+not reach the app (the log says so); tapping a button (`tap-text Yes`) answers it, as do `answer` and `type`;
+`key back` ends an `edit` as Back.
 The window shows the same dialogs as native Tk dialogs instead.
 
 ### Window keys
@@ -188,6 +189,10 @@ included, then seeds `files/` from `<fixtures dir>/files/`.
 - `polyline` and `polygon` with too few points or an odd array return `nil, "invalid_argument"` instead of drawing
   nothing or failing the frame; more than 128 points return `nil, "limit_exceeded"`.
 - `g:pattern` with an unknown `kind` returns `nil, "invalid_argument"`; without `kind` it draws `dot`.
+- `ctx.input:edit`: the edit object's text is the method `ed:text()` (the raw `ed.text` field is gone),
+  `ed:close()` returns the final text, `on_end` gets `how = "back"` instead of `"cancel"`, bad options return
+  `nil, "invalid_argument"`, and a second edit returns `nil, "busy"` instead of replacing the first. `input:text`
+  returns `nil, "busy"` while a text input, an edit or a confirm is open, and `dialog:confirm` while an edit is.
 - Circles and arcs follow the pixel rules of §6: half a pixel smaller than in 0.1, an arc of whole turns draws
   nothing, and a filled `arc` is a stroke, not a pie slice.
 
@@ -316,7 +321,11 @@ the start with an error. From each file inkemu takes:
 - `files` (`read`, `write`, `append`, `exists`, `size`, `remove`, `list`; `path` = `/AppFiles/<app_id>`).
 - `package` (`read`, `open_text`, `image`, `exists`, `size`, `cache_stats` = `{}`).
 - `net` (`request`; GET and POST), `dialog` (`confirm`, `toast`), `input` (`text`, `edit`, `keyboard_h` = 436,
-  `pointer` = true).
+  `pointer` = true). `input:edit` checks its options as §4 (`rect`, `text`, `placeholder`, `max_chars`, `kind`,
+  `multiline`, `enter`, else `nil, "invalid_argument"`) and returns `ed` with `set_text`, `text` and `close`;
+  `on_end` gets `how` = `"enter"` or `"back"` (the Back key or `answer no`). While it is open, another `edit`,
+  `input:text` and `dialog:confirm` return `nil, "busy"`; `edit` and `input:text` are also busy while a text input
+  or a confirm is open.
 - `image`, `qr`, `json`, `base64` (`encode`, `decode`), `hex`, `url` (`encode`, `decode`), `zlib`, `random` (`uuid`, `bytes`).
 - `hash`: `sha256`, `md5` and `hmac_sha256` return the raw digest bytes (use `ctx.hex:encode` for text); `sha1` returns the
   20 raw bytes too; `crc32` returns a signed 32-bit integer (values from 2^31 wrap to negative); all verified in QEMU on firmware 26112001.
@@ -348,6 +357,11 @@ offset_minutes revision valid`.
 - `ctx.capabilities` reports what inkemu emulates: `dialog frontlight image_decode image_transform pattern reader ui`
   are true, `ble identity nn ttf` false. The device reports `ble dialog frontlight identity image_decode
   image_transform nn pattern reader ui` as true and `ttf` as false.
+- Docked input (`ctx.input:edit`) is the dialog plate: the app gets no input while it is open (on the device,
+  pointers outside `rect` and the keys other than Back still reach it), the host draws no text in `rect` (it is
+  checked and logged), `kind` and `placeholder` are only checked, and there is no composition and no full-screen
+  fallback. `type` types the text and presses the confirm key; a newline in it is the confirm key too. With
+  `enter = "newline"`, `type` and `answer yes` insert a line break and the field stays open.
 - `ctx.system:act(s)` needs a string ("string expected" otherwise), as on the device. `"refresh"` makes the next
   frame full, like `ctx:invalidate("full")`; inkemu answers every other string, `"sleep"` and `"power_off"`
   included, with `nil, "invalid_argument"` and logs it.
