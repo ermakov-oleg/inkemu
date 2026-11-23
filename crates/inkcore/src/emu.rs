@@ -121,6 +121,8 @@ pub(crate) struct State {
     pub(crate) images: HashMap<i64, Rc<Gray>>,
     pub(crate) next_image: i64,
     pub(crate) frame_commands: usize,
+    /// `g:image` transform options were already warned about in this session.
+    pub(crate) transform_warned: bool,
     /// The API the running package declares: §7 text options are read from 2.16 and 2.28 on.
     pub(crate) app_api: (u32, u32),
     pub(crate) locked: bool,
@@ -520,6 +522,7 @@ pub(crate) fn boot(st: &Shared, mode: BootMode) {
             };
         }
         s.frame_commands = 0;
+        s.transform_warned = false;
         s.app_api = api_of(&manifest);
         s.frame_seq += 1;
         s.lua.replace(new)
@@ -673,6 +676,7 @@ impl Core {
             images: HashMap::new(),
             next_image: 0,
             frame_commands: 0,
+            transform_warned: false,
             app_api: (0, 8),
             locked: false,
             lock_wakes: 0,

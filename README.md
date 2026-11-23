@@ -196,6 +196,23 @@ included, then seeds `files/` from `<fixtures dir>/files/`.
   returns `nil, "busy"` while a text input, an edit or a confirm is open, and `dialog:confirm` while an edit is.
 - Circles and arcs follow the pixel rules of §6: half a pixel smaller than in 0.1, an arc of whole turns draws
   nothing, and a filled `arc` is a stroke, not a pie slice.
+- `g:text_box` with an `h` below one line height draws nothing and succeeds; 0.1 drew one line. Give it at least
+  `font.line_height`. A line that cannot wrap is clipped at the box edge, CJK and Thai text wraps between
+  characters, and packages declaring API 2.16 or later get kinsoku.
+- `ctx.fonts:size(px)` with `px` outside 8..96 or fractional returns `nil, "invalid_argument"`; 0.1 returned the
+  nearest font. Clamp `px` first, or pick `ctx.fonts.small`, `medium` or `large` directly.
+- Text metrics changed: the bundled font's ascents are 17/21/26, DejaVu advances are whole pixels and the baseline
+  moved, so text shifts and pixel or screenshot baselines of 0.1 no longer match. Regenerate them, and measure
+  with `font:measure` instead of assuming widths.
+- `g:text`, `g:text_box`, `font:measure` and `font:layout` return `nil, code` for right-to-left text, invalid
+  UTF-8 and text over the byte limits (8192 per call, 65536 per frame and per `layout` call). Before, `measure`
+  returned a number and the text was drawn or skipped. Check the second result when the text comes from outside.
+- `font:measure` and `font:layout` raise `bad argument #1` for anything but a string or a number; 0.1 measured the
+  printed form of `nil` or a table. Pass `tostring(v)` or a real string.
+- Draw calls after the 1024th command of a frame return `nil, "limit_exceeded"`; 0.1 dropped them
+  with only a log warning. Check the result, or draw fewer commands (a layer or one `g:image`).
+- `ctx:invalidate(x)` with anything but nothing or `"full"`, and `ctx:defer_full_refresh(ms)` outside 1..60000 or
+  fractional, return `nil, "invalid_argument"`, and a refused `invalidate` no longer asks for a frame.
 
 ## Supported API
 
@@ -355,7 +372,7 @@ offset_minutes revision valid`.
 - Not emulated, so nil: `ctx.crypto`, `ctx.nn`, `ctx.widget`, `dialog:choose`, `i18n:t`, `url:query`,
   `input.keys`, `input.listen`, `input.gamepad`, `device.display`, `device.keep_awake`, `device.radios`,
   `screen.occlusion`. No BLE, no WebSocket; only GET and POST get a network callback.
-- `ctx.capabilities` reports what inkemu emulates: `dialog frontlight image_decode image_transform pattern reader ui`
+- `ctx.capabilities` reports what inkemu emulates, except that `image_transform` is true as on the device: `dialog frontlight image_decode image_transform pattern reader ui`
   are true, `ble identity nn ttf` false. The device reports `ble dialog frontlight identity image_decode
   image_transform nn pattern reader ui` as true and `ttf` as false.
 - Docked input (`ctx.input:edit`) is the dialog plate: the app gets no input while it is open (on the device,
@@ -393,7 +410,9 @@ offset_minutes revision valid`.
 - `g:image` resolves the image when the command is recorded, not at the end of `on_draw`.
 - Images and layers have no transparency: a new layer is white, not transparent, so a layer covers what lies under
   it and `invert` turns its undrawn area black. `g:image`'s `background` is not emulated (with opaque images there is
-  nothing for it to show through), nor are `gray` and the transforms (`flip_x`, `rotate`, ...). `w` and `h` scale
+  nothing for it to show through), nor are `gray` and the transforms (`flip_x`, `flip_y`, `rotate`, `pivot_x`,
+  `pivot_y`): `ctx.capabilities.image_transform` is true as on the device, but these options are ignored and the
+  log warns once per session. `w` and `h` scale
   each side on its own, up to 8192 (the contract scales only when both are set, up to 4096), and shrinking the width
   is Lanczos plus dithering, not nearest-neighbour. `color` tints only an image (or `src` region) whose pixels are
   all pure black or white, so an anti-aliased PNG icon is not tinted.

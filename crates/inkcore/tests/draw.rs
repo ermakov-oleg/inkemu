@@ -389,3 +389,21 @@ fn image_radius_clips_like_a_rounded_rect_and_white_color_tints_ink() {
     assert_eq!(black(&black_layer("g:image(l, 30, 30, {color = 0})")), 0);
     assert_eq!(black(&black_layer("g:image(l, 30, 30, {color = 8})")), 200);
 }
+
+#[test]
+fn image_transform_options_warn_once_and_draw_untransformed() {
+    let core = boot(
+        "function on_load(c) l = c.layers:create(20, 10) l:draw(function(g) g:clear(0) g:rect(0, 0, 10, 10, {fill=true}) end) end\n\
+         function on_draw(c, g) g:clear(0) g:image(l, 0, 0, {flip_x = true}) g:image(l, 0, 20, {rotate = 90}) g:image(l, 0, 40) end\n",
+    );
+    assert!(core.errors().is_empty(), "{:?}", &*core.errors());
+    let f = core.raw_frame();
+    assert_eq!((f.get(2, 5), f.get(15, 5)), (1, 0));
+    let w: Vec<_> = core
+        .warnings()
+        .iter()
+        .filter(|w| w.contains("not emulated"))
+        .cloned()
+        .collect();
+    assert_eq!(w.len(), 1, "{w:?}");
+}

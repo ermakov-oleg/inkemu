@@ -620,6 +620,23 @@ fn image_command(st: &Shared, target: &Target, a: &[Value]) -> Result<Cmd, Refus
             Rc::new(img.crop(sx, sy, sw, sh))
         }
     };
+    if [
+        "flip_x",
+        "flip_y",
+        "rotate",
+        "pivot_x",
+        "pivot_y",
+        "background",
+    ]
+    .iter()
+    .any(|k| !get(&o, k).is_nil())
+    {
+        with(st, |s| {
+            if !std::mem::replace(&mut s.transform_warned, true) {
+                s.warn("g:image: flip_x, flip_y, rotate, pivot_x, pivot_y and background are not emulated; drawn without them");
+            }
+        });
+    }
     let w = side("w", &get(&o, "w"), img.w)?;
     let h = side("h", &get(&o, "h"), img.h)?;
     let look = Look {

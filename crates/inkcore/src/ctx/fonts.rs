@@ -19,18 +19,26 @@ fn opts(a: &[Value], i: usize) -> Option<Table> {
     }
 }
 
-/// The text of a `measure`/`layout` argument (strings as they are, anything else as 0.1 printed it), or the
-/// refusal code: too long, not UTF-8, or right-to-left.
-fn text(v: &Value, max: usize) -> Result<String, &'static str> {
+/// The text of a `measure`/`layout` argument: a string, or a number as Lua coerces it; any other type raises.
+/// The inner error is the refusal code: too long, not UTF-8, or right-to-left.
+fn text(f: &str, v: &Value, max: usize) -> mlua::Result<Result<String, &'static str>> {
     let bytes = match v {
         Value::String(s) => s.as_bytes().to_vec(),
-        v => fmt(v).into_bytes(),
+        Value::Integer(_) | Value::Number(_) => fmt(v).into_bytes(),
+        v => {
+            check_arg(f, 1, v, "string")?;
+            unreachable!("check_arg refuses a non-string")
+        }
     };
-    let s = utf8_text(bytes, max)?;
-    if has_rtl(&s) {
-        return Err("invalid_argument");
-    }
-    Ok(s)
+    let s = match utf8_text(bytes, max) {
+        Ok(s) => s,
+        Err(code) => return Ok(Err(code)),
+    };
+    Ok(if has_rtl(&s) {
+        Err("invalid_argument")
+    } else {
+        Ok(s)
+    })
 }
 
 pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
@@ -40,7 +48,7 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
         let (f, st1) = (fonts.clone(), st.clone());
         let measure = method(move |lua, args| {
             let a = args.into_vec();
-            let s = match text(arg(&a, 0), CALL_TEXT_BYTES) {
+            let s = match text("measure", arg(&a, 0), CALL_TEXT_BYTES)? {
                 Ok(s) => s,
                 Err(code) => return soft_fail(lua, code),
             };
@@ -50,9 +58,10 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
         let (f, st1) = (fonts.clone(), st.clone());
         let layout = method(move |lua, args| {
             let a = args.into_vec();
+            let s = text("layout", arg(&a, 0), LAYOUT_BYTES)?;
             check_arg("layout", 2, arg(&a, 1), "number")?;
             check_arg("layout", 3, arg(&a, 2), "number")?;
-            let s = match text(arg(&a, 0), LAYOUT_BYTES) {
+            let s = match s {
                 Ok(s) => s,
                 Err(code) => return soft_fail(lua, code),
             };

@@ -272,3 +272,35 @@ fn unreadable_user_fonts_fall_back_to_dejavu_with_a_warning() {
         json!(dejavu.ascent("medium"))
     );
 }
+
+#[test]
+fn measure_and_layout_take_a_string_or_a_number_only() {
+    let mut core = draw("");
+    for (call, name) in [("measure(%)", "measure"), ("layout(%, 100, 100)", "layout")] {
+        for (bad, ty) in [("nil", "nil"), ("{}", "table"), ("true", "boolean")] {
+            let code = format!(
+                "local ok, e = pcall(function() return ctx.fonts.medium:{} end) return {{ok, e}}",
+                call.replace('%', bad)
+            );
+            let r = core.lua_eval(&code).unwrap();
+            let msg = r[1].as_str().unwrap_or_default();
+            assert!(
+                r[0] == json!(false)
+                    && msg.contains(&format!(
+                        "bad argument #1 to '{name}' (string expected, got {ty})"
+                    )),
+                "{call} {bad}: {r}"
+            );
+        }
+    }
+    assert_eq!(
+        core.lua_eval("return ctx.fonts.medium:measure(42) == ctx.fonts.medium:measure('42')")
+            .unwrap(),
+        json!(true)
+    );
+    assert_eq!(
+        core.lua_eval("return select('#', ctx.fonts.medium:layout(42, 100, 100))")
+            .unwrap(),
+        json!(3)
+    );
+}
