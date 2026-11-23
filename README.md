@@ -181,8 +181,9 @@ included, then seeds `files/` from `<fixtures dir>/files/`.
   26112001 has none of them. Use `g:rect(x, y, w, h, {radius = r})`, `font:measure(text)` (for example
   `ctx.fonts.medium:measure("Hi")`) and `g:pattern`. There is no compatibility mode.
 - A `g` kept after its callback returns `nil, "inactive"` instead of drawing into the next frame.
-- `g:image` of something that is not an image is `nil, "invalid_argument"`, and of a released image or layer
-  `nil, "invalid_handle"`, instead of drawing nothing or failing the frame. `layer:draw` on a released layer returns
+- `g:image` of something that is not an image is `nil, "invalid_argument"`, and of a released `ctx.image` or
+  `ctx.qr` image or layer `nil, "invalid_handle"`, instead of drawing nothing or failing the frame (a released
+  `ctx.package:image` stays drawable). `layer:draw` on a released layer returns
   `nil, "invalid_handle"` instead of raising, and `release()` returns true.
 - `polyline` and `polygon` with too few points or an odd array return `nil, "invalid_argument"` instead of drawing
   nothing or failing the frame; more than 128 points return `nil, "limit_exceeded"`.
@@ -218,13 +219,14 @@ Shapes and images, as in the contract (§6):
 - `g:pattern`: `kind` defaults to `dot` and `density` to 50. An unknown `kind`, or a `density` that is not a whole
   number from 0 to 100, is `nil, "invalid_argument"` and draws nothing.
 - `g:image(img, x, y, opts)` takes an object from `ctx.package:image`, `ctx.image`, `ctx.qr` or `ctx.layers`.
-  Anything else, or a layer drawn into itself, is `nil, "invalid_argument"`; a released one is
+  Anything else, or a layer drawn into itself, is `nil, "invalid_argument"`; a released runtime image or layer is
   `nil, "invalid_handle"`. `src = {x = , y = , w = , h = }`, or `{x, y, w, h}` by position, draws only that region of
   the image: four whole numbers, `x, y >= 0`, `w, h >= 1`, inside the image, else `nil, "invalid_argument"`; `w` and
   `h` then scale the region. `invert = true` swaps black and white after dithering, `radius` clips the output to
   the corners `g:rect{radius}` draws, and a `color` of 0–7 draws the ink of a black-and-white image white.
-- `release()` of an image or a layer returns true and can be repeated. `layer:draw` on a released layer returns
-  `nil, "invalid_handle"` without calling the function.
+- `release()` of an image or a layer returns true and can be repeated. A `ctx.package:image` stays drawable after it
+  (§8); an image from `ctx.image` or `ctx.qr`, or a layer, is then `nil, "invalid_handle"`. `layer:draw` on a
+  released layer returns `nil, "invalid_handle"` without calling the function.
 
 Text, as in the contract (§7):
 
@@ -380,7 +382,6 @@ offset_minutes revision valid`.
   each side on its own, up to 8192 (the contract scales only when both are set, up to 4096), and shrinking the width
   is Lanczos plus dithering, not nearest-neighbour. `color` tints only an image (or `src` region) whose pixels are
   all pure black or white, so an anti-aliased PNG icon is not tinted.
-- A released `ctx.package:image` is `invalid_handle` like the other images; the contract keeps it drawable.
 - Layers: `draw` inside `on_draw` or inside another `draw` still runs (the contract returns `nil, "busy"`), an error
   in its function fails the app, and `set_bits` and the limit of 4 layers are not emulated.
 - Remote commands (daemon verbs, MCP) freeze the window clock, read-only ones included, so a screenshot is stable;

@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use mlua::{IntoLuaMulti, Lua, Table};
 
-use super::image::new_image;
+use super::image::{new_image, Kind};
 use super::object::{method, new_object};
 use super::{arg, check_arg, nil, round_ms, soft_fail};
 use crate::draw::image::Gray;
@@ -78,8 +78,14 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
                     Ok(nil())
                 })
             };
-            let (obj, new_id) =
-                new_image(lua, &st, Gray::white(w, h), "layer", vec![("draw", draw)])?;
+            let (obj, new_id) = new_image(
+                lua,
+                &st,
+                Gray::white(w, h),
+                Kind::Runtime,
+                "layer",
+                vec![("draw", draw)],
+            )?;
             id.set(new_id);
             obj.into_lua_multi(lua)
         })
