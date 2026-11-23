@@ -483,11 +483,7 @@ fn next_break(para: &[(usize, char, i64)], i: usize, avail: f64, o: &LayoutOpts)
                     .find(|&q| q == n || boundary(para, q))
                     .unwrap_or(n)
             });
-            return if o.kinsoku {
-                kinsoku(para, k, p, o.wrap)
-            } else {
-                p
-            };
+            return if o.kinsoku { kinsoku(para, k, p) } else { p };
         }
         w += a;
         j += 1;
@@ -518,7 +514,7 @@ fn boundary(para: &[(usize, char, i64)], j: usize) -> bool {
 
 /// 2.16: a break before a character that may not start a line, or after one that may not end it, moves back
 /// up to 8 code points to a break that breaks neither rule; else it stays.
-fn kinsoku(para: &[(usize, char, i64)], k: usize, p: usize, wrap: Wrap) -> usize {
+fn kinsoku(para: &[(usize, char, i64)], k: usize, p: usize) -> usize {
     let bad = |q: usize| {
         q < para.len() && (NO_START.contains(&para[q].1) || NO_END.contains(&para[q - 1].1))
     };
@@ -531,7 +527,8 @@ fn kinsoku(para: &[(usize, char, i64)], k: usize, p: usize, wrap: Wrap) -> usize
         if q <= k {
             break;
         }
-        if !bad(q) && breaks(para, q, wrap) {
+        // en-07: the moved break must be a valid `word` break point, in `char` wrapping too
+        if !bad(q) && breaks(para, q, Wrap::Word) {
             return q;
         }
     }

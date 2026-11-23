@@ -3,7 +3,7 @@ from pathlib import Path
 
 HELLO = Path(__file__).resolve().parent.parent / "examples" / "hello"
 # the same value is pinned in crates/inkcore/examples/hello_hash.rs, which CI also runs under wasm
-HELLO_HASH = "077f5578ec11f69429c25e4db0e2b5c8b016abd240a6a270143021d5fceae4c0"
+HELLO_HASH = "382aeb4feb77bc990eb6ba982afff505f55454c768f3dce4518d7a6725b46e67"
 
 
 def test_hello_frame_hash_matches_the_rust_example(emu_factory):

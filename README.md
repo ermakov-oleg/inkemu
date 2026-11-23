@@ -195,7 +195,8 @@ Text, as in the contract (§7):
 
 - `g:text`, `g:text_box` and `font:measure` take up to 8192 bytes per call, `font:layout` up to 65536, and all text
   of one frame up to 65536 bytes; past that the call returns `nil, "limit_exceeded"`. Text that is not valid UTF-8
-  is `nil, "invalid_argument"`; so is right-to-left text in `g:text` and `g:text_box`, which log a warning for both.
+  is `nil, "invalid_argument"`, and so is text with a right-to-left character; `g:text` and `g:text_box` also log a
+  warning.
 - A tab is one space; `\n` and other control characters have no width and are not drawn (`text_box` breaks the line
   at `\n`).
 - `font:measure(text, {bold, tabular})`: bold adds 1 pixel to a line that has any width; with `tabular` every digit
@@ -216,8 +217,8 @@ Text, as in the contract (§7):
 - `bold` and `tabular` work for packages that declare API 2.16 or above, `italic`, `underline` and `strike` for 2.28
   or above; older packages get the plain text.
 - `ctx.fonts:size(px, sample)`: `px` is a whole number from 8 to 96 and `sample` nil or text (at most 256 bytes,
-  valid UTF-8, no NUL, no right-to-left text), else `nil, "invalid_argument"`; a `sample` that is neither a string,
-  a number nor nil raises an error. The answer is still the nearest of the three system fonts.
+  valid UTF-8, no NUL, no right-to-left text), else `nil, "invalid_argument"`; a `sample` that is neither a string
+  nor nil (a number included) raises an error. The answer is still the nearest of the three system fonts.
 
 Frames: `emu.status()["refresh"]` is the waveform of the last app frame presented, `"partial"` or `"full"`, and
 `emu.status()["refreshes"]` lists the waveforms of the last 64 app frames, oldest first (one step such as a tap can
@@ -335,7 +336,7 @@ offset_minutes revision valid`.
     `overflow` (inkemu: the default), a newline at the very end of the text (inkemu: no empty line after it),
     `consumed` when `ellipsis` took characters off the last line (inkemu: the bytes up to the kept ones), a
     `text_box` with no line that fits in a frame that is already full (inkemu: accepted, it costs nothing), a
-    `ctx.fonts:size` sample over 256 bytes (inkemu: `invalid_argument`) or given as a number (inkemu: accepted).
+    `ctx.fonts:size` sample over 256 bytes (inkemu: `invalid_argument`).
 - `g:round_rect`, `g:measure`, `g:measure_text`, `g:fill_pattern` and `g:pattern_rect` are not in the device's `g`
   metatable listing and were not verified by a call; inkemu keeps them (`round_rect` as before; the device's way
   is `g:rect` with `radius`).

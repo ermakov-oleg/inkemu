@@ -302,10 +302,11 @@ fn ellipsis_ends_the_last_line_that_fits() {
     assert_eq!(&s[..lay.consumed], &format!("alpha beta {kept}"));
     // nothing taken off: the wrap-point space still counts toward the page
     let s = "alpha beta gamma delta";
+    let w = w.max(f.measure("medium", "gamma…"));
+    assert!(f.measure("medium", "gamma delta") > w && f.measure("medium", "alpha beta gamma") > w);
     let lay = f.layout("medium", s, f64::from(w), 2.0 * 24.0, &o);
-    if lay.lines[1].text == "gamma…" {
-        assert_eq!(&s[..lay.consumed], "alpha beta gamma ");
-    }
+    assert_eq!(texts(&lay), ["alpha beta", "gamma…"]);
+    assert_eq!(&s[..lay.consumed], "alpha beta gamma ");
     // everything fits: no ellipsis
     let lay = f.layout("medium", "alpha", f64::from(w), 24.0, &o);
     assert_eq!(texts(&lay), ["alpha"]);
@@ -647,4 +648,73 @@ fn clip_leaves_lines_that_fit_whole() {
         .max()
         .unwrap();
     assert!(right > plain_right, "{right} {plain_right}");
+}
+
+#[test]
+fn a_number_sample_raises() {
+    let mut core = boot_api("2.33", "");
+    assert_eq!(
+        eval(
+            &mut core,
+            "return {pcall(function() return ctx.fonts:size(24, 5) end)}"
+        )[0],
+        json!(false)
+    );
+}
+
+#[test]
+fn measure_and_layout_refuse_right_to_left_text() {
+    let mut core = boot_api("2.33", "");
+    assert_eq!(
+        eval(
+            &mut core,
+            "local f = ctx.fonts.medium local a, b = f:measure('x \u{05D0}') local c, d = f:layout('\u{0627}', 100, 100) \
+             return {tostring(a), b, tostring(c), d}"
+        ),
+        json!(["nil", "invalid_argument", "nil", "invalid_argument"])
+    );
+}
+
+/// `lines, consumed` of a one-line, char-wrapped `layout` of `text` in a box as wide as `fit`.
+fn char_layout(api: &str, text: &str, fit: &str) -> Value {
+    let mut core = boot_api(api, "");
+    eval(
+        &mut core,
+        &format!(
+            "local f = ctx.fonts.medium local l, _, c = f:layout({text:?}, f:measure({fit:?}), f.line_height, \
+             {{wrap = 'char'}}) return {{l, c}}"
+        ),
+    )
+}
+
+#[test]
+fn kinsoku_moves_a_char_break_back_to_a_word_break_point() {
+    // the break before "." is not allowed from 2.16; between "b" and "c" is no word break point, so it stays
+    assert_eq!(char_layout("2.15", "abc.", "abc"), json!([1, 3]));
+    assert_eq!(char_layout("2.16", "abc.", "abc"), json!([1, 3]));
+    // here the word break before "cd." is within reach, so "cd" moves to the next line with the "."
+    assert_eq!(char_layout("2.15", "ab cd.", "ab cd"), json!([1, 5]));
+    assert_eq!(char_layout("2.16", "ab cd.", "ab cd"), json!([1, 3]));
+}
+
+#[test]
+fn centred_text_starts_at_x_minus_half_the_width_floored() {
+    let f = Fonts::new();
+    let s = ["Hi", "Hil", "Hill", "Hello", "abc"]
+        .into_iter()
+        .find(|s| f.measure("medium", s) % 2 == 1)
+        .expect("an odd width");
+    let w = f.measure("medium", s);
+    for (opts, x, y) in [
+        (
+            "align = 'center', valign = 'middle'",
+            101 - w / 2,
+            51 - 24 / 2,
+        ),
+        ("align = 'right', valign = 'bottom'", 101 - w, 51 - 24),
+    ] {
+        let core = draw(&format!("g:text(101, 51, '{s}', {{{opts}}})"));
+        let t = &core.texts()[0];
+        assert_eq!((t.x, t.y), (x, y), "{opts}");
+    }
 }

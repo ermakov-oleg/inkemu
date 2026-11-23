@@ -9,7 +9,7 @@ import { loadCore, toBase64 } from '../js/core.js';
 const ROOT = new URL('../../', import.meta.url);
 const START_LOCAL_MS = 1_795_165_200_000; // 2026-11-20T09:00:00, as crates/inkcore/examples/hello_hash.rs
 // crates/inkcore/examples/hello_hash.rs and tests/test_parity.py pin the same value
-const HELLO_HASH = '077f5578ec11f69429c25e4db0e2b5c8b016abd240a6a270143021d5fceae4c0';
+const HELLO_HASH = '382aeb4feb77bc990eb6ba982afff505f55454c768f3dce4518d7a6725b46e67';
 
 const factory = await loadCore(new URL('../core/inkcore_wasm.js', import.meta.url).href);
 const enc = new TextEncoder();

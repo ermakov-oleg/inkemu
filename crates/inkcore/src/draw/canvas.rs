@@ -287,11 +287,17 @@ impl Canvas {
         let (item, lines) = match *cmd {
             Cmd::Text { x, y, .. } => {
                 let bw = f.measure_with(font, s, style);
-                let bx = py_round(place(x, f64::from(bw), 0.0, opts.align));
-                let by = match opts.valign {
-                    Align::Baseline => py_round(y).saturating_sub(f.ascent(font)),
-                    a => py_round(place(y, f64::from(lh), 0.0, a)),
+                // §7: the line box starts at `x - width // 2` and `y - line_height // 2` when centred
+                let anchor = |at: f64, size: i32, a: Align| {
+                    let at = py_round(at);
+                    match a {
+                        Align::Middle => at.saturating_sub(size.div_euclid(2)),
+                        Align::End => at.saturating_sub(size),
+                        Align::Start => at,
+                        Align::Baseline => at.saturating_sub(f.ascent(font)),
+                    }
                 };
+                let (bx, by) = (anchor(x, bw, opts.align), anchor(y, lh, opts.valign));
                 ((bx, by, bw, lh), vec![(bx, by, s.clone(), bw, false)])
             }
             Cmd::TextBox { x, y, w, h, .. } => {
