@@ -300,7 +300,9 @@ def test_log_and_ctx_values(make_app, emu_factory):
     )
     emu = emu_factory(app)
     text = "\n".join(emu.log)
-    assert "now 2026 11 20 9 0 0 6 true" in text
+    assert "now 2026 11 20 9 0 0 5 true" in text, (
+        "API 2.33.1 contract §12 says otherwise (12/clock_weekday_sunday): weekday 0 is Sunday"
+    )
     assert "api 2 33 87 false" in text, "firmware 26112001 inventory: ctx.api is 2.33"
     assert "font large 30 true medium" in text
     assert "millis 0 string" in text

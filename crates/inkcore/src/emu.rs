@@ -682,7 +682,7 @@ impl Core {
             lock_wakes: 0,
             lock: Lock::default(),
             frontlight: 0,
-            clock_revision: 0,
+            clock_revision: 1,
             rng,
             persisted,
             persist_changed: false,

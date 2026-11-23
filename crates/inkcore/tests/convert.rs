@@ -147,8 +147,8 @@ fn clock_now_has_integer_epoch_and_local_seconds() {
         .unwrap();
     assert_eq!(
         got,
-        json!(["integer", "integer", 9, 3600, 6, true, true, 0]),
-        "firmware 26112001 inventory: clock:now() has weekday, no wday/yday"
+        json!(["integer", "integer", 9, 3600, 5, true, true, 0]),
+        "API 2.33.1 contract §12 says otherwise (12/clock_weekday_sunday): Friday is 5; clock:now() has weekday, no wday/yday"
     );
     let epoch = core.lua_eval("return ctx.clock:now().epoch_sec").unwrap();
     // 2026-11-20T09:00 at UTC+1 is 08:00 UTC

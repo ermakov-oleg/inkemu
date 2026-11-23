@@ -2,10 +2,6 @@
   "03/gray_frame_refresh": "status() has no refresh field and gray = true is not treated as a gray frame",
   "03/gray_next_frame_full": "status() has no refreshes field and gray frames are not tracked",
   "03/gray_pixels": "status() has no refresh field and the shot of a gray frame is 1-bit: no 4-level rectangles",
-  "12/clock_revision_start": "revision is 0 at session start instead of 1",
-  "12/clock_weekday_saturday": "weekday is 1-based from Sunday (Saturday is 7)",
-  "12/clock_weekday_sunday": "weekday is 1-based from Sunday (Sunday is 1)",
-  "12/log_methods": "ctx.log methods accept a non-string argument instead of raising",
   "14/net_body_cap": "the body is delivered whole (131082 bytes) and err stays nil",
   "14/net_body_get_head": "a body on GET or HEAD is accepted",
   "14/net_body_rules": "a body of 65537 bytes is accepted",
@@ -43,12 +39,5 @@
   "15/lock_timer_alignment": "the timer wake comes interval_sec after locking, not at the next whole multiple of the interval",
   "25/act_inactive": "sleep and power_off return invalid_argument instead of inactive",
   "25/act_sleep_key": "act(\"sleep\") is not implemented: no on_leave and the device is not locked",
-  "25/act_sleep_tap": "act(\"sleep\") is not implemented: no on_leave and the device is not locked",
-  "26/base64_decode_url_unpadded": "decode rejects the url alphabet and unpadded input with invalid_argument",
-  "26/base64_url_alphabet": "encode ignores opts.url: standard alphabet with padding",
-  "26/encoding_input_limit": "hex, base64 and url encoders have no 1048576-byte input limit",
-  "26/hash_input_limit": "hashes of 1048577 bytes succeed (no input limit)",
-  "26/random_bytes": "bytes(0) returns an empty string and bytes(1025) succeeds instead of invalid_argument",
-  "26/url_decode_invalid": "url:decode keeps a malformed %XX instead of invalid_argument",
-  "26/url_query": "ctx.url has no query method"
+  "25/act_sleep_tap": "act(\"sleep\") is not implemented: no on_leave and the device is not locked"
 }

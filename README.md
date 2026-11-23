@@ -184,6 +184,11 @@ included, then seeds `files/` from `<fixtures dir>/files/`.
   26112001 has none of them. Use `g:rect(x, y, w, h, {radius = r})`, `font:measure(text)` (for example
   `ctx.fonts.medium:measure("Hi")`) and `g:pattern`. There is no compatibility mode.
 - A `g` kept after its callback returns `nil, "inactive"` instead of drawing into the next frame.
+- `clock:now().weekday` counts from Sunday = 0 (0.1: Sunday = 1), and `revision` starts at 1 (0.1: 0).
+- `ctx.log:info`, `warn` and `error` raise a Lua error for a non-string argument.
+- `hash`, `hex`, `base64` and `url` take at most 1048576 bytes of input, else `nil, "limit_exceeded"`.
+  `base64:decode` also takes the `-_` alphabet and unpadded input, `url:decode` of a malformed `%XX` returns
+  `nil, "invalid_argument"` (0.1 kept it), and `random:bytes(n)` takes 1 to 1024 (0.1: 0 to 1048576).
 - `g:image` of something that is not an image is `nil, "invalid_argument"`, and of a released `ctx.image` or
   `ctx.qr` image or layer `nil, "invalid_handle"`, instead of drawing nothing or failing the frame (a released
   `ctx.package:image` stays drawable). `layer:draw` on a released layer returns
@@ -358,7 +363,7 @@ the start with an error. From each file inkemu takes:
   `on_end` gets `how` = `"enter"` or `"back"` (the Back key or `answer no`). While it is open, another `edit`,
   `input:text` and `dialog:confirm` return `nil, "busy"`; `edit` and `input:text` are also busy while a text input
   or a confirm is open.
-- `image`, `qr`, `json`, `base64` (`encode`, `decode`), `hex`, `url` (`encode`, `decode`), `zlib`, `random` (`uuid`, `bytes`).
+- `image`, `qr`, `json`, `base64` (`encode` with `{url = true}`, `decode`), `hex`, `url` (`encode`, `decode`, `query`), `zlib`, `random` (`uuid`, `bytes` of 1 to 1024).
 - `hash`: `sha256`, `md5` and `hmac_sha256` return the raw digest bytes (use `ctx.hex:encode` for text); `sha1` returns the
   20 raw bytes too; `crc32` returns a signed 32-bit integer (values from 2^31 wrap to negative); all verified in QEMU on firmware 26112001.
 - `screen` (`width`, `height`, `orientation`, `set_orientation`, `gray_levels` = 2, `gray_still` = 4),
@@ -381,7 +386,7 @@ offset_minutes revision valid`.
   `16777217.0 == 16777216.0`).
 - The app sees no `io`, `os`, `debug`, `package`, `load`, `loadstring`, `dofile`, `loadfile`, `collectgarbage` or
   `print`, as on the device; `require` searches only the app folder. Lua 5.5's global `warn` is visible to the app.
-- Not emulated, so nil: `ctx.crypto`, `ctx.nn`, `ctx.ui`, `ctx.widget`, `dialog:choose`, `i18n:t`, `url:query`,
+- Not emulated, so nil: `ctx.crypto`, `ctx.nn`, `ctx.ui`, `ctx.widget`, `dialog:choose`, `i18n:t`,
   `input.keys`, `input.listen`, `input.gamepad`, `device.display`, `device.keep_awake`, `device.radios`,
   `screen.occlusion`. No BLE, no WebSocket; only GET and POST get a network callback.
 - `ctx.capabilities` reports what inkemu emulates, except that `image_transform` is true as on the device: `dialog frontlight image_decode image_transform pattern reader`
@@ -400,12 +405,11 @@ offset_minutes revision valid`.
   - `ctx.perf:info()`'s `tick_us`, `draw_us`, `asset_hit` and `asset_miss`, which measure the device's renderer:
     always 0 in inkemu;
   - the format of the level prefix of `ctx.log:info/warn/error`;
-  - the numbering of `clock:now().weekday` (inkemu: Sunday = 1, as 2.26's `wday`);
   - the meaning of `clock:now().revision` (inkemu: it changes when the clock is moved by a wait, `]` or `}`, not
     when time passes in the window or with an input);
   - the result format of `ctx.hash:hmac_sha256` (raw bytes in inkemu);
   - the level `ctx.frontlight:reset()` goes back to (inkemu: the level at start, 0);
-  - `ctx.random:bytes(n)` with `n` below 0 or above 1 MiB: inkemu refuses it with `nil, "invalid_argument"`;
+  - `url:query` with more than 64 items (inkemu: `nil, "limit_exceeded"`; the contract names no code);
   - whether `density` changes the `line` and `cross` patterns (inkemu: no); whether `line` and `cross` are anchored
     to the screen like `dot` or to the box (inkemu: the screen; the probe's boxes started where both agree);
   - `g:pattern` with a `density` that is not a number (inkemu: the frame fails with "g: bad values in on_draw");

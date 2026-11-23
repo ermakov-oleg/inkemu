@@ -79,8 +79,8 @@ fn clock_now_has_the_26112001_fields() {
              return {t.wday == nil, t.yday == nil, t.weekday, t.date_sep, t.date_order, t.offset_minutes,\n\
                math.type(t.revision)}"
         ),
-        // 2026-11-20 is a Friday: 6 counting from Sunday = 1
-        json!([true, true, 6, "/", "dmy", 60, "integer"])
+        // 2026-11-20 is a Friday: 5 counting from Sunday = 0
+        json!([true, true, 5, "/", "dmy", 60, "integer"])
     );
 }
 
@@ -239,13 +239,13 @@ fn random_bytes_system_act_and_small_members() {
              local r, e = ctx.system:act('power_off')\n\
              ctx.frontlight:set(9)\nctx.frontlight:reset()\n\
              local caps = ctx.capabilities\n\
-             return {type(s), #s, #ctx.random:bytes(0), tostring(r), e, ctx.frontlight:get(),\n\
+             return {type(s), #s, #ctx.random:bytes(1), tostring(r), e, ctx.frontlight:get(),\n\
                ctx.input.keyboard_h, ctx.input.pointer, ctx.screen.gray_levels, ctx.screen.gray_still,\n\
                next(ctx.package:cache_stats()) == nil, next(ctx.perf:info()) == nil,\n\
                caps.ble, caps.identity, caps.nn, caps.ui, caps.dialog}"
         ),
         json!([
-            "string", 16, 0, "nil", "invalid_argument", 0, 436, true, 2, 4, true, false, false, false, false,
+            "string", 16, 1, "nil", "invalid_argument", 0, 436, true, 2, 4, true, false, false, false, false,
             false, true
         ]),
         "API 2.33.1 contract §5 says otherwise: perf:info() is not empty (05/perf_info)"
@@ -272,7 +272,6 @@ fn not_emulated_members_are_nil() {
         "ctx.widget",
         "ctx.dialog.choose",
         "ctx.i18n.t",
-        "ctx.url.query",
         "ctx.input.keys",
         "ctx.input.listen",
         "ctx.input.gamepad",

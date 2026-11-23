@@ -47,24 +47,6 @@ Already green and pinned: `09/storage_usage`, `09/storage_name_valid`, `09/stora
 
 ## §12 Clock, log and memory
 
-### 12/clock_weekday_sunday, 12/clock_weekday_saturday
-- Contract: `weekday` is 0 for Sunday (6 for Saturday).
-- Core now: `weekday` is 1-based from Sunday (Friday 6, Sunday 1, Saturday 7), the Lua `os.date` numbering.
-- Touch points: `crates/inkcore/src/ctx/clock.rs`.
-- Source: contract only.
-
-### 12/clock_revision_start
-- Contract: `revision` is an integer and is 1 at the start of the session.
-- Core now: 0.
-- Touch points: `crates/inkcore/src/ctx/clock.rs`.
-- Source: contract only.
-
-### 12/log_methods
-- Contract: `ctx.log:info`, `warn` and `error` raise a Lua error for a non-string argument (returning nothing is pinned apart in `12/log_returns_nothing`, green).
-- Core now: they accept tables, nil and booleans.
-- Touch points: `crates/inkcore/src/ctx/mod.rs` (log object).
-- Source: contract only.
-
 Already green and pinned: `12/log_and_clock`, `12/clock_fields` (date and time fields, epoch and local seconds), `12/clock_snapshot`, `12/log_returns_nothing`, `12/clock_millis`.
 
 ## §14 Networking
@@ -234,42 +216,6 @@ Already green and pinned: `15/lock_reason_timer`, `15/lock_elapsed_first`, `15/l
 Already green and pinned: `25/act_refresh`, `25/act_inactive_no_lock` (refused `sleep`/`power_off` calls do not lock the device), `25/act_args` (unknown name is `nil, "invalid_argument"` - probe-confirmed; a non-string name raises). Not covered: `act("power_off")` with its confirmation dialog and `busy` (contract only, needs system dialog support).
 
 ## §26 Encoding, hashes, random
-
-### 26/hash_input_limit
-- Contract: every hash call takes at most 1048576 bytes, more is `nil, "limit_exceeded"` (the accepted maximum is `26/hash_input_max`, green).
-- Core now: no input limit anywhere.
-- Touch points: `crates/inkcore/src/ctx/utils.rs`.
-- Source: contract only (§26 gives it for all input; §18 gives the code).
-
-### 26/encoding_input_limit
-- Contract: `hex:encode`, `base64:encode` and `url:encode` take at most 1048576 bytes of input; more is `nil, "limit_exceeded"` (the accepted maximum is `26/encoding_input_max`, green).
-- Core now: no limit.
-- Touch points: `crates/inkcore/src/ctx/utils.rs`.
-- Source: contract only.
-
-### 26/base64_url_alphabet, 26/base64_decode_url_unpadded
-- Contract: `encode(s, { url = true })` uses `-` and `_` without padding; `decode` also accepts the url alphabet and missing padding. (Decoding the standard alphabet and the illegal-input errors are `26/base64_decode`, green.)
-- Core now: `opts` is ignored on encode; `decode` rejects the url alphabet and unpadded input.
-- Touch points: `crates/inkcore/src/ctx/utils.rs`.
-- Source: contract only.
-
-### 26/random_bytes
-- Contract: `bytes(n)` takes an integer from 1 to 1024; 0 and 1025 are `nil, "invalid_argument"` (1, 1024 and a negative count are `26/random_bytes_range`, `26/base64_encode_std`, green).
-- Core now: 0 returns an empty string and 1025 returns bytes.
-- Touch points: `crates/inkcore/src/ctx/utils.rs`.
-- Source: probe-confirmed.
-
-### 26/url_decode_invalid
-- Contract: a malformed `%XX` escape in `url:decode` is `invalid_argument` (§26: an illegal character or length when decoding). The escape and keep-`+` rules are `26/url_encode_decode` (green).
-- Core now: a malformed escape is passed through unchanged.
-- Touch points: `crates/inkcore/src/ctx/utils.rs`.
-- Source: contract only.
-
-### 26/url_query
-- Contract: `ctx.url:query(t)` joins `key=value` items in byte order of the keys, encoding both, booleans and numbers allowed; an empty table gives `""`.
-- Core now: the method does not exist.
-- Touch points: `crates/inkcore/src/ctx/utils.rs`.
-- Source: contract only. Inferred, not stated: booleans appear as the text `true` and `false`. Not pinned: the 64-item cap (the contract does not name the error code).
 
 Already green and pinned: `26/encoding`, `26/hash_input_max`, `26/encoding_input_max`, `26/base64_decode`, `26/url_encode_decode`, `26/random_bytes_range`, `26/hash_hmac_sha256` (the probe's `k`/`m` vector, RFC 4231 cases 2 and 6), `26/hex_decode`, `26/random_uuid`, `26/hash_crc32` and `26/hash_sha1` (probe-confirmed; fixed in the core).
 

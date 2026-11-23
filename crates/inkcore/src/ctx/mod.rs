@@ -163,10 +163,12 @@ const LOG_CALL: &str = "local log = ... return function(_, ...) return log(...) 
 
 /// `ctx.log` is a table of levels on firmware 2.33; calling it as 2.26's `ctx:log(...)` still logs.
 fn install_log(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
-    let level = |prefix: &'static str| {
+    let level = |name: &'static str, prefix: &'static str| {
         let st = st.clone();
         method(move |_, args| {
-            let parts: Vec<String> = args.iter().map(fmt).collect();
+            let a = args.into_vec();
+            check_arg(name, 1, arg(&a, 0), "string")?;
+            let parts: Vec<String> = a.iter().map(fmt).collect();
             with(&st, |s| {
                 s.log_line(&format!("[app] {prefix} {}", parts.join(" ")))
             });
@@ -177,9 +179,9 @@ fn install_log(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
         lua,
         "log",
         &[
-            ("error", level("ERROR")),
-            ("info", level("INFO")),
-            ("warn", level("WARN")),
+            ("error", level("error", "ERROR")),
+            ("info", level("info", "INFO")),
+            ("warn", level("warn", "WARN")),
         ],
     )?;
     let call: Function = lua
