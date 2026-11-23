@@ -192,8 +192,8 @@ A frame accepts 1024 commands, and each line a `text_box` draws is one of them. 
 one warning with the number of commands asked for.
 
 Frames: `emu.status()["refresh"]` is the waveform of the last app frame presented, `"partial"` or `"full"`, and
-`emu.status()["refreshes"]` lists the waveforms of every app frame since the emulator started, oldest first (one
-step such as a tap can present more than one frame). The rules, as in the contract:
+`emu.status()["refreshes"]` lists the waveforms of the last 64 app frames, oldest first (one step such as a tap can
+present more than one frame). The rules, as in the contract:
 
 - `ctx:invalidate()` asks for a partial frame and `ctx:invalidate("full")` or `ctx.system:act("refresh")` for a full
   one; one full request among several makes the frame full. A request made in `on_draw` is for the next frame.

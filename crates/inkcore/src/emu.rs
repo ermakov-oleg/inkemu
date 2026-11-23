@@ -1,6 +1,6 @@
 //! The emulator core: one app, its Lua state, virtual time and lifecycle, as 0.1 `emu.Emu`.
 use std::cell::{Ref, RefCell};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::rc::Rc;
 
 use mlua::{Function, IntoLuaMulti, Lua, MultiValue, Table, Value};
@@ -25,6 +25,8 @@ pub const ERROR_TITLE: &str = "App error, closed";
 const INSTALL_FAILED: &str = "Install failed";
 /// Gancao firmware's default: after 29 partial refreshes the 30th frame is a full one.
 const AUTO_FULL_EVERY: u32 = 30;
+/// How many refresh kinds `Status.refreshes` keeps; status is read on every daemon response and page poll.
+const KEPT_REFRESHES: usize = 64;
 
 /// The waveform a frame was presented with.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -72,7 +74,7 @@ pub struct Status {
     pub locked: bool,
     /// The kind of the last presented app frame.
     pub refresh: Option<&'static str>,
-    /// The kinds of every app frame presented by this core, oldest first.
+    /// The kinds of the last 64 app frames presented by this core, oldest first.
     pub refreshes: Vec<&'static str>,
 }
 
@@ -139,7 +141,7 @@ pub(crate) struct State {
     pub(crate) partials: u32,
     /// Clock ms up to which `defer_full_refresh` holds back the automatic full refresh.
     pub(crate) defer_until: i64,
-    pub(crate) refreshes: Vec<Refresh>,
+    pub(crate) refreshes: VecDeque<Refresh>,
     pub(crate) perf: Perf,
 }
 
@@ -178,7 +180,10 @@ impl State {
             Refresh::Partial
         };
         self.partials = if kind == Refresh::Partial { next } else { 0 };
-        self.refreshes.push(kind);
+        if self.refreshes.len() == KEPT_REFRESHES {
+            self.refreshes.pop_front();
+        }
+        self.refreshes.push_back(kind);
         let (cmd_count, image_count) = self.canvas.accepted();
         self.perf = Perf {
             cmd_count,
@@ -672,7 +677,7 @@ impl Core {
             full_next: false,
             partials: 0,
             defer_until: 0,
-            refreshes: vec![],
+            refreshes: VecDeque::new(),
             perf: Perf::default(),
         }));
         if let Some(p) = font_problem {
@@ -851,7 +856,7 @@ impl Core {
             running: s.running,
             pending: s.pending.clone(),
             locked: s.locked,
-            refresh: s.refreshes.last().map(|r| r.as_str()),
+            refresh: s.refreshes.back().map(|r| r.as_str()),
             refreshes: s.refreshes.iter().map(|r| r.as_str()).collect(),
         }
     }

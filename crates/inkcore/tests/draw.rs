@@ -112,10 +112,12 @@ fn a_deferral_holds_the_automatic_full_until_it_ends() {
          function on_draw(c, g) end
 ",
     );
-    core.advance(700).unwrap();
-    // frame 30 would be the automatic full; the first one at 500 ms (index 50) gets it
-    assert_eq!(fulls(&core), [0, 50]);
-    assert_eq!(core.status().refreshes.len(), 71);
+    core.advance(490).unwrap();
+    // frame 30 would be the automatic full; the first one at 500 ms gets it
+    assert_eq!(fulls(&core), [0]);
+    assert_eq!(core.status().refreshes.len(), 50);
+    core.advance(10).unwrap();
+    assert_eq!(core.status().refresh, Some("full"));
 }
 
 #[test]
@@ -126,8 +128,26 @@ fn a_renewed_deferral_still_gets_a_full_at_twice_the_interval() {
          function on_draw(c, g) end
 ",
     );
-    core.advance(1300).unwrap();
-    assert_eq!(fulls(&core), [0, 60, 120]);
+    core.advance(590).unwrap();
+    assert_eq!(fulls(&core), [0]);
+    for (ms, kind) in [(10, "full"), (590, "partial"), (10, "full")] {
+        core.advance(ms).unwrap();
+        assert_eq!(core.status().refresh, Some(kind));
+    }
+}
+
+#[test]
+fn refreshes_keep_the_last_64_frames() {
+    let mut core = boot(
+        "local n = 0\n\
+         function on_load(c) c:set_tick(10) end\n\
+         function on_tick(c) n = n + 1 if n == 99 then c:invalidate('full') else c:invalidate() end end\n\
+         function on_draw(c, g) end\n",
+    );
+    core.advance(990).unwrap();
+    // frames 0..=99: automatic fulls at 30, 60 and 90, the requested one at 99; the window starts at frame 36
+    assert_eq!(core.status().refreshes.len(), 64);
+    assert_eq!(fulls(&core), [24, 54, 63]);
 }
 
 #[test]
