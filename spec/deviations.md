@@ -47,7 +47,8 @@ no radio and is not the device, so panel timing and network completion were not 
   and `up`, and an event with no matching action gives `nil, nil` (§16).
 - Reader does: a key event with phase `repeat` returns `nil, "invalid_argument"`, at every package minor (the
   reader's UI library run as a black box with our scenarios, and the probe).
-- inkemu does: `nil, "invalid_argument"`; focus drawing is not switched on by it.
+- inkemu does: `nil, "invalid_argument"`. Whether such a key turns focus drawing on was not measured; inkemu leaves
+  it as it was.
 - Status: measured on 26112001.
 - Checks: `16/events_keys`.
 
@@ -144,6 +145,7 @@ the README.
   `16/events_pointer`, `16/focus_drawn_only_after_key`, `16/focus_api`.
 - `ctx.ui`, not measured: `begin_frame` takes as a canvas any table with the canvas's `rect` and `text_box` methods,
   since Lua cannot tell host objects apart. A control's box holds the points `x .. x + w - 1` for hits, and boxes that
-  only touch do not overlap for the arrows. A refused event (`invalid_argument`) leaves focus drawing as it was. `ok`
+  only touch do not overlap for the arrows. A key whose `phase` is neither `down` nor `up` (any other value, not only
+  `repeat` or none) is `invalid_argument`, and a refused event leaves focus drawing as it was. `ok`
   on a kept id that is disabled in the last frame gives `nil, nil`. An arrow from a kept id that `ui:focus` set to a
   disabled control starts from that control's place.

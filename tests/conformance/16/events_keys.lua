@@ -31,6 +31,7 @@ function on_draw(ctx, g)
   frame(g)
   if done then return end
   done = true
+  send("ok_up_without_down", key("ok", "up"))
   send("ok_down", key("ok", "down"))
   send("ok_up", key("ok", "up"))
   send("ok_up_again", key("ok", "up"))

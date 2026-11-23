@@ -4,6 +4,7 @@
   "steps": ["key ok"],
   "expect": {
     "before_any_frame": {"value": {"ok": true, "ret": [null, null]}, "spec": "§16"},
+    "ok_up_without_down": {"value": {"ok": true, "ret": [null, null]}, "deviation": "D5", "spec_value": {"ok": true, "ret": ["a", "activate"]}},
     "ok_down": {"value": {"ok": true, "ret": ["a", "press"]}, "spec": "§16"},
     "ok_up": {"value": {"ok": true, "ret": ["a", "activate"]}, "spec": "§16"},
     "ok_up_again": {"value": {"ok": true, "ret": [null, null]}, "deviation": "D5", "spec_value": {"ok": true, "ret": ["a", "activate"]}},

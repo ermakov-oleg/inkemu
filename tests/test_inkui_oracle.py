@@ -15,8 +15,8 @@ Each step is compared in full, except:
   is left out of the named canvas calls, the rest is compared, and the step is skipped.
 - `HOST_REFUSES` lists the canvas calls the core refuses with a Lua error (the oracle's canvas accepted anything); any
   other refusal fails the step.
-- A step that acts on a frame with a control inkemu does not implement yet (the last closed frame had a stubbed
-  call), or that starts from a focus an earlier stubbed step left elsewhere than the oracle (the focus recorded by
+- An event step that acts on a frame with a control inkemu does not implement yet (the last closed frame had a
+  stubbed call), or a step that starts from a focus an earlier stubbed step left elsewhere than the oracle (the focus recorded by
   the step before differs), is an xfail while only focus, its event result and the canvas calls differ
   (`AFTER_STUB`), a failure when anything else does, and an ordinary pass when it matches.
 
@@ -238,20 +238,26 @@ def focus_record(step: dict):
     return step.get("focused_after", step.get("focused"))
 
 
+def last_frame(steps: list[dict], i: int) -> range:
+    """The steps (from 0) of the last frame closed before step `i`: a `frame`, or `begin` through `end`."""
+    for k in range(i - 2, -1, -1):
+        if steps[k]["op"] == "frame":
+            return range(k, k + 1)
+        if steps[k]["op"] == "end":
+            start = k
+            while start > 0 and steps[start]["op"] != "begin":
+                start -= 1
+            return range(start, k + 1)
+    return range(0)
+
+
 def after_stub(steps: list[dict], ours: list[dict], i: int) -> str | None:
     """Why step `i` may differ in focus only: what an earlier stubbed step changed, or None."""
     if not any(stubbed(ours[k]) for k in range(i - 1)):
         return None
-    for k in range(i - 2, -1, -1):
-        if steps[k]["op"] not in ("frame", "end"):
-            continue
-        start = k
-        if steps[k]["op"] == "end":
-            while start > 0 and steps[start]["op"] != "begin":
-                start -= 1
-        if any(stubbed(ours[n]) for n in range(start, k + 1)):
-            return f"the last frame (step {k + 1}) has a control that is not implemented yet"
-        break
+    frame = last_frame(steps, i)
+    if steps[i - 1]["op"] == "event" and any(stubbed(ours[n]) for n in frame):
+        return f"the event acts on the frame of step {frame[-1] + 1}, which has a control not implemented yet"
     for k in range(i - 2, -1, -1):
         want = focus_record(steps[k])
         if want is not None:
