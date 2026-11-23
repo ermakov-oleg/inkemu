@@ -1,0 +1,19 @@
+{
+  "spec": "\u00a77",
+  "about": "x4_pro system fonts have line heights 20, 24 and 30",
+  "expect": {
+    "small.line_height": {
+      "value": 20,
+      "spec": "\u00a73"
+    },
+    "medium.line_height": {
+      "value": 24,
+      "spec": "\u00a73"
+    },
+    "large.line_height": {
+      "value": 30,
+      "spec": "\u00a73"
+    }
+  },
+  "errors": []
+}

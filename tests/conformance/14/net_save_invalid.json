@@ -1,0 +1,82 @@
+{
+  "spec": "§14",
+  "about": "a save that is not a table, has another target or has a bad name is invalid_argument",
+  "manifest": {
+    "permissions": [
+      "net"
+    ]
+  },
+  "expect": {
+    "not_table": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "bad_to": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "no_to": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "no_name": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "files_name": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "storage_name": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "storage_dot": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    }
+  },
+  "errors": []
+}

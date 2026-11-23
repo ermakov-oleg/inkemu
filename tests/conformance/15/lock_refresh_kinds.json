@@ -1,0 +1,29 @@
+{
+  "spec": "\u00a715",
+  "about": "the first lock session presents a full refresh and a timer session a partial one",
+  "manifest": {
+    "lockscreen": {
+      "entry": "lockscreen.lua",
+      "interval_sec": 60
+    }
+  },
+  "files": {
+    "lockscreen.lua": "lock_reason.lockscreen.lua"
+  },
+  "steps": [
+    "lock",
+    "wait 61s",
+    "observe s"
+  ],
+  "expect": {
+    "s.refreshes": {
+      "value": [
+        "full",
+        "full",
+        "partial"
+      ],
+      "spec": "\u00a715"
+    }
+  },
+  "errors": []
+}

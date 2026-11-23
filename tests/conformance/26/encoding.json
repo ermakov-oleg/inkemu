@@ -1,0 +1,14 @@
+{
+  "spec": "§26",
+  "about": "digests are raw bytes, hex encodes lowercase, base64 uses the standard alphabet with padding",
+  "expect": {
+    "sha256_empty.len": {"value": {"ok": true, "ret": [32]}, "spec": "§26"},
+    "sha256_empty.hex": {"value": {"ok": true, "ret": ["e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"]}, "spec": "§26"},
+    "md5_empty.len": {"value": {"ok": true, "ret": [16]}, "spec": "§26"},
+    "md5_abc.hex": {"value": {"ok": true, "ret": ["900150983cd24fb0d6963f7d28e17f72"]}, "spec": "§26"},
+    "hex.encode": {"value": {"ok": true, "ret": ["abcdef"]}, "spec": "§26"},
+    "base64.std": {"value": {"ok": true, "ret": ["+/+/"]}, "spec": "§26"},
+    "base64.std_padded": {"value": {"ok": true, "ret": ["YWI="]}, "spec": "§26"}
+  },
+  "errors": []
+}

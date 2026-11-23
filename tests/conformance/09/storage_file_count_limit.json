@@ -1,0 +1,70 @@
+{
+  "spec": "§9",
+  "about": "512 files fit; a 513th new file is limit_exceeded, rewriting an existing one still works",
+  "expect": {
+    "failed": {
+      "value": 0,
+      "spec": "§9"
+    },
+    "usage_files": {
+      "value": 512,
+      "spec": "§9"
+    },
+    "write_513": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§9"
+    },
+    "exists_extra": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§9"
+    },
+    "overwrite_existing": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§9"
+    },
+    "size_f1": {
+      "value": {
+        "ok": true,
+        "ret": [
+          2
+        ]
+      },
+      "spec": "§9"
+    },
+    "remove_one": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§9"
+    },
+    "write_after_remove": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§9"
+    }
+  },
+  "errors": []
+}

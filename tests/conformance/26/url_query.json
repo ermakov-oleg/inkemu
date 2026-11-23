@@ -1,0 +1,52 @@
+{
+  "spec": "§26",
+  "about": "url:query joins key=value items in byte order of the keys, encoding both",
+  "expect": {
+    "sorted": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "page=2&q=paper"
+        ]
+      },
+      "spec": "§26"
+    },
+    "bool_number": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "a=true&b=false&c=7"
+        ]
+      },
+      "spec": "§26"
+    },
+    "encoded_value": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "k=a%20b"
+        ]
+      },
+      "spec": "§26"
+    },
+    "byte_order": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "B=2&a=3&b=1"
+        ]
+      },
+      "spec": "§26"
+    },
+    "empty": {
+      "value": {
+        "ok": true,
+        "ret": [
+          ""
+        ]
+      },
+      "spec": "§26"
+    }
+  },
+  "errors": []
+}

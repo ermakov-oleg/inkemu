@@ -1,0 +1,24 @@
+{
+  "spec": "§5",
+  "about": "g:clear past the 1024-command cap is rejected like any other command and leaves the frame as it was",
+  "expect": {
+    "clear_after_cap": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§5"
+    }
+  },
+  "pixels": [
+    [
+      15,
+      15,
+      1
+    ]
+  ],
+  "errors": []
+}

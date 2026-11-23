@@ -1,0 +1,23 @@
+{
+  "spec": "\u00a715",
+  "about": "the first session after locking reports reason first",
+  "manifest": {
+    "lockscreen": {
+      "entry": "lockscreen.lua",
+      "interval_sec": 60
+    }
+  },
+  "files": {
+    "lockscreen.lua": "lock_reason.lockscreen.lua"
+  },
+  "steps": [
+    "lock"
+  ],
+  "expect": {
+    "reason": {
+      "value": "first",
+      "spec": "\u00a715"
+    }
+  },
+  "errors": []
+}

@@ -1,0 +1,50 @@
+{
+  "spec": "§5",
+  "about": "perf:info returns integer fields; cmd_count counts the commands accepted in the latest frame",
+  "steps": [
+    "wait 1s"
+  ],
+  "expect": {
+    "perf.tick_us": {
+      "value": "integer",
+      "spec": "§5"
+    },
+    "perf.draw_us": {
+      "value": "integer",
+      "spec": "§5"
+    },
+    "perf.cmd_count": {
+      "value": "integer",
+      "spec": "§5"
+    },
+    "perf.image_count": {
+      "value": "integer",
+      "spec": "§5"
+    },
+    "perf.asset_hit": {
+      "value": "integer",
+      "spec": "§5"
+    },
+    "perf.asset_miss": {
+      "value": "integer",
+      "spec": "§5"
+    },
+    "perf.draw_frame": {
+      "value": "integer",
+      "spec": "§5"
+    },
+    "perf.cmd_count_value": {
+      "value": 3,
+      "spec": "§5"
+    },
+    "perf.image_count_value": {
+      "value": 0,
+      "spec": "§5"
+    },
+    "perf.drawn": {
+      "value": true,
+      "spec": "§5"
+    }
+  },
+  "errors": []
+}

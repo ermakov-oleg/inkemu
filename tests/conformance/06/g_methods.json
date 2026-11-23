@@ -1,0 +1,27 @@
+{
+  "spec": "\u00a76",
+  "about": "the 0.1 extras of g do not exist on the reader",
+  "expect": {
+    "absent.round_rect": {
+      "value": "nil",
+      "spec": "\u00a76"
+    },
+    "absent.measure": {
+      "value": "nil",
+      "spec": "\u00a76"
+    },
+    "absent.measure_text": {
+      "value": "nil",
+      "spec": "\u00a76"
+    },
+    "absent.fill_pattern": {
+      "value": "nil",
+      "spec": "\u00a76"
+    },
+    "absent.pattern_rect": {
+      "value": "nil",
+      "spec": "\u00a76"
+    }
+  },
+  "errors": []
+}

@@ -1,0 +1,70 @@
+{
+  "spec": "§14",
+  "about": "keep_wifi takes an integer from -1 to 2147483647 and returns nothing; other numbers are invalid_argument",
+  "manifest": {
+    "permissions": [
+      "net"
+    ]
+  },
+  "expect": {
+    "zero": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§14"
+    },
+    "forever": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§14"
+    },
+    "default": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§14"
+    },
+    "max": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§14"
+    },
+    "below": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "fraction": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "above": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    }
+  },
+  "errors": []
+}

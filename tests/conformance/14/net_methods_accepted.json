@@ -1,0 +1,259 @@
+{
+  "spec": "§14",
+  "about": "PUT, PATCH, DELETE, HEAD, OPTIONS and the WebDAV methods are accepted in uppercase and a fixture for each reaches the callback",
+  "manifest": {
+    "permissions": [
+      "net"
+    ]
+  },
+  "fixtures": [
+    {
+      "method": "PUT",
+      "url": "https://m.test/PUT",
+      "status": 200,
+      "body": "ok",
+      "headers": {
+        "X-Method": "PUT"
+      },
+      "delay_ms": 10
+    },
+    {
+      "method": "PATCH",
+      "url": "https://m.test/PATCH",
+      "status": 200,
+      "body": "ok",
+      "headers": {
+        "X-Method": "PATCH"
+      },
+      "delay_ms": 10
+    },
+    {
+      "method": "DELETE",
+      "url": "https://m.test/DELETE",
+      "status": 200,
+      "body": "ok",
+      "headers": {
+        "X-Method": "DELETE"
+      },
+      "delay_ms": 10
+    },
+    {
+      "method": "HEAD",
+      "url": "https://m.test/HEAD",
+      "status": 200,
+      "body": "",
+      "headers": {
+        "X-Method": "HEAD"
+      },
+      "delay_ms": 10
+    },
+    {
+      "method": "OPTIONS",
+      "url": "https://m.test/OPTIONS",
+      "status": 200,
+      "body": "ok",
+      "headers": {
+        "X-Method": "OPTIONS"
+      },
+      "delay_ms": 10
+    },
+    {
+      "method": "PROPFIND",
+      "url": "https://m.test/PROPFIND",
+      "status": 200,
+      "body": "ok",
+      "headers": {
+        "X-Method": "PROPFIND"
+      },
+      "delay_ms": 10
+    },
+    {
+      "method": "PROPPATCH",
+      "url": "https://m.test/PROPPATCH",
+      "status": 200,
+      "body": "ok",
+      "headers": {
+        "X-Method": "PROPPATCH"
+      },
+      "delay_ms": 10
+    },
+    {
+      "method": "MKCOL",
+      "url": "https://m.test/MKCOL",
+      "status": 200,
+      "body": "ok",
+      "headers": {
+        "X-Method": "MKCOL"
+      },
+      "delay_ms": 10
+    },
+    {
+      "method": "COPY",
+      "url": "https://m.test/COPY",
+      "status": 200,
+      "body": "ok",
+      "headers": {
+        "X-Method": "COPY"
+      },
+      "delay_ms": 10
+    },
+    {
+      "method": "MOVE",
+      "url": "https://m.test/MOVE",
+      "status": 200,
+      "body": "ok",
+      "headers": {
+        "X-Method": "MOVE"
+      },
+      "delay_ms": 10
+    },
+    {
+      "method": "REPORT",
+      "url": "https://m.test/REPORT",
+      "status": 200,
+      "body": "ok",
+      "headers": {
+        "X-Method": "REPORT"
+      },
+      "delay_ms": 10
+    }
+  ],
+  "steps": [
+    "wait 14s"
+  ],
+  "expect": {
+    "started_PUT": {
+      "value": true,
+      "spec": "§14"
+    },
+    "status_PUT": {
+      "value": 200,
+      "spec": "§14"
+    },
+    "header_PUT": {
+      "value": "PUT",
+      "spec": "§14"
+    },
+    "started_PATCH": {
+      "value": true,
+      "spec": "§14"
+    },
+    "status_PATCH": {
+      "value": 200,
+      "spec": "§14"
+    },
+    "header_PATCH": {
+      "value": "PATCH",
+      "spec": "§14"
+    },
+    "started_DELETE": {
+      "value": true,
+      "spec": "§14"
+    },
+    "status_DELETE": {
+      "value": 200,
+      "spec": "§14"
+    },
+    "header_DELETE": {
+      "value": "DELETE",
+      "spec": "§14"
+    },
+    "started_HEAD": {
+      "value": true,
+      "spec": "§14"
+    },
+    "status_HEAD": {
+      "value": 200,
+      "spec": "§14"
+    },
+    "header_HEAD": {
+      "value": "HEAD",
+      "spec": "§14"
+    },
+    "started_OPTIONS": {
+      "value": true,
+      "spec": "§14"
+    },
+    "status_OPTIONS": {
+      "value": 200,
+      "spec": "§14"
+    },
+    "header_OPTIONS": {
+      "value": "OPTIONS",
+      "spec": "§14"
+    },
+    "started_PROPFIND": {
+      "value": true,
+      "spec": "§14"
+    },
+    "status_PROPFIND": {
+      "value": 200,
+      "spec": "§14"
+    },
+    "header_PROPFIND": {
+      "value": "PROPFIND",
+      "spec": "§14"
+    },
+    "started_PROPPATCH": {
+      "value": true,
+      "spec": "§14"
+    },
+    "status_PROPPATCH": {
+      "value": 200,
+      "spec": "§14"
+    },
+    "header_PROPPATCH": {
+      "value": "PROPPATCH",
+      "spec": "§14"
+    },
+    "started_MKCOL": {
+      "value": true,
+      "spec": "§14"
+    },
+    "status_MKCOL": {
+      "value": 200,
+      "spec": "§14"
+    },
+    "header_MKCOL": {
+      "value": "MKCOL",
+      "spec": "§14"
+    },
+    "started_COPY": {
+      "value": true,
+      "spec": "§14"
+    },
+    "status_COPY": {
+      "value": 200,
+      "spec": "§14"
+    },
+    "header_COPY": {
+      "value": "COPY",
+      "spec": "§14"
+    },
+    "started_MOVE": {
+      "value": true,
+      "spec": "§14"
+    },
+    "status_MOVE": {
+      "value": 200,
+      "spec": "§14"
+    },
+    "header_MOVE": {
+      "value": "MOVE",
+      "spec": "§14"
+    },
+    "started_REPORT": {
+      "value": true,
+      "spec": "§14"
+    },
+    "status_REPORT": {
+      "value": 200,
+      "spec": "§14"
+    },
+    "header_REPORT": {
+      "value": "REPORT",
+      "spec": "§14"
+    }
+  },
+  "errors": []
+}

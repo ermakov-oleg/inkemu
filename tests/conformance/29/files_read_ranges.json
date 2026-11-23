@@ -1,0 +1,61 @@
+{
+  "spec": "§29",
+  "about": "read(name, offset, len) returns at most len bytes from offset, an empty string at or past the end",
+  "expect": {
+    "middle": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "234"
+        ]
+      },
+      "spec": "§29"
+    },
+    "tail": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "89"
+        ]
+      },
+      "spec": "§29"
+    },
+    "at_end": {
+      "value": {
+        "ok": true,
+        "ret": [
+          ""
+        ]
+      },
+      "spec": "§29"
+    },
+    "past_end": {
+      "value": {
+        "ok": true,
+        "ret": [
+          ""
+        ]
+      },
+      "spec": "§29"
+    },
+    "offset_only": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "789"
+        ]
+      },
+      "spec": "§29"
+    },
+    "one_byte": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "0"
+        ]
+      },
+      "spec": "§29"
+    }
+  },
+  "errors": []
+}

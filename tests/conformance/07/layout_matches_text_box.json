@@ -1,0 +1,19 @@
+{
+  "spec": "§7",
+  "about": "layout counts the lines text_box draws: 1024 minus that many rects, then the box, fills the frame exactly",
+  "expect": {
+    "fit": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true,
+          0,
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§7"
+    }
+  },
+  "errors": []
+}

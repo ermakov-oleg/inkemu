@@ -1,0 +1,41 @@
+{
+  "spec": "§6",
+  "about": "129 points: the reader answers limit_exceeded where the contract says invalid_argument (measured)",
+  "expect": {
+    "polyline_129": {
+      "deviation": "D2",
+      "spec_value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      }
+    },
+    "polygon_129": {
+      "deviation": "D2",
+      "spec_value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      }
+    }
+  },
+  "errors": []
+}

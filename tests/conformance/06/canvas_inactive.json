@@ -1,0 +1,30 @@
+{
+  "spec": "§6",
+  "about": "g is usable only inside its own callback; later calls return nil, inactive",
+  "steps": [
+    "wait 1s"
+  ],
+  "expect": {
+    "rect_after_draw": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "inactive"
+        ]
+      },
+      "spec": "§6"
+    },
+    "size_after_draw": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "inactive"
+        ]
+      },
+      "spec": "§6"
+    }
+  },
+  "errors": []
+}

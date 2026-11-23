@@ -1,0 +1,89 @@
+{
+  "spec": "§29",
+  "about": "512 files fit; a 513th new file is limit_exceeded on write and append, existing files still change",
+  "expect": {
+    "failed": {
+      "value": 0,
+      "spec": "§29"
+    },
+    "count": {
+      "value": 512,
+      "spec": "§29"
+    },
+    "write_new": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§29"
+    },
+    "append_new": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists_extra": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    },
+    "write_existing": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "append_existing": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "read_f1": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "yyz"
+        ]
+      },
+      "spec": "§29"
+    },
+    "remove_one": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "write_after_remove": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    }
+  },
+  "errors": []
+}

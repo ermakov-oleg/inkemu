@@ -1,0 +1,15 @@
+local T = require("conformance")
+
+function on_draw(ctx, g)
+  T.call("size", function() return g:size() end)
+  T.call("clear", function() return g:clear(0) end)
+  T.call("line", function() return g:line(0, 0, 10, 10) end)
+  T.call("rect", function() return g:rect(0, 0, 10, 10) end)
+  T.call("circle", function() return g:circle(50, 50, 10) end)
+  T.call("arc", function() return g:arc(50, 50, 10, 0, 90) end)
+  T.call("polyline", function() return g:polyline({ 0, 0, 10, 10 }) end)
+  T.call("polygon", function() return g:polygon({ 0, 0, 10, 0, 10, 10 }) end)
+  T.call("pattern", function() return g:pattern(0, 0, 10, 10) end)
+  T.call("text", function() return g:text(0, 0, "x") end)
+  T.call("text_box", function() return g:text_box(0, 0, 50, 50, "x") end)
+end

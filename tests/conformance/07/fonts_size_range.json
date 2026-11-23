@@ -1,0 +1,47 @@
+{
+  "spec": "\u00a77",
+  "about": "fonts:size outside 8..96 or with a fraction is invalid_argument",
+  "expect": {
+    "size_7": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a77"
+    },
+    "size_97": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a77"
+    },
+    "size_0": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a77"
+    },
+    "size_fraction": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a77"
+    }
+  },
+  "errors": []
+}

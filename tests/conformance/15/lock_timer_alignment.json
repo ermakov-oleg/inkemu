@@ -1,0 +1,29 @@
+{
+  "spec": "\u00a715",
+  "about": "the timer wake is aligned to wall-clock multiples of interval_sec (locked at :20 the first wake is at the next :00, not 60 s later)",
+  "manifest": {
+    "lockscreen": {
+      "entry": "lockscreen.lua",
+      "interval_sec": 60
+    }
+  },
+  "files": {
+    "lockscreen.lua": "lock_reason.lockscreen.lua"
+  },
+  "start_time": "2026-11-20T09:00:20",
+  "steps": [
+    "lock",
+    "wait 41s"
+  ],
+  "expect": {
+    "reason": {
+      "value": "timer",
+      "spec": "\u00a715"
+    },
+    "elapsed": {
+      "value": 40,
+      "spec": "\u00a715"
+    }
+  },
+  "errors": []
+}

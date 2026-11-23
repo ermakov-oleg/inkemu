@@ -1,0 +1,31 @@
+{
+  "spec": "\u00a715",
+  "about": "lock.net is true in the first session of a networked lock screen and ctx.net exists",
+  "manifest": {
+    "permissions": [
+      "net"
+    ],
+    "lockscreen": {
+      "entry": "lockscreen.lua",
+      "interval_sec": 60,
+      "net": true
+    }
+  },
+  "files": {
+    "lockscreen.lua": "lock_net.lockscreen.lua"
+  },
+  "steps": [
+    "lock"
+  ],
+  "expect": {
+    "lock_net": {
+      "value": true,
+      "spec": "\u00a715"
+    },
+    "has_net": {
+      "value": true,
+      "spec": "\u00a715"
+    }
+  },
+  "errors": []
+}

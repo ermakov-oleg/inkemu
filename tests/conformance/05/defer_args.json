@@ -1,0 +1,51 @@
+{
+  "spec": "\u00a75",
+  "about": "defer_full_refresh takes an integer 1..60000 and returns nothing; outside the range it is invalid_argument",
+  "expect": {
+    "min": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "\u00a75"
+    },
+    "max": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "\u00a75"
+    },
+    "zero": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a75"
+    },
+    "over": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a75"
+    },
+    "negative": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a75"
+    }
+  },
+  "errors": []
+}

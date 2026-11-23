@@ -1,0 +1,57 @@
+{
+  "spec": "\u00a77",
+  "about": "text that is not valid UTF-8 is invalid_argument in text, text_box, measure and layout",
+  "expect": {
+    "text": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a77"
+    },
+    "text_cut": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a77"
+    },
+    "text_box": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a77"
+    },
+    "measure": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a77"
+    },
+    "layout": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a77"
+    }
+  },
+  "errors": []
+}

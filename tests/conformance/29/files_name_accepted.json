@@ -1,0 +1,151 @@
+{
+  "spec": "§29",
+  "about": "names up to 128 UTF-8 bytes with non-ASCII letters, several dots and device-name prefixes are accepted",
+  "expect": {
+    "write.book": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.book": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.utf8": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.utf8": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.long128": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.long128": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.long_utf8_128": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.long_utf8_128": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.prefix_con": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.prefix_con": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.conx": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.conx": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.multi_dot": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.multi_dot": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "write.dash": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists.dash": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    }
+  },
+  "errors": []
+}

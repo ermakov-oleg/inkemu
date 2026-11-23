@@ -1,0 +1,40 @@
+{
+  "spec": "§14",
+  "about": "an HTTP error status is still a complete answer: ok = true with the body and no err",
+  "manifest": {
+    "permissions": [
+      "net"
+    ]
+  },
+  "fixtures": [
+    {
+      "method": "GET",
+      "url": "https://r.test/gone",
+      "status": 404,
+      "body": "gone",
+      "delay_ms": 10
+    }
+  ],
+  "steps": [
+    "wait 3s"
+  ],
+  "expect": {
+    "ok": {
+      "value": true,
+      "spec": "§14"
+    },
+    "status": {
+      "value": 404,
+      "spec": "§14"
+    },
+    "body": {
+      "value": "gone",
+      "spec": "§14"
+    },
+    "err": {
+      "value": "nil",
+      "spec": "§14"
+    }
+  },
+  "errors": []
+}

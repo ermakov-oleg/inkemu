@@ -1,0 +1,33 @@
+{
+  "spec": "§9",
+  "about": "list is an array of names in byte order (a hyphen sorts before a dot, a dot before a digit, a digit before an underscore)",
+  "expect": {
+    "list_empty": {
+      "value": {
+        "ok": true,
+        "ret": [
+          []
+        ]
+      },
+      "spec": "§9"
+    },
+    "list": {
+      "value": {
+        "ok": true,
+        "ret": [
+          [
+            "0z",
+            "a",
+            "a-1",
+            "a.b",
+            "a0",
+            "a_",
+            "b"
+          ]
+        ]
+      },
+      "spec": "§9"
+    }
+  },
+  "errors": []
+}

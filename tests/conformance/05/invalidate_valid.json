@@ -1,0 +1,21 @@
+{
+  "spec": "\u00a75",
+  "about": "invalidate() and invalidate(\"full\") return nothing",
+  "expect": {
+    "plain": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "\u00a75"
+    },
+    "full": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "\u00a75"
+    }
+  },
+  "errors": []
+}

@@ -1,0 +1,42 @@
+{
+  "spec": "\u00a715",
+  "about": "invalidate(\"full\") in the preparation phase makes the frame of the timer session a full refresh and adds no frame",
+  "manifest": {
+    "permissions": [
+      "net"
+    ],
+    "lockscreen": {
+      "entry": "lockscreen.lua",
+      "interval_sec": 60,
+      "net": true
+    }
+  },
+  "files": {
+    "lockscreen.lua": "lock_invalidate_full.lockscreen.lua"
+  },
+  "fixtures": [
+    {
+      "method": "GET",
+      "url": "https://x.test/lock",
+      "status": 200,
+      "body": "fresh"
+    }
+  ],
+  "steps": [
+    "lock",
+    "wait 61s",
+    "observe s"
+  ],
+  "expect": {
+    "s.refreshes": {
+      "value": [
+        "full",
+        "full",
+        "partial",
+        "full"
+      ],
+      "spec": "\u00a715"
+    }
+  },
+  "errors": []
+}

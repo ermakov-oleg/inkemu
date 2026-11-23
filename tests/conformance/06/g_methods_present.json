@@ -1,0 +1,55 @@
+{
+  "spec": "\u00a76",
+  "about": "g offers the twelve listed methods",
+  "expect": {
+    "has.size": {
+      "value": "function",
+      "spec": "\u00a76"
+    },
+    "has.clear": {
+      "value": "function",
+      "spec": "\u00a76"
+    },
+    "has.line": {
+      "value": "function",
+      "spec": "\u00a76"
+    },
+    "has.rect": {
+      "value": "function",
+      "spec": "\u00a76"
+    },
+    "has.circle": {
+      "value": "function",
+      "spec": "\u00a76"
+    },
+    "has.arc": {
+      "value": "function",
+      "spec": "\u00a76"
+    },
+    "has.polyline": {
+      "value": "function",
+      "spec": "\u00a76"
+    },
+    "has.polygon": {
+      "value": "function",
+      "spec": "\u00a76"
+    },
+    "has.pattern": {
+      "value": "function",
+      "spec": "\u00a76"
+    },
+    "has.text": {
+      "value": "function",
+      "spec": "\u00a76"
+    },
+    "has.text_box": {
+      "value": "function",
+      "spec": "\u00a76"
+    },
+    "has.image": {
+      "value": "function",
+      "spec": "\u00a76"
+    }
+  },
+  "errors": []
+}

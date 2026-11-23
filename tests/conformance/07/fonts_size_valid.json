@@ -1,0 +1,27 @@
+{
+  "spec": "\u00a77",
+  "about": "fonts:size takes the bounds 8 and 96",
+  "expect": {
+    "size_8": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true,
+          null
+        ]
+      },
+      "spec": "\u00a77"
+    },
+    "size_96": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true,
+          null
+        ]
+      },
+      "spec": "\u00a77"
+    }
+  },
+  "errors": []
+}

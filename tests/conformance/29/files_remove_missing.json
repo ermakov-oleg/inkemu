@@ -1,0 +1,25 @@
+{
+  "spec": "§29",
+  "about": "remove returns true for an app file that is not there, also right after removing it",
+  "expect": {
+    "remove_missing": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "remove_again": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    }
+  },
+  "errors": []
+}

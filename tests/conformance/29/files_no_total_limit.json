@@ -1,0 +1,38 @@
+{
+  "spec": "§29",
+  "about": "the app folder has no byte quota: it keeps growing past 128 MB while the file count stays at 512",
+  "expect": {
+    "failed": {
+      "value": 0,
+      "spec": "§29"
+    },
+    "append_existing": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "size_f1": {
+      "value": {
+        "ok": true,
+        "ret": [
+          262145
+        ]
+      },
+      "spec": "§29"
+    },
+    "write_existing": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    }
+  },
+  "errors": []
+}

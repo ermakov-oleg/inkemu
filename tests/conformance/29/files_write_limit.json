@@ -1,0 +1,46 @@
+{
+  "spec": "§29",
+  "about": "a write of 262145 bytes is limit_exceeded and the file is unchanged",
+  "expect": {
+    "write_over": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§29"
+    },
+    "size_over": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "not_found"
+        ]
+      },
+      "spec": "§29"
+    },
+    "overwrite_over": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§29"
+    },
+    "small_unchanged": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    }
+  },
+  "errors": []
+}

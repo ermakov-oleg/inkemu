@@ -1,0 +1,34 @@
+{
+  "spec": "§7",
+  "about": "a tab measures as one space; newline and other control characters have no width",
+  "expect": {
+    "tab_is_space": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§7"
+    },
+    "newline_zero_width": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§7"
+    },
+    "control_zero_width": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§7"
+    }
+  },
+  "errors": []
+}

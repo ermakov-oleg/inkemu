@@ -1,0 +1,27 @@
+{
+  "spec": "§26",
+  "about": "random:bytes of 0 or 1025 is invalid_argument",
+  "expect": {
+    "zero": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§26"
+    },
+    "over": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§26"
+    }
+  },
+  "errors": []
+}

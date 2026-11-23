@@ -1,0 +1,62 @@
+{
+  "spec": "§14",
+  "about": "timeout_ms below 1000, above 60000 or not an integer is invalid_argument",
+  "manifest": {
+    "permissions": [
+      "net"
+    ]
+  },
+  "expect": {
+    "timeout_999": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "timeout_60001": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "timeout_0": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "timeout_-1": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "timeout_1.5": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    }
+  },
+  "errors": []
+}

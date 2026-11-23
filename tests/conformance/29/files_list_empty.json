@@ -1,0 +1,17 @@
+{
+  "spec": "§29",
+  "about": "list of an empty folder is an empty table",
+  "expect": {
+    "list_empty": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "table",
+          0
+        ]
+      },
+      "spec": "§29"
+    }
+  },
+  "errors": []
+}

@@ -1,0 +1,60 @@
+{
+  "spec": "§14",
+  "about": "a second request while one is unfinished is busy, a bad method is still invalid_argument, and the slot frees afterwards",
+  "manifest": {
+    "permissions": [
+      "net"
+    ]
+  },
+  "fixtures": [
+    {
+      "method": "GET",
+      "url": "https://b.test/slow",
+      "status": 200,
+      "body": "ok",
+      "delay_ms": 500
+    }
+  ],
+  "steps": [
+    "wait 5s"
+  ],
+  "expect": {
+    "first_started": {
+      "value": true,
+      "spec": "§14"
+    },
+    "second_get": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "busy"
+        ]
+      },
+      "spec": "§14"
+    },
+    "bad_method_not_busy": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "first_status": {
+      "value": 200,
+      "spec": "§14"
+    },
+    "again_started": {
+      "value": true,
+      "spec": "§14"
+    },
+    "again_status": {
+      "value": 200,
+      "spec": "§14"
+    }
+  },
+  "errors": []
+}

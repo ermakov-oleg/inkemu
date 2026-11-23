@@ -1,0 +1,14 @@
+{
+  "spec": "\u00a77",
+  "about": "left-to-right text is drawn and returns nothing",
+  "expect": {
+    "latin_ok": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "\u00a77"
+    }
+  },
+  "errors": []
+}

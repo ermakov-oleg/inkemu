@@ -1,0 +1,24 @@
+{
+  "spec": "\u00a725",
+  "about": "act(\"refresh\") returns nothing and the next frame is a full refresh, as with invalidate(\"full\")",
+  "steps": [
+    "wait 1s",
+    "tap 100 100",
+    "wait 1s",
+    "observe s"
+  ],
+  "expect": {
+    "act_refresh": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "\u00a725"
+    },
+    "s.refresh": {
+      "value": "full",
+      "spec": "\u00a725"
+    }
+  },
+  "errors": []
+}

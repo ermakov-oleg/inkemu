@@ -1,0 +1,52 @@
+{
+  "spec": "§26",
+  "about": "hash input of exactly 1048576 bytes is accepted by every hash",
+  "expect": {
+    "sha256": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§26"
+    },
+    "sha1": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§26"
+    },
+    "md5": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§26"
+    },
+    "crc32": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§26"
+    },
+    "hmac": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§26"
+    }
+  },
+  "errors": []
+}

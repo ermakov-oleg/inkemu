@@ -1,0 +1,56 @@
+{
+  "spec": "§14",
+  "about": "with 512 app files a save under a new name is limit_exceeded, a save over an existing one works",
+  "manifest": {
+    "permissions": [
+      "net"
+    ]
+  },
+  "fixtures": [
+    {
+      "method": "GET",
+      "url": "https://s.test/ok",
+      "status": 200,
+      "body": "hello",
+      "delay_ms": 10
+    }
+  ],
+  "steps": [
+    "wait 6s"
+  ],
+  "expect": {
+    "new_saved": {
+      "value": false,
+      "spec": "§14"
+    },
+    "new_err": {
+      "value": "limit_exceeded",
+      "spec": "§14"
+    },
+    "new_exists": {
+      "value": false,
+      "spec": "§14"
+    },
+    "existing_saved": {
+      "value": true,
+      "spec": "§14"
+    },
+    "existing_file": {
+      "value": "hello",
+      "spec": "§14"
+    },
+    "new_ok": {
+      "value": true,
+      "spec": "§14"
+    },
+    "new_bytes": {
+      "value": 5,
+      "spec": "§14"
+    },
+    "new_body_len": {
+      "value": 0,
+      "spec": "§14"
+    }
+  },
+  "errors": []
+}

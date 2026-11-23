@@ -1,0 +1,39 @@
+{
+  "spec": "§14",
+  "about": "a 3xx answer reaches the app as it is with its location header",
+  "manifest": {
+    "permissions": [
+      "net"
+    ]
+  },
+  "fixtures": [
+    {
+      "method": "GET",
+      "url": "https://r.test/old",
+      "status": 302,
+      "body": "",
+      "headers": {
+        "Location": "https://r.test/new"
+      },
+      "delay_ms": 10
+    }
+  ],
+  "steps": [
+    "wait 3s"
+  ],
+  "expect": {
+    "status": {
+      "value": 302,
+      "spec": "§14"
+    },
+    "location": {
+      "value": "https://r.test/new",
+      "spec": "§14"
+    },
+    "body": {
+      "value": "",
+      "spec": "§14"
+    }
+  },
+  "errors": []
+}

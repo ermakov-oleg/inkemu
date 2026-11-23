@@ -1,0 +1,43 @@
+{
+  "spec": "§29",
+  "about": "read without a length returns 65536 bytes; the rest follows from offset 65536",
+  "expect": {
+    "default_len": {
+      "value": {
+        "ok": true,
+        "ret": [
+          65536
+        ]
+      },
+      "spec": "§29"
+    },
+    "second_chunk": {
+      "value": {
+        "ok": true,
+        "ret": [
+          4464
+        ]
+      },
+      "spec": "§29"
+    },
+    "ten": {
+      "value": {
+        "ok": true,
+        "ret": [
+          10
+        ]
+      },
+      "spec": "§29"
+    },
+    "max_len": {
+      "value": {
+        "ok": true,
+        "ret": [
+          65536
+        ]
+      },
+      "spec": "§29"
+    }
+  },
+  "errors": []
+}

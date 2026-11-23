@@ -1,0 +1,45 @@
+{
+  "spec": "\u00a77",
+  "about": "a sample with bad UTF-8, NUL or right-to-left text is invalid_argument and other types raise an error",
+  "expect": {
+    "sample_bad_utf8": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a77"
+    },
+    "sample_nul": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a77"
+    },
+    "sample_rtl": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a77"
+    },
+    "raises_table": {
+      "value": true,
+      "spec": "\u00a77"
+    },
+    "raises_boolean": {
+      "value": true,
+      "spec": "\u00a77"
+    }
+  },
+  "errors": []
+}

@@ -1,0 +1,28 @@
+{
+  "spec": "\u00a725",
+  "about": "act(\"sleep\") from a pointer up returns nothing, ends the session through on_leave and locks the device",
+  "steps": [
+    "wait 1s",
+    "tap 100 100",
+    "wait 1s",
+    "observe s"
+  ],
+  "expect": {
+    "sleep": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "\u00a725"
+    },
+    "left": {
+      "value": true,
+      "spec": "\u00a725"
+    },
+    "s.locked": {
+      "value": true,
+      "spec": "\u00a725"
+    }
+  },
+  "errors": []
+}

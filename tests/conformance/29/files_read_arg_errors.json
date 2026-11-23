@@ -1,0 +1,57 @@
+{
+  "spec": "§29",
+  "about": "a negative offset or a length below 1 is invalid_argument, a length above 65536 is limit_exceeded",
+  "expect": {
+    "negative_offset": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "len_zero": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "len_negative": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "len_over": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§29"
+    },
+    "len_way_over": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§29"
+    }
+  },
+  "errors": []
+}

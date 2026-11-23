@@ -1,0 +1,17 @@
+{
+  "spec": "§6",
+  "about": "a layer used as the source of its own g:image is invalid_argument",
+  "expect": {
+    "self_draw": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§6"
+    }
+  },
+  "errors": []
+}

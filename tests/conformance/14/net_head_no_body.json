@@ -1,0 +1,44 @@
+{
+  "spec": "§14",
+  "about": "a HEAD answer has an empty body and zero bytes while its headers arrive",
+  "manifest": {
+    "permissions": [
+      "net"
+    ]
+  },
+  "fixtures": [
+    {
+      "method": "HEAD",
+      "url": "https://h.test/h",
+      "status": 200,
+      "body": "",
+      "headers": {
+        "X-A": "b",
+        "Content-Length": "1234"
+      },
+      "delay_ms": 10
+    }
+  ],
+  "steps": [
+    "wait 3s"
+  ],
+  "expect": {
+    "status": {
+      "value": 200,
+      "spec": "§14"
+    },
+    "body": {
+      "value": "",
+      "spec": "§14"
+    },
+    "bytes": {
+      "value": 0,
+      "spec": "§14"
+    },
+    "header_a": {
+      "value": "b",
+      "spec": "§14"
+    }
+  },
+  "errors": []
+}

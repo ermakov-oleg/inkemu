@@ -1,0 +1,17 @@
+{
+  "spec": "\u00a725",
+  "about": "act(\"sleep\") and act(\"power_off\") outside a key or pointer up (load, timer, pointer down) do not lock the device",
+  "steps": [
+    "wait 1s",
+    "tap 100 100",
+    "wait 1s",
+    "observe s"
+  ],
+  "expect": {
+    "s.locked": {
+      "value": false,
+      "spec": "\u00a725"
+    }
+  },
+  "errors": []
+}

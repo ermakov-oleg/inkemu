@@ -1,0 +1,72 @@
+{
+  "spec": "§14",
+  "about": "a method must be uppercase and known: lowercase, mixed case and unknown strings are invalid_argument",
+  "manifest": {
+    "permissions": [
+      "net"
+    ]
+  },
+  "expect": {
+    "method_get": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "method_post": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "method_Get": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "method_patch": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "method_put": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    },
+    "method_FOO": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§14"
+    }
+  },
+  "errors": []
+}

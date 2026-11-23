@@ -1,0 +1,43 @@
+{
+  "spec": "§6",
+  "about": "a filled rect with a width or height of zero or less draws nothing",
+  "expect": {},
+  "pixels": [
+    [
+      10,
+      12,
+      0
+    ],
+    [
+      9,
+      12,
+      0
+    ],
+    [
+      36,
+      12,
+      0
+    ],
+    [
+      40,
+      12,
+      0
+    ],
+    [
+      75,
+      10,
+      0
+    ],
+    [
+      75,
+      9,
+      0
+    ],
+    [
+      105,
+      15,
+      1
+    ]
+  ],
+  "errors": []
+}

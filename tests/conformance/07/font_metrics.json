@@ -1,0 +1,19 @@
+{
+  "spec": "\u00a77",
+  "about": "x4_pro system fonts have ascents 17, 21 and 26",
+  "expect": {
+    "small.ascent": {
+      "value": 17,
+      "spec": "\u00a77"
+    },
+    "medium.ascent": {
+      "value": 21,
+      "spec": "\u00a77"
+    },
+    "large.ascent": {
+      "value": 26,
+      "spec": "\u00a77"
+    }
+  },
+  "errors": []
+}

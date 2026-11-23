@@ -1,0 +1,37 @@
+{
+  "spec": "§26",
+  "about": "encoders refuse 1048577 bytes of input with limit_exceeded",
+  "expect": {
+    "hex": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§26"
+    },
+    "base64": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§26"
+    },
+    "url": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§26"
+    }
+  },
+  "errors": []
+}

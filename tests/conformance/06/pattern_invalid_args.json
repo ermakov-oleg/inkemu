@@ -1,0 +1,69 @@
+{
+  "spec": "\u00a76",
+  "about": "an unknown pattern kind or a density outside 0..100 is invalid_argument and draws nothing",
+  "expect": {
+    "bogus_kind": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a76"
+    },
+    "density_101": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a76"
+    },
+    "density_negative": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a76"
+    }
+  },
+  "pixels": [
+    [
+      20,
+      20,
+      0
+    ],
+    [
+      30,
+      30,
+      0
+    ],
+    [
+      110,
+      20,
+      0
+    ],
+    [
+      120,
+      30,
+      0
+    ],
+    [
+      200,
+      20,
+      0
+    ],
+    [
+      210,
+      30,
+      0
+    ]
+  ],
+  "errors": []
+}
