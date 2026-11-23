@@ -443,17 +443,11 @@ Already green and pinned: `25/act_inactive_no_lock` (refused `sleep`/`power_off`
 
 ## §26 Encoding, hashes, random
 
-### 26/hash_sha1, 26/hash_input_limit
-- Contract: `sha1` returns 20 raw bytes; every hash call takes at most 1048576 bytes, more is `nil, "limit_exceeded"` (`hash_input_limit`; the accepted maximum is `26/hash_input_max`, green).
-- Core now: `sha1` returns 40 hex characters; no input limit anywhere.
+### 26/hash_input_limit
+- Contract: every hash call takes at most 1048576 bytes, more is `nil, "limit_exceeded"` (the accepted maximum is `26/hash_input_max`, green).
+- Core now: no input limit anywhere.
 - Touch points: `crates/inkcore/src/ctx/utils.rs`.
-- Source: probe-confirmed for `sha1` (`abc` gives 20 bytes); the limit is contract only (§26 gives it for all input; §18 gives the code).
-
-### 26/hash_crc32
-- Contract: `crc32` is zlib's value as a signed 32-bit integer; `crc32("a") == -390611389`.
-- Core now: an unsigned single-precision float (`3904355840.0`).
-- Touch points: `crates/inkcore/src/ctx/utils.rs`.
-- Source: probe-confirmed for `a` and `abc`; `""` and `123456789` are computed from zlib.
+- Source: contract only (§26 gives it for all input; §18 gives the code).
 
 ### 26/encoding_input_limit
 - Contract: `hex:encode`, `base64:encode` and `url:encode` take at most 1048576 bytes of input; more is `nil, "limit_exceeded"` (the accepted maximum is `26/encoding_input_max`, green).
@@ -485,7 +479,7 @@ Already green and pinned: `25/act_inactive_no_lock` (refused `sleep`/`power_off`
 - Touch points: `crates/inkcore/src/ctx/utils.rs`.
 - Source: contract only. Inferred, not stated: booleans appear as the text `true` and `false`. Not pinned: the 64-item cap (the contract does not name the error code).
 
-Already green and pinned: `26/encoding`, `26/hash_input_max`, `26/encoding_input_max`, `26/base64_decode`, `26/url_encode_decode`, `26/random_bytes_range`, `26/hash_hmac_sha256` (the probe's `k`/`m` vector, RFC 4231 cases 2 and 6), `26/hex_decode`, `26/random_uuid`.
+Already green and pinned: `26/encoding`, `26/hash_input_max`, `26/encoding_input_max`, `26/base64_decode`, `26/url_encode_decode`, `26/random_bytes_range`, `26/hash_hmac_sha256` (the probe's `k`/`m` vector, RFC 4231 cases 2 and 6), `26/hex_decode`, `26/random_uuid`, `26/hash_crc32` and `26/hash_sha1` (probe-confirmed; fixed in the core).
 
 ## §29 App files
 
