@@ -266,3 +266,52 @@ fn new_secrets_apply_from_the_next_start() {
         .iter()
         .any(|l| l.ends_with("net: GET http://x.test/{{pin}} -> 200 (fixture)")));
 }
+
+fn mixed() -> Config {
+    Config {
+        net_mode: NetMode::FixturesThenLive,
+        ..with_fixtures(&[(
+            "a.json",
+            fixture(
+                json!({"method": "GET", "url": "http://x.test/a"}),
+                json!({"status": 200, "body": "ok"}),
+            ),
+        )])
+    }
+}
+
+#[test]
+fn fixtures_then_live_uses_a_fixture_when_there_is_one() {
+    let mut core = boot(app("{url = 'http://x.test/a'}", STATUS_BODY), mixed());
+    assert!(core.take_outgoing().is_empty());
+    assert_eq!(core.status().net, "fixtures+live");
+    core.wait(300).unwrap();
+    assert_eq!(msg(&mut core), "200:ok");
+    assert!(core
+        .log()
+        .iter()
+        .any(|l| l.contains("GET http://x.test/a -> 200 (fixture)")));
+}
+
+#[test]
+fn fixtures_then_live_sends_the_rest_to_the_outbox() {
+    let mut core = boot(
+        app("{url = 'http://x.test/b'}", "msg = resp.status"),
+        mixed(),
+    );
+    let out = core.take_outgoing();
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0].url, "http://x.test/b");
+    assert!(core.warnings().is_empty());
+    core.deliver(
+        out[0].id,
+        NetResult::Response {
+            status: 204,
+            headers: vec![],
+            body: vec![],
+            delay_ms: 50,
+        },
+    );
+    core.wait(50).unwrap();
+    assert_eq!(msg(&mut core), json!(204));
+}

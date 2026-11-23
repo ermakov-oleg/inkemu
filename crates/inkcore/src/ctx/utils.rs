@@ -78,8 +78,8 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
 
     let crc32 = method(|lua, args| {
         let b = bytes_arg("crc32", 1, args.iter().next().unwrap_or(&Value::Nil))?;
-        // the device returns the CRC as a 32-bit float, so the low bits are rounded away (verified on 26112001)
-        Value::Number(crc32fast::hash(&b) as f32).into_lua_multi(lua)
+        // signed 32-bit integer on the device, values from 2^31 wrap to negative (verified on 26112001)
+        Value::Integer(crc32fast::hash(&b) as i32).into_lua_multi(lua)
     });
     let hmac_sha256 = method(|lua, args| {
         let a = args.into_vec();
@@ -108,7 +108,7 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
         (
             "hash",
             vec![
-                codec("sha1", |b| Ok(hex(&Sha1::digest(b)).into_bytes())),
+                codec("sha1", |b| Ok(Sha1::digest(b).to_vec())),
                 codec("sha256", |b| Ok(Sha256::digest(b).to_vec())),
                 codec("md5", |b| Ok(Md5::digest(b).to_vec())),
                 ("crc32", crc32),

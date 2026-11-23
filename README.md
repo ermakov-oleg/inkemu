@@ -19,6 +19,30 @@ network responses.
 The device API is not publicly documented. Everything here is built from community reverse-engineering notes, so
 treat inkemu as a development aid, not as a reference of the firmware.
 
+## In the browser
+
+The same core runs as a static page: **<https://ermakov-oleg.github.io/inkemu/>**. It is for trying an InkApp without
+Python or the reader. Open an app by pasting a GitHub folder link (`https://github.com/<owner>/<repo>/tree/<ref>/<path>`),
+loading a zip, or picking a local folder (re-read it after editing; "Re-read files" needs a Chromium browser, it uses the File System Access API). Click = tap, drag = swipe, long press = hold,
+arrows/Enter/Esc = side buttons. The app clock stops while the tab is hidden.
+
+- Share link: `?gh=<owner>/<repo>&ref=<ref>&path=<path>`. It always follows the branch, it is never pinned to a commit.
+- Limits: 20 MiB and 2000 files per app; GitHub allows 60 API calls per hour per IP without a token, one call per open for a plain branch name (2–3 when the branch name contains `/`).
+- Fixtures: the nearest `tests/fixtures/<app_id>/` up the tree from the app folder (its `net/` and `reader.json`).
+  The default is "fixtures, then the network"; the "fixtures only" toggle replays only.
+- Network: the page calls servers from the browser, so a server without CORS headers answers `no_network`. Record a
+  fixture with `inkemu run --net record` and keep it in the repository.
+- Fonts: the bundled DejaVu Sans is used. "Fonts..." takes your own `small.bdf`, `medium.bdf` and `large.bdf`; the
+  reader's font is not included.
+
+Development:
+
+```bash
+scripts/build-web.sh                 # builds the Wasm core into web/core/ (needs emscripten)
+python3 -m http.server -d web        # then open http://localhost:8000
+node --test 'web/tests/**/*.test.mjs'
+```
+
 ## Install
 
 ```bash
@@ -208,8 +232,8 @@ the start with an error. From each file inkemu takes:
 - `net` (`request`; GET and POST), `dialog` (`confirm`, `toast`), `input` (`text`, `edit`, `keyboard_h` = 436,
   `pointer` = true).
 - `image`, `qr`, `json`, `base64` (`encode`, `decode`), `hex`, `url` (`encode`, `decode`), `zlib`, `random` (`uuid`, `bytes`).
-- `hash`: `sha256`, `md5` and `hmac_sha256` return the raw digest bytes (use `ctx.hex:encode` for text); `crc32`
-  returns the CRC as a 32-bit float, so its low bits are rounded away as on the device; `sha1` returns hex.
+- `hash`: `sha256`, `md5` and `hmac_sha256` return the raw digest bytes (use `ctx.hex:encode` for text); `sha1` returns the
+  20 raw bytes too; `crc32` returns a signed 32-bit integer (values from 2^31 wrap to negative); all verified in QEMU on firmware 26112001.
 - `screen` (`width`, `height`, `orientation`, `set_orientation`, `gray_levels` = 2, `gray_still` = 4),
   `frontlight` (`get`, `set`, `reset`), `system` (`can_open`, `open`, `act`), `i18n` (`locale`), `perf` (`info` =
   `{}`), `gc`, `budget`, `reader` (answers from `<fixtures dir>/reader.json`), `lockscreen`, `lock`.
@@ -240,7 +264,7 @@ offset_minutes revision valid`.
   - the numbering of `clock:now().weekday` (inkemu: Sunday = 1, as 2.26's `wday`);
   - the meaning of `clock:now().revision` (inkemu: it changes when the clock is moved by a wait, `]` or `}`, not
     when time passes in the window or with an input);
-  - the result format of `ctx.hash:hmac_sha256` (raw bytes in inkemu) and of `ctx.hash:sha1` (hex in inkemu);
+  - the result format of `ctx.hash:hmac_sha256` (raw bytes in inkemu);
   - the level `ctx.frontlight:reset()` goes back to (inkemu: the level at start, 0);
   - `ctx.random:bytes(n)` with `n` below 0 or above 1 MiB: inkemu refuses it with `nil, "invalid_argument"`;
   - the quota of `ctx.files` (inkemu: the same as `ctx.storage`'s, counted separately);

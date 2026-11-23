@@ -1,0 +1,49 @@
+name: Pages
+
+on:
+  push:
+    branches: [rust-core, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - run: scripts/vendor-lua.sh
+      - uses: Swatinem/rust-cache@v2.8.1
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 7.0.0
+      - run: rustup target add wasm32-unknown-emscripten
+      - run: scripts/build-web.sh
+      - name: stage the site without the tests
+        run: |
+          mkdir "$RUNNER_TEMP/site"
+          tar -C web --exclude=./tests --exclude=./package.json --exclude=node_modules -cf - . | tar -C "$RUNNER_TEMP/site" -xf -
+          find "$RUNNER_TEMP/site" -type f | sort
+      - uses: actions/upload-pages-artifact@v3.0.1
+        with:
+          path: ${{ runner.temp }}/site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4.0.5

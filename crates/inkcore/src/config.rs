@@ -8,6 +8,8 @@ pub enum NetMode {
     Replay,
     Record,
     Live,
+    /// A matching fixture answers as in `Replay`, the rest goes out as in `Live`; never records.
+    FixturesThenLive,
 }
 
 impl NetMode {
@@ -16,6 +18,7 @@ impl NetMode {
             NetMode::Replay => "replay",
             NetMode::Record => "record",
             NetMode::Live => "live",
+            NetMode::FixturesThenLive => "fixtures+live",
         }
     }
 }
