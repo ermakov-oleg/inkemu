@@ -1,0 +1,15 @@
+local T = require("conformance")
+
+function on_load(ctx)
+  T.value("capabilities.ui", ctx.capabilities.ui)
+  T.type("ui", ctx.ui)
+  T.type("ui.create", ctx.ui and ctx.ui.create)
+  local a = ctx.ui:create()
+  local b = ctx.ui:create({})
+  T.type("create.no_opts", a)
+  T.type("create.empty", b)
+  T.value("create.independent", a ~= b)
+  T.type("create.unknown_fields", ctx.ui:create({ no_such_field = 1 }))
+  T.call("create.number", function() return ctx.ui:create(5) end)
+  T.call("create.string", function() return ctx.ui:create("x") end)
+end
