@@ -124,8 +124,11 @@ pub(crate) fn new_g(lua: &Lua, st: &Shared, target: Target) -> mlua::Result<Tabl
                 } else {
                     command(lua, name, &a)
                 };
-                on_canvas(&st, &target, |c| c.record(cmd));
-                Ok(MultiValue::new())
+                if on_canvas(&st, &target, |c| c.record(cmd)) {
+                    Ok(MultiValue::new())
+                } else {
+                    (Value::Nil, "limit_exceeded").into_lua_multi(lua)
+                }
             }),
         ));
     }

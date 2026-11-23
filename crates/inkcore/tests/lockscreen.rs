@@ -162,3 +162,16 @@ fn a_fetcher_answers_every_live_wake_within_one_wait() {
     );
     assert!(core.take_outgoing().is_empty());
 }
+
+#[test]
+fn lock_screen_frames_are_recorded_like_app_frames() {
+    let lock = "function on_draw(c, g) g:text(0, 0, 'locked') end\n";
+    let mut core = Core::new(
+        files(r#"{"interval_sec": 60}"#, lock),
+        Config::default(),
+        Persisted::default(),
+    );
+    core.lock();
+    core.unlock();
+    assert_eq!(core.status().refreshes, ["full", "full", "full"]);
+}

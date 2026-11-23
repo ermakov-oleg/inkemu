@@ -180,7 +180,7 @@ class Emu:
     # ---- inspection -------------------------------------------------------------------------
 
     def status(self) -> dict:
-        time, net, cmds, paused, screen, app_id, running, pending, locked = self._s.status()
+        time, net, cmds, paused, screen, app_id, running, pending, locked, refresh, refreshes = self._s.status()
         return {
             "time": time,
             "net": net,
@@ -191,6 +191,8 @@ class Emu:
             "running": running,
             "pending": None if pending is None else dict(zip(("kind", "title", "text"), pending, strict=True)),
             "locked": locked,
+            "refresh": refresh,
+            "refreshes": refreshes,
         }
 
     @property

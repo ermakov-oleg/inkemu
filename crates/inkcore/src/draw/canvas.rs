@@ -1,4 +1,4 @@
-//! One frame's draw commands, as 0.1 `draw.Canvas`: the first 1024 are kept, text is laid out as it is recorded.
+//! One frame's draw commands, as 0.1 `draw.Canvas`: up to 1024 are accepted, text is laid out as it is recorded.
 use std::rc::Rc;
 
 use unicode_bidi::{bidi_class, BidiClass};
@@ -10,7 +10,7 @@ use super::text::Fonts;
 use super::{Frame, TextItem};
 use crate::log::py_repr_str;
 
-/// The device drops every draw command of a frame after this many.
+/// A frame accepts this many draw commands; the device refuses every call past it.
 pub const CAP: usize = 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -128,7 +128,12 @@ pub struct Canvas {
     /// the next `begin_frame`, as in 0.1.
     rec_ops: Vec<Op>,
     rec_texts: Vec<TextItem>,
+    /// Commands accepted in the frame being recorded.
     n: usize,
+    /// Commands asked for, refused ones too.
+    tried: usize,
+    /// `g:image` commands accepted.
+    images: usize,
     warnings: Vec<String>,
     bad: Option<String>,
 }
@@ -149,6 +154,8 @@ impl Canvas {
             rec_ops: vec![],
             rec_texts: vec![],
             n: 0,
+            tried: 0,
+            images: 0,
             warnings: vec![],
             bad: None,
         }
@@ -168,46 +175,70 @@ impl Canvas {
         self.rec_ops.clear();
         self.rec_texts.clear();
         self.warnings.clear();
-        self.n = 0;
+        (self.n, self.tried, self.images) = (0, 0, 0);
         self.bad = None;
     }
 
-    /// Counts one command; only the first `CAP` are drawn, checked and laid out. `Err` is a value the device
-    /// cannot draw: the frame fails at `end_frame`.
-    pub fn record(&mut self, cmd: Result<Cmd, String>) {
-        self.n += 1;
-        if self.n > CAP {
-            return;
+    /// Adds a command if the frame has room for it, else refuses it whole (false). Each line of a text box is
+    /// one command. `Err` is a value the device cannot draw: the frame fails at `end_frame`.
+    pub fn record(&mut self, cmd: Result<Cmd, String>) -> bool {
+        if self.n >= CAP {
+            self.tried += 1;
+            return false;
         }
         let cmd = match cmd {
             Ok(c) => c,
             Err(msg) => {
+                (self.n, self.tried) = (self.n + 1, self.tried + 1);
                 self.bad.get_or_insert(msg);
-                return;
+                return true;
             }
         };
-        let op = match cmd {
+        let (op, text, cost) = match cmd {
             Cmd::Text { .. } | Cmd::TextBox { .. } => match self.layout(&cmd) {
-                Some(op) => op,
-                None => return,
+                Some((op, text)) => {
+                    let lines = match &op {
+                        Op::Lines { lines, .. } if matches!(cmd, Cmd::TextBox { .. }) => {
+                            lines.len()
+                        }
+                        _ => 1,
+                    };
+                    (Some(op), Some(text), lines)
+                }
+                None => (None, None, 1),
             },
-            c => Op::Draw(c),
+            c => (Some(Op::Draw(c)), None, 1),
         };
-        self.rec_ops.push(op);
+        self.tried += cost;
+        if self.n + cost > CAP {
+            return false;
+        }
+        self.n += cost;
+        if let Some(Op::Draw(Cmd::Image { .. })) = op {
+            self.images += 1;
+        }
+        self.rec_texts.extend(text);
+        self.rec_ops.extend(op);
+        true
     }
 
-    /// Shows the recorded frame; the number of commands recorded, kept or not.
+    /// Shows the recorded frame; the number of commands asked for, accepted or not.
     pub fn end_frame(&mut self) -> usize {
         self.ops = std::mem::take(&mut self.rec_ops);
         self.texts = std::mem::take(&mut self.rec_texts);
-        if self.n > CAP {
+        if self.tried > CAP {
             let msg = format!(
                 "{} draw commands in one frame; the device drops everything after {CAP}",
-                self.n
+                self.tried
             );
             self.warnings.insert(0, msg);
         }
-        self.n
+        self.tried
+    }
+
+    /// Commands and `g:image` calls accepted in the frame being recorded (after `end_frame`: the finished one).
+    pub fn accepted(&self) -> (usize, usize) {
+        (self.n, self.images)
     }
 
     /// Warnings of this frame, oldest first.
@@ -224,7 +255,7 @@ impl Canvas {
         self.texts.clone()
     }
 
-    fn layout(&mut self, cmd: &Cmd) -> Option<Op> {
+    fn layout(&mut self, cmd: &Cmd) -> Option<(Op, TextItem)> {
         let (op, s, opts) = match cmd {
             Cmd::Text { text, opts, .. } => ("text", text, opts),
             Cmd::TextBox { text, opts, .. } => ("text_box", text, opts),
@@ -275,19 +306,20 @@ impl Canvas {
             _ => return None,
         };
         let (x, y, w, h) = item;
-        self.rec_texts.push(TextItem {
+        let item = TextItem {
             text: s.clone(),
             x,
             y,
             w,
             h,
             font,
-        });
-        Some(Op::Lines {
+        };
+        let op = Op::Lines {
             font,
             ink: opts.ink,
             lines,
-        })
+        };
+        Some((op, item))
     }
 
     /// 0.1 `_wrap`: words on spaces, a word wider than `width` split by characters; `\n` starts a new line.

@@ -451,6 +451,8 @@ mod abi {
             "running": st.running,
             "pending": st.pending.map(|p| json!({"kind": p.kind, "title": p.title, "text": p.text})),
             "locked": st.locked,
+            "refresh": st.refresh,
+            "refreshes": st.refreshes,
         });
         Map::from_iter([
             ("status".into(), status),

@@ -23,6 +23,32 @@ use crate::lua;
 
 pub const ERROR_TITLE: &str = "App error, closed";
 const INSTALL_FAILED: &str = "Install failed";
+/// Gancao firmware's default: after 29 partial refreshes the 30th frame is a full one.
+const AUTO_FULL_EVERY: u32 = 30;
+
+/// The waveform a frame was presented with.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Refresh {
+    Partial,
+    Full,
+}
+
+impl Refresh {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Refresh::Partial => "partial",
+            Refresh::Full => "full",
+        }
+    }
+}
+
+/// What `ctx.perf:info()` reports about frames; the timings and the image cache are not emulated.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct Perf {
+    pub cmd_count: usize,
+    pub image_count: usize,
+    pub draw_frame: u64,
+}
 
 /// A dialog waiting for the user.
 #[derive(Clone, Debug, PartialEq)]
@@ -44,6 +70,10 @@ pub struct Status {
     pub running: bool,
     pub pending: Option<Pending>,
     pub locked: bool,
+    /// The kind of the last presented app frame.
+    pub refresh: Option<&'static str>,
+    /// The kinds of every app frame presented by this core, oldest first.
+    pub refreshes: Vec<&'static str>,
 }
 
 /// What the plates show: error overlay, dialog, visible toast.
@@ -103,6 +133,14 @@ pub(crate) struct State {
     /// Moves when a new frame is drawn; see `Core::frame_seq`.
     pub(crate) frame_seq: u64,
     pub(crate) plates_sig: PlatesSig,
+    /// The next frame is a full refresh: the session's first, `invalidate("full")`, `act("refresh")`.
+    pub(crate) full_next: bool,
+    /// Partial frames since the last full one.
+    pub(crate) partials: u32,
+    /// Clock ms up to which `defer_full_refresh` holds back the automatic full refresh.
+    pub(crate) defer_until: i64,
+    pub(crate) refreshes: Vec<Refresh>,
+    pub(crate) perf: Perf,
 }
 
 impl State {
@@ -124,7 +162,29 @@ impl State {
             self.sched.cancel(t);
         }
         self.tick = None;
+        self.full_next = false;
         self.net.stop();
+    }
+
+    /// Records a finished app frame: its refresh kind and its `perf` counters.
+    fn presented(&mut self, forced_full: bool) {
+        let next = self.partials + 1;
+        let deferred = self.sched.clock.ms < self.defer_until;
+        // a deferral cannot hold the automatic full past twice the interval (2.28.1)
+        let auto = next >= AUTO_FULL_EVERY && (!deferred || next >= 2 * AUTO_FULL_EVERY);
+        let kind = if forced_full || auto {
+            Refresh::Full
+        } else {
+            Refresh::Partial
+        };
+        self.partials = if kind == Refresh::Partial { next } else { 0 };
+        self.refreshes.push(kind);
+        let (cmd_count, image_count) = self.canvas.accepted();
+        self.perf = Perf {
+            cmd_count,
+            image_count,
+            draw_frame: self.perf.draw_frame + 1,
+        };
     }
 
     pub(crate) fn clear_pending(&mut self) {
@@ -354,9 +414,10 @@ impl Host<'_> {
     }
 
     fn draw(&self) {
-        let (ctx, g) = with(self.st, |s| {
+        // taken before on_draw: a full request made while drawing is for the next frame
+        let (ctx, g, full) = with(self.st, |s| {
             s.canvas.begin_frame();
-            (s.ctx.clone(), s.g.clone())
+            (s.ctx.clone(), s.g.clone(), std::mem::take(&mut s.full_next))
         });
         self.call("on_draw", (ctx, g));
         with(self.st, |s| {
@@ -370,7 +431,12 @@ impl Host<'_> {
                     s.fail(&format!("g: bad values in on_draw: {bad}"), ERROR_TITLE);
                     s.canvas.begin_frame();
                 }
-                None => s.frame_commands = n,
+                None => {
+                    s.frame_commands = n;
+                    if s.running {
+                        s.presented(full);
+                    }
+                }
             }
         });
     }
@@ -408,6 +474,7 @@ pub(crate) fn boot(st: &Shared, mode: BootMode) {
         (s.images, s.next_image) = (HashMap::new(), 0);
         s.net.inflight = 0;
         s.lock.waiting = false;
+        (s.full_next, s.partials, s.defer_until, s.perf) = (true, 0, 0, Perf::default());
         if mode != BootMode::Lock {
             s.lock.ctx = None;
         }
@@ -602,6 +669,11 @@ impl Core {
             net,
             frame_seq: 0,
             plates_sig: PlatesSig::default(),
+            full_next: false,
+            partials: 0,
+            defer_until: 0,
+            refreshes: vec![],
+            perf: Perf::default(),
         }));
         if let Some(p) = font_problem {
             st.borrow_mut().warn(&p);
@@ -779,6 +851,8 @@ impl Core {
             running: s.running,
             pending: s.pending.clone(),
             locked: s.locked,
+            refresh: s.refreshes.last().map(|r| r.as_str()),
+            refreshes: s.refreshes.iter().map(|r| r.as_str()).collect(),
         }
     }
 

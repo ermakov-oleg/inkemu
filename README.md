@@ -187,7 +187,24 @@ lock and on every `interval_sec` wake, with `ctx.lock` (`reason`, `done`, `set_i
 
 Drawing (`g`): `clear`, `rect`, `round_rect`, `line`, `circle`, `arc`, `polygon`, `polyline`, `text`, `text_box`,
 `image`, `pattern`, `pattern_rect`, `fill_pattern`, `size`, `measure`, `measure_text`, plus layers via `ctx.layers`.
-The frame cap of 1024 commands is enforced.
+A frame accepts 1024 commands, and each line a `text_box` draws is one of them. A call past the cap returns
+`nil, "limit_exceeded"` and draws nothing (a `text_box` that does not fit whole is refused whole); the frame logs
+one warning with the number of commands asked for.
+
+Frames: `emu.status()["refresh"]` is the waveform of the last app frame presented, `"partial"` or `"full"`, and
+`emu.status()["refreshes"]` lists the waveforms of every app frame since the emulator started, oldest first (one
+step such as a tap can present more than one frame). The rules, as in the contract:
+
+- `ctx:invalidate()` asks for a partial frame and `ctx:invalidate("full")` or `ctx.system:act("refresh")` for a full
+  one; one full request among several makes the frame full. A request made in `on_draw` is for the next frame.
+- After 29 partial frames the 30th is full (the firmware's default setting; inkemu does not let you change it). Any
+  full frame starts the count again.
+- `ctx:defer_full_refresh(ms)` holds that automatic full back for `ms` of virtual time; the first frame after the
+  deadline gets the full it is owed, and at 60 partial frames the frame is full even while deferred.
+- The first frame of every session (start, restart, reload, unlock, each lock screen session) is full; the contract
+  leaves it open, this is inkemu's choice. Lock screen frames count like app frames.
+- The error overlay, dialogs and toasts are not frames of the app, and a frame whose `on_draw` fails is not counted.
+- `"gray"` is reserved for a frame with a `g:image{gray = true}`; inkemu does not draw gray frames yet.
 
 Grey, as measured on 26112001: the canvas is 1-bit, and grey is a pattern of black and white pixels.
 
@@ -222,7 +239,9 @@ the start with an error. From each file inkemu takes:
 
 `ctx`:
 
-- `invalidate`, `after`/timers, `set_tick`, `defer_full_refresh`, `quit`, `save_state`, `state`, `api`.
+- `invalidate` (nothing or `"full"`; another argument is `nil, "invalid_argument"`), `after`/timers, `set_tick`,
+  `defer_full_refresh` (whole ms from 1 to 60000, else `nil, "invalid_argument"`), `quit`, `save_state`, `state`,
+  `api`.
 - `log`: a table with `error`, `info` and `warn`, each logging with its level (`[app] WARN ...`).
 - `capabilities`, `clock` (`now`, `millis`), `device` (`battery`, `firmware`, `model`, `name`, `id_for_app`,
   `lock_timer`), `fonts`.
@@ -236,7 +255,9 @@ the start with an error. From each file inkemu takes:
   20 raw bytes too; `crc32` returns a signed 32-bit integer (values from 2^31 wrap to negative); all verified in QEMU on firmware 26112001.
 - `screen` (`width`, `height`, `orientation`, `set_orientation`, `gray_levels` = 2, `gray_still` = 4),
   `frontlight` (`get`, `set`, `reset`), `system` (`can_open`, `open`, `act`), `i18n` (`locale`), `perf` (`info` =
-  `{}`), `gc`, `budget`, `reader` (answers from `<fixtures dir>/reader.json`), `lockscreen`, `lock`.
+  `{tick_us, draw_us, cmd_count, image_count, asset_hit, asset_miss, draw_frame}`: `cmd_count` and `image_count`
+  are the commands and `g:image` calls accepted in the last frame, `draw_frame` the frames of this session), `gc`,
+  `budget`, `reader` (answers from `<fixtures dir>/reader.json`), `lockscreen`, `lock`.
 
 `clock:now()` has `year month day hour minute second weekday hour12 date_order date_sep epoch_sec local_sec
 offset_minutes revision valid`.
@@ -251,15 +272,17 @@ offset_minutes revision valid`.
   `print`, as on the device; `require` searches only the app folder. Lua 5.5's global `warn` is visible to the app.
 - Not emulated, so nil: `ctx.crypto`, `ctx.nn`, `ctx.ui`, `ctx.widget`, `dialog:choose`, `i18n:t`, `url:query`,
   `input.keys`, `input.listen`, `input.gamepad`, `device.display`, `device.keep_awake`, `device.radios`,
-  `screen.occlusion`, and the fields of `perf:info()` (`asset_hit asset_miss cmd_count draw_frame draw_us image_count
-  tick_us` on the device). No BLE, no WebSocket; only GET and POST get a network callback.
+  `screen.occlusion`. No BLE, no WebSocket; only GET and POST get a network callback.
 - `ctx.capabilities` reports what inkemu emulates: `dialog frontlight image_decode image_transform pattern reader`
   are true, `ble identity nn ui ttf` false. The device reports `ble dialog frontlight identity image_decode
   image_transform nn pattern reader ui` as true and `ttf` as false.
-- `ctx.system:act(s)` needs a string ("string expected" otherwise), as on the device. Which strings the device
-  accepts is unknown, so inkemu answers every one with `nil, "invalid_argument"` and logs it.
+- `ctx.system:act(s)` needs a string ("string expected" otherwise), as on the device. `"refresh"` makes the next
+  frame full, like `ctx:invalidate("full")`; inkemu answers every other string, `"sleep"` and `"power_off"`
+  included, with `nil, "invalid_argument"` and logs it.
 - Not verified on the device:
   - the 2.26 call form `ctx:log(...)`, which still logs;
+  - `ctx.perf:info()`'s `tick_us`, `draw_us`, `asset_hit` and `asset_miss`, which measure the device's renderer:
+    always 0 in inkemu;
   - the format of the level prefix of `ctx.log:info/warn/error`;
   - the numbering of `clock:now().weekday` (inkemu: Sunday = 1, as 2.26's `wday`);
   - the meaning of `clock:now().revision` (inkemu: it changes when the clock is moved by a wait, `]` or `}`, not

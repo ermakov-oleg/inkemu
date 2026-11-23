@@ -12,10 +12,10 @@ Already green and pinned: `01/globals_absent` (the globals that must not exist).
 ## §3 Gray frames
 
 ### Gray frames: proposed interface
-A frame is gray when one of its `g:image` calls sets `gray = true` (outside `layer:draw`; `ctx.screen.gray_still` is 4, probe-confirmed). `Emu.status()["refresh"]` and `["refreshes"]` report such a frame as `"gray"` (see "Refresh kind: proposed interface" under §5). `Emu.shot()` returns a Pillow image of mode `"L"` for a gray frame, with the gray levels 0, 85, 170 and 255 for 3, 2, 1 and 0 ink steps, and keeps returning mode `"1"` for every other frame. The runner tells the two apart by `image.mode`: a `pixels` entry `[x, y, ink, level]` always checks ink (`1` only for black, the 3-step level) and also checks the level 0-3 when the shot is gray, so the level is ignored on a 1-bit frame. The core stays 1-bit for normal frames; only a gray frame needs the 4-step buffer.
+A frame is gray when one of its `g:image` calls sets `gray = true` (outside `layer:draw`; `ctx.screen.gray_still` is 4, probe-confirmed). `Emu.status()["refresh"]` and `["refreshes"]` report such a frame as `"gray"` (the refresh kinds are described under "Frames" in `README.md`). `Emu.shot()` returns a Pillow image of mode `"L"` for a gray frame, with the gray levels 0, 85, 170 and 255 for 3, 2, 1 and 0 ink steps, and keeps returning mode `"1"` for every other frame. The runner tells the two apart by `image.mode`: a `pixels` entry `[x, y, ink, level]` always checks ink (`1` only for black, the 3-step level) and also checks the level 0-3 when the shot is gray, so the level is ignored on a 1-bit frame. The core stays 1-bit for normal frames; only a gray frame needs the 4-step buffer.
 - Touch points: `crates/inkcore/src/draw/canvas.rs` and `crates/inkcore/src/draw/image.rs` (frame buffer and `g:image` options), `crates/inkcore/src/emu.rs` (frame presentation, `frame`), `crates/inkemu-py/src/lib.rs` and `src/inkemu/emu.py` (`_image`, `shot`).
 
-### 03/gray_frame_refresh, 03/gray_next_frame_full, 03/gray_layer_ignored
+### 03/gray_frame_refresh, 03/gray_next_frame_full
 - Contract: `gray = true` on a `g:image` makes the frame a gray one, shown with the full-refresh gray waveform; the next ordinary frame is full again and the one after goes back to partial; `gray = true` inside `layer:draw` is ignored.
 - Core now: `gray` is ignored and no refresh kind is recorded.
 - Touch points: `crates/inkcore/src/draw/image.rs`, `crates/inkcore/src/ctx/layers.rs`, `crates/inkcore/src/emu.rs`.
@@ -27,21 +27,9 @@ A frame is gray when one of its `g:image` calls sets `gray = true` (outside `lay
 - Touch points: as for the interface above.
 - Source: contract only.
 
-Already green and pinned: `03/color_threshold`, `03/device_profile` (the profile values, with the keyboard height as deviation D1).
+Already green and pinned: `03/color_threshold`, `03/device_profile` (the profile values, with the keyboard height as deviation D1), `03/gray_layer_ignored` (green while no frame is gray; it guards the gray frames above).
 
 ## §5 Presenting a frame
-
-### 05/cmd_cap_1025, 05/cmd_cap_clear
-- Contract: a frame holds 1024 commands; the call that would be command 1025 (and `g:clear` past the cap) returns `nil, "limit_exceeded"` and is not recorded; earlier commands stay.
-- Core now: every call returns nothing; commands past the cap are silently dropped at record time and a warning is logged.
-- Touch points: `crates/inkcore/src/draw/mod.rs` (method wrapper), `crates/inkcore/src/draw/canvas.rs` (`record`).
-- Source: probe-confirmed.
-
-### 05/cmd_cap_text_box_lines
-- Contract: each line `g:text_box` draws is one command; a call that would pass the cap is refused whole and does not count.
-- Core now: a `text_box` is one command whatever its line count, and nothing is refused.
-- Touch points: `crates/inkcore/src/draw/canvas.rs` (`record`, `layout`), `crates/inkcore/src/draw/mod.rs`.
-- Source: contract only.
 
 ### 05/cmd_cap_underline
 - Contract: from API 2.28 on, each underline or strikethrough stroke costs one more command of the 1024.
@@ -49,54 +37,7 @@ Already green and pinned: `03/color_threshold`, `03/device_profile` (the profile
 - Touch points: `crates/inkcore/src/draw/canvas.rs`, `crates/inkcore/src/draw/text.rs`.
 - Source: contract only.
 
-### 05/invalidate_args
-- Contract: `ctx:invalidate()` and `ctx:invalidate("full")` return nothing; every other argument gives `nil, "invalid_argument"`.
-- Core now: every argument is accepted.
-- Touch points: `crates/inkcore/src/ctx/mod.rs` (`invalidate`).
-- Source: probe-confirmed for `"bogus"`; the number case is contract only.
-
-### 05/perf_info
-- Contract: `ctx.perf:info()` returns integer fields `tick_us`, `draw_us`, `cmd_count`, `image_count`, `asset_hit`, `asset_miss`, `draw_frame`; `cmd_count` is the commands accepted in the latest frame.
-- Core now: an empty table.
-- Touch points: `crates/inkcore/src/ctx/stubs.rs` (perf), `crates/inkcore/src/draw/canvas.rs` (counter).
-- Source: contract only.
-
-### Refresh kind: proposed interface
-The refresh kind is not observable today. Proposed: two fields. `Emu.status()["refresh"]` is the kind of the last presented app frame and `Emu.status()["refreshes"]` is the list of kinds of all app frames presented this session, oldest first (a single `tap` or `wait` step can present more than one frame, so a check that needs a middle frame reads the list). A kind is one of `"partial"`, `"full"`, `"gray"` (`"gray"` is the full refresh with the grayscale waveform of a frame that has a `g:image` with `gray = true`). The runner reads it through `observe`, so no runner change is needed. The contract does not classify the first frame of a session; inkemu chooses `"full"` for it (see below). The automatic-full checks assume that any full frame resets the partial counter.
-- Touch points: `crates/inkcore/src/emu.rs` (frame presentation, status), `crates/inkemu-py/src/lib.rs` and `src/inkemu/emu.py` (`status`).
-
-### 05/refresh_first_frame (inkemu choice)
-- Contract: silent about the first frame of a session.
-- inkemu choice: the first frame is `"full"` (the screen is blank before it). Not a contract rule; change the check if the choice changes.
-- Core now: no refresh kind is recorded.
-- Touch points: `crates/inkcore/src/emu.rs`.
-- Source: inkemu choice.
-
-### 05/refresh_plain, 05/refresh_full_arg, 05/refresh_full_wins, 05/refresh_full_in_draw
-- Contract: a plain `invalidate()` presents a partial refresh and `invalidate("full")` a full one; if a frame is requested several times, one `"full"` request makes the whole frame full; a request made from `on_draw` (including `"full"`) applies to the next frame. `05/refresh_full_in_draw` expects `refreshes == ["full", "partial", "full"]` (session start, the frame that asks, the deferred frame) and `refresh == "full"`.
-- Core now: the argument is ignored and the kind is not recorded.
-- Touch points: `crates/inkcore/src/ctx/mod.rs` (`invalidate`), `crates/inkcore/src/emu.rs` (frame scheduling).
-- Source: contract only.
-
-### 05/refresh_auto_full
-- Contract: the host inserts a full refresh every N frames (default 30), so 29 partial frames are followed by a full one.
-- Core now: every frame is the same kind; nothing counts partial frames.
-- Touch points: `crates/inkcore/src/emu.rs`.
-- Source: contract only.
-
-### 05/refresh_defer_blocks_auto
-- Contract: `defer_full_refresh(ms)` stops the automatic full refresh from happening during the next `ms` milliseconds (the count keeps growing; a forced full comes at twice the interval, not tested here).
-- Core now: the call is accepted and does nothing.
-- Touch points: `crates/inkcore/src/ctx/basic.rs`, `crates/inkcore/src/emu.rs`.
-- Source: contract only.
-
-### 05/defer_args
-- Contract: `defer_full_refresh(ms)` takes an integer 1..60000 and returns nothing; anything outside that is `nil, "invalid_argument"`.
-- Core now: any number is accepted and one `nil` is returned.
-- Touch points: `crates/inkcore/src/ctx/basic.rs` (`defer_full_refresh`).
-- Source: contract only.
-
-Already green and pinned (the valid cases of the rules above): `05/cmd_cap_text_box_counter` (the rectangles that still fit after a refused `text_box`), `05/cmd_cap_underline_text`, `05/invalidate_valid`.
+Already green and pinned: `05/cmd_cap_1025`, `05/cmd_cap_clear`, `05/cmd_cap_text_box_lines`, `05/cmd_cap_text_box_counter` (the rectangles that still fit after a refused `text_box`), `05/cmd_cap_underline_text`, `05/invalidate_args`, `05/invalidate_valid`, `05/perf_info`, `05/refresh_first_frame` (an inkemu choice: the contract does not classify the first frame), `05/refresh_plain`, `05/refresh_full_arg`, `05/refresh_full_wins`, `05/refresh_full_in_draw`, `05/refresh_auto_full`, `05/refresh_defer_blocks_auto`, `05/defer_args`.
 
 ## §6 Drawing
 
@@ -421,12 +362,6 @@ Already green and pinned: `15/lock_reason_timer`, `15/lock_elapsed_first`, `15/l
 
 ## §25 System actions
 
-### 25/act_refresh
-- Contract: `ctx.system:act("refresh")` returns nothing and makes the next frame a full refresh, like `invalidate("full")`; it is allowed in any callback.
-- Core now: every name returns `nil, "invalid_argument"`.
-- Touch points: `crates/inkcore/src/ctx/stubs.rs` (`act`), `crates/inkcore/src/emu.rs`.
-- Source: probe-confirmed (returns nothing); the full frame is contract only.
-
 ### 25/act_inactive
 - Contract: `act("sleep")` and `act("power_off")` return `nil, "inactive"` anywhere except inside `on_input` for a key release or pointer release (not in load, timers or pointer press).
 - Core now: `nil, "invalid_argument"`.
@@ -439,7 +374,7 @@ Already green and pinned: `15/lock_reason_timer`, `15/lock_elapsed_first`, `15/l
 - Touch points: `crates/inkcore/src/ctx/stubs.rs` (`act`), `crates/inkcore/src/emu.rs` (lock path).
 - Source: contract only.
 
-Already green and pinned: `25/act_inactive_no_lock` (refused `sleep`/`power_off` calls do not lock the device), `25/act_args` (unknown name is `nil, "invalid_argument"` - probe-confirmed; a non-string name raises). Not covered: `act("power_off")` with its confirmation dialog and `busy` (contract only, needs system dialog support).
+Already green and pinned: `25/act_refresh`, `25/act_inactive_no_lock` (refused `sleep`/`power_off` calls do not lock the device), `25/act_args` (unknown name is `nil, "invalid_argument"` - probe-confirmed; a non-string name raises). Not covered: `act("power_off")` with its confirmation dialog and `busy` (contract only, needs system dialog support).
 
 ## §26 Encoding, hashes, random
 

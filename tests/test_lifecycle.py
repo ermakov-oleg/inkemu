@@ -312,6 +312,14 @@ def test_status_is_json_serialisable(make_app, emu_factory):
     json.dumps(st)
     assert st["app_id"] == "testapp" and st["net"] == "replay" and st["paused"] is False
     assert st["time"] == "2026-11-20T09:00:00.000" and st["frame_commands"] == 2
+    assert st["refresh"] == "full" and st["refreshes"] == ["full"]
+
+
+def test_status_reports_refresh_kinds(make_app, emu_factory):
+    app = make_app(DRAW_MSG + "function on_input(c, ev) if ev.phase == 'up' then c:invalidate() end return true end")
+    emu = emu_factory(app)
+    emu.tap(10, 10)
+    assert emu.status()["refreshes"] == ["full", "partial"] and emu.status()["refresh"] == "partial"
 
 
 def test_save_shot_writes_png(make_app, emu_factory, tmp_path):

@@ -22,6 +22,8 @@ type Status = (
     bool,
     Option<(&'static str, String, String)>,
     bool,
+    Option<&'static str>,
+    Vec<&'static str>,
 );
 type Text = (String, i32, i32, i32, i32, &'static str);
 
@@ -217,6 +219,8 @@ impl Session {
                 st.running,
                 st.pending.map(|p| (p.kind, p.title, p.text)),
                 st.locked,
+                st.refresh,
+                st.refreshes,
             )
         })
     }

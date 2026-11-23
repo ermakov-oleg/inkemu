@@ -241,9 +241,10 @@ fn random_bytes_system_act_and_small_members() {
                caps.ble, caps.identity, caps.nn, caps.ui, caps.dialog}"
         ),
         json!([
-            "string", 16, 0, "nil", "invalid_argument", 0, 436, true, 2, 4, true, true, false, false, false,
+            "string", 16, 0, "nil", "invalid_argument", 0, 436, true, 2, 4, true, false, false, false, false,
             false, true
-        ])
+        ]),
+        "API 2.33.1 contract §5 says otherwise: perf:info() is not empty (05/perf_info)"
     );
     assert!(
         core.log().iter().any(|l| l.contains("power_off")),

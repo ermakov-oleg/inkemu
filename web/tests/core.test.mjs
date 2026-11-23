@@ -69,12 +69,15 @@ test('hello: tap counter, then the frame hash pinned in stage 1', async () => {
     assert.equal(st.status.app_id, 'hello');
     assert.equal(st.status.time, '2026-11-20T09:00:00.000');
     assert.deepEqual(st.status.screen, [480, 800]);
+    assert.equal(st.status.refresh, 'full');
+    assert.deepEqual(st.status.refreshes, ['full']);
 
     // as Core::tap_text: the last item equal to the text, tapped at its middle
     const it = st.texts.findLast((t) => t.text === 'Tap me');
     const tap = core.cmd({ cmd: 'tap', x: it.x + Math.floor(it.w / 2), y: it.y + Math.floor(it.h / 2), with_state: true });
     assert.equal(tap.ok, true);
     assert.ok(hasText(tap, 'Taps: 1'), JSON.stringify(tap.texts));
+    assert.deepEqual(tap.status.refreshes, ['full', 'partial']);
 
     assert.deepEqual(core.cmd({ cmd: 'wait', ms: 61_000 }), { ok: true });
     st = core.cmd({ cmd: 'state' });
