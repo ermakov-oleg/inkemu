@@ -11,6 +11,8 @@ FIT = "fit"
 local MAX_LEVELS = 16
 local MAX_CHILDREN = 1024
 
+-- every container kind, and the flex ones among them
+CONTAINERS = { row = true, column = true, grid = true, stack = true }
 FLEX = { row = true, column = true }
 local GRID_STACK = { grid = true, stack = true }
 local CONTROLS = {
@@ -98,7 +100,7 @@ local function check_skin(cx, n, skin, what)
     return fail(cx, INVALID)
   end
   n.skin = skin
-  if cx.frame or not FLEX[n.kind] then
+  if cx.frame or not CONTAINERS[n.kind] then
     not_implemented(cx, what .. " skin")
   end
 end
@@ -279,7 +281,7 @@ local function check_child(cx, n, o, parent)
   n.lo_h = int_or(lo_h, spacer and 0 or 1)
   n.hi_w, n.hi_h = int_or(o.max_w, nil), int_or(o.max_h, nil)
   -- a container child keeps at least its own padding
-  if FLEX[n.kind] then
+  if CONTAINERS[n.kind] then
     local pw, ph = n.pad_l + n.pad_r, n.pad_t + n.pad_b
     n.lo_w, n.lo_h = math.max(n.lo_w, pw), math.max(n.lo_h, ph)
     n.hi_w, n.hi_h = n.hi_w and math.max(n.hi_w, pw), n.hi_h and math.max(n.hi_h, ph)
@@ -356,7 +358,7 @@ node_of = function(cx, o, parent, level)
     not_implemented(cx, "ui:" .. kind)
     return nil
   end
-  if FLEX[kind] then
+  if CONTAINERS[kind] then
     if level + 1 > MAX_LEVELS then
       return fail(cx, "limit_exceeded")
     end
@@ -394,7 +396,7 @@ node_of = function(cx, o, parent, level)
   if cx.frame and CONTROLS[kind] then
     check_control(cx, n, o)
   end
-  if FLEX[kind] then
+  if CONTAINERS[kind] then
     check_children(cx, n, o, level + 1)
   end
   return n
@@ -411,7 +413,7 @@ function layout_tree(st, frame, id, kind, o)
   if GRID_STACK[kind] then
     return nil, nil, "ui:" .. kind .. " is not implemented in inkemu yet"
   end
-  if not FLEX[kind] then
+  if not CONTAINERS[kind] then
     return nil, INVALID
   end
   local n = { kind = kind, o = o, id = id, can_fit = true }

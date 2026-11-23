@@ -72,7 +72,7 @@ local function paint_container(g, c)
 end
 
 -- what end_frame keeps for a container: it takes no focus and paints only its own look
-local CONTAINER = { paint = paint_container }
+local CONTAINER_KIND = { paint = paint_container }
 
 -- Registers the placed tree `n` in frame `f` in declaration order, containers before their children. A node
 -- with no width or no height is left out with everything in it. False once the frame is full: what was registered
@@ -81,14 +81,14 @@ local function register(f, n)
   if n.w <= 0 or n.h <= 0 then
     return true
   end
-  if FLEX[n.kind] then
+  if CONTAINERS[n.kind] then
     if not reserve(f, 1) then
       return false
     end
     if n.id then
       f.ids[n.id] = true
     end
-    f.list[#f.list + 1] = { kind = CONTAINER, id = n.id, node = n }
+    f.list[#f.list + 1] = { kind = CONTAINER_KIND, id = n.id, node = n }
     for _, child in ipairs(n.children) do
       if child and not register(f, child) then
         return false
@@ -100,7 +100,7 @@ local function register(f, n)
   if c == nil then
     return true
   end
-  if not reserve(f, c.kind.cost or 1) then
+  if not reserve(f, cost_of(c)) then
     return false
   end
   c.x, c.y, c.w, c.h = n.x, n.y, n.w, n.h
@@ -173,7 +173,7 @@ end
 -- the box of node `n` for ui:layout, with its children's boxes at their positions; `ids` gathers them by id
 local function result(n, ids)
   local t = { x = n.x, y = n.y, w = n.w, h = n.h, overflow = n.overflow }
-  if FLEX[n.kind] then
+  if CONTAINERS[n.kind] then
     for i = 1, #n.children do
       local c = n.children[i]
       t[i] = c and result(c, ids) or false

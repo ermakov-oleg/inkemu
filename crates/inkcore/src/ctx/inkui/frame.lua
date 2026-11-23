@@ -4,7 +4,8 @@
 MAX_CONTROLS = 128
 
 -- control kinds by name, filled by the control files: { check = function(c, o) -> ok[, unsupported message],
--- paint = function(g, c, look), focusable = bool, cost = controls counted against MAX_CONTROLS (1 when nil) }
+-- paint = function(g, c, look), focusable = bool, cost = controls counted against MAX_CONTROLS: a number, 1 when
+-- nil, or a function of the control record }; composite.lua adds the fields of composite kinds
 kinds = {}
 
 -- a canvas is the frame's g (or a layer's): host objects that cannot be told apart from Lua, so look at the methods
@@ -40,6 +41,15 @@ methods.end_frame = function(self)
   end
 end
 
+-- how many of a frame's MAX_CONTROLS the control record `c` takes
+function cost_of(c)
+  local cost = c.kind.cost
+  if type(cost) == "function" then
+    return cost(c)
+  end
+  return cost or 1
+end
+
 -- Reserves `n` of the frame's controls; false once the frame would hold more than MAX_CONTROLS.
 function reserve(f, n)
   if f.count + n > MAX_CONTROLS then
@@ -68,7 +78,7 @@ function declare(st, name, id, o, level)
   if not ok then
     return nil, INVALID
   end
-  if not reserve(f, kind.cost or 1) then
+  if not reserve(f, cost_of(c)) then
     return nil, "limit_exceeded"
   end
   f.ids[id] = true

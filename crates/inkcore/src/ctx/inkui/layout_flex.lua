@@ -30,7 +30,7 @@ end
 
 -- a container's own padding along `axis`, 0 for any other node
 local function pad(n, axis)
-  if not FLEX[n.kind] then
+  if not CONTAINERS[n.kind] then
     return 0
   end
   if axis == "w" then
@@ -511,7 +511,7 @@ baseline = function(c, w, h)
       return h // 2 - 2 - c.font.line_height + c.font.ascent
     end
     return (h - c.font.line_height) // 2 + c.font.ascent
-  elseif FLEX[k] then
+  elseif CONTAINERS[k] then
     for _, b in ipairs((boxes(c, w, h))) do
       if b.node.kind ~= "spacer" then
         return b.y + baseline(b.node, b.w, b.h)
@@ -525,7 +525,7 @@ end
 -- with `n.overflow` set to the child (counting skipped ones) that first leaves the inner box.
 function place(n, x, y, w, h)
   n.x, n.y, n.w, n.h = x, y, w, h
-  if not FLEX[n.kind] then
+  if not CONTAINERS[n.kind] then
     return
   end
   local list, iw, ih = boxes(n, w, h)
