@@ -1,0 +1,10 @@
+{
+  "spec": "§16",
+  "about": "ui:layout gives nil, invalid_argument for a bad rect, or a spec against the 2.15 rules: min over max, fields of another container kind, divider with wrap, reserved or repeated ids, non-table children, values out of range, fit or a percentage where not allowed, a size that cannot be found, a spec that is not a container, unknown kinds, skins and text types (probe-confirmed for the oracle's 35 cases)",
+  "expect": {
+    "cases": {"value": 57, "spec": "§16"},
+    "not_refused": {"value": [], "spec": "§16"},
+    "valid": {"value": {"ok": true, "ret": ["table"]}, "spec": "§16"}
+  },
+  "errors": []
+}

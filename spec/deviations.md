@@ -88,6 +88,44 @@ no radio and is not the device, so panel timing and network completion were not 
 - Status: measured on 26112001 (the reader's UI library run as a black box).
 - Checks: `16/focus_drawn_only_after_key` (`keyless.after_pointer`).
 
+### D9 - a container that runs into the 128 controls of a frame
+
+- Contract says: the call that goes past 128 controls returns `nil, "limit_exceeded"` and its control is not drawn
+  (§16).
+- Reader does: a `row` or `column` whose children go past the limit returns `limit_exceeded`, but the container and
+  the children registered before the limit stay: they are drawn, hit and take focus.
+- inkemu does: the same.
+- Status: measured on 26112001 (the reader's UI library run as a black box).
+- Checks: `16/layout_limits` (`container_at_limit.k2`).
+
+### D10 - nesting levels in a frame
+
+- Contract says: more than 16 nested levels of containers gives `nil, "limit_exceeded"`, in a frame and in
+  `ui:layout` alike (§16).
+- Reader does: in a frame the control inside the innermost container counts as a level, so 16 containers with a
+  control in the last one already give `limit_exceeded` from the outermost call and nothing is drawn; a spacer there
+  does not count. `ui:layout` takes 16 containers with a control inside and refuses 17.
+- inkemu does: the same.
+- Status: measured on 26112001 (the reader's UI library run as a black box).
+- Checks: `16/layout_limits` (`frame_16_levels_and_a_control`).
+
+### D11 - row and column before 2.15 are not clipped
+
+- Contract says: for packages before 2.15, a `row` or `column` clips its children to its box (§16).
+- Reader does: no clipping; a child larger than its container is drawn whole.
+- inkemu does: the same.
+- Status: measured on 26112001 (the reader's UI library run as a black box; the recon of its behaviour agrees).
+- Checks: `16/row_column_before_2_15` (`not_clipped`).
+
+### D12 - fit widths of switch and tabs from 2.16
+
+- Contract says: the content width of a `switch` uses its text width, that of `tabs` its widest item (§16).
+- Reader does: from 2.16 both are measured bold, as the 2.16 defaults draw them: the switch text unless `bold =
+  false`, and every tab item unless `bold = false`, even with no selected cell.
+- inkemu does: the same.
+- Status: measured on 26112001 (the reader's UI library run as a black box).
+- Checks: `16/layout_content_sizes` (`switch_bold`, `tabs_bold`).
+
 ## Notes
 
 ### N1 - completion of PUT, PATCH and DELETE
@@ -120,6 +158,11 @@ Earlier notes got these wrong; do not reintroduce them.
 - `ctx.ui` arrows follow the package manifest's `api`, not the firmware's: a 2.12 package moves in declaration order
   (skipping disabled controls, ignoring `nav`), a 2.13 one by position. Checks: `16/nav_order_before_2_13`,
   `16/nav_spatial`.
+- `ctx.ui` 2.15 layout: the §16 `ui:layout` example, the rounding of grow and shrink, the `justify_content` weights,
+  `overflow`, the halftone bands and rounded rows of a container's fill, and where a divider goes (1 px into
+  the earlier child when the gap is 0) come out as the contract gives them. A package for 2.15 gets the container
+  look in plain colours; halftone starts at 2.16. Checks: `16/layout_*`, `16/container_appearance*`,
+  `16/overflow_field`.
 
 ## Not emulated
 
@@ -150,3 +193,24 @@ the README.
   accepted whatever its `phase` (none or unknown gives `nil, nil` and turns focus drawing off). `ok`
   on a kept id that is disabled in the last frame gives `nil, nil`. An arrow from a kept id that `ui:focus` set to a
   disabled control starts from that control's place.
+- `ctx.ui` containers, as measured with the reader's UI library run as a black box: before 2.15 a `row` or `column`
+  needs an integer `w` and `h` on every child and places them one after another from its corner with `gap`, ignores
+  the 2.15 fields, and refuses `spacer` children; a hidden child's `id` is not checked against the keys of the
+  `ui:layout` result; a percentage in a fitted container resolves against the size found for it. Checks:
+  `16/row_column_before_2_15`, `16/layout_content_sizes`, `16/layout_hidden_and_false`.
+- `ctx.ui` containers, not measured:
+  - The whole tree is checked before anything is laid out or registered, and the first `invalid_argument` or
+    `limit_exceeded` in declaration order wins; a part inkemu does not implement yet raises only when nothing is
+    invalid.
+  - The 1024 children of `ui:layout` count every child table, hidden ones included, and apply to frames too.
+  - In a frame, a control child needs an `id` and a child without `kind` is invalid. The `text` of a `label`,
+    `button` or `switch` child is a string or nil, in a frame as in `ui:layout` (the oracle measured only the label in
+    `ui:layout`).
+  - A hidden child's `id` is not reserved in the frame; a zero-size child is not registered, so its `id` is free too.
+  - `divider = false` is the same as no divider, and `children = nil` as no children.
+  - Dividers are drawn between neighbours that are not spacers even when one of them has zero size.
+  - Before 2.15, a nested container places its own children from its own corner, and `gap` must be a non-negative
+    integer.
+  - A rounded halftone block whose radius takes its whole height gets no middle row.
+  - The freeze loop multiplies the free space by cumulative weights in 32-bit integers; a very large `shrink` × base
+    over many children could wrap.

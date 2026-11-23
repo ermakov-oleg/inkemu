@@ -1,0 +1,22 @@
+{
+  "spec": "§16",
+  "about": "limits of containers: ui:layout allows 16 nested containers and 1024 children over the whole tree; in a frame the control inside the 16th container already exceeds the nesting limit (a spacer does not), and a container whose children reach 128 controls keeps the ones declared before (probe-confirmed)",
+  "expect": {
+    "layout.16_levels_and_a_control": {"value": "table", "spec": "§16"},
+    "layout.17_levels": {"value": "limit_exceeded", "spec": "§16"},
+    "layout.1024_children": {"value": "table", "spec": "§16"},
+    "layout.1025_children": {"value": "limit_exceeded", "spec": "§16"},
+    "layout.2_x_600_children": {"value": "limit_exceeded", "spec": "§16"},
+    "frame_15_levels_and_a_control": {"value": {"ok": true, "ret": []}, "spec": "§16"},
+    "frame_15_levels_and_a_control.focus": {"value": "leaf", "spec": "§16"},
+    "frame_16_levels_and_a_control": {"value": {"ok": true, "ret": [null, "limit_exceeded"]}, "deviation": "D10", "spec_value": {"ok": true, "ret": []}},
+    "frame_16_levels_and_a_control.focus": {"value": "none", "deviation": "D10", "spec_value": "leaf"},
+    "frame_16_levels_and_a_spacer": {"value": {"ok": true, "ret": []}, "spec": "§16"},
+    "frame_17_levels": {"value": {"ok": true, "ret": [null, "limit_exceeded"]}, "spec": "§16"},
+    "container_at_limit": {"value": {"ok": true, "ret": [null, "limit_exceeded"]}, "spec": "§16"},
+    "container_at_limit.k2": {"value": {"ok": true, "ret": ["k2", "activate"]}, "deviation": "D9", "spec_value": {"ok": true, "ret": [null, null]}},
+    "container_at_limit.k3": {"value": {"ok": true, "ret": [null, null]}, "spec": "§16"}
+  },
+  "pixels": [[5, 25, 1], [204, 25, 1], [205, 25, 0], [294, 25, 0]],
+  "errors": []
+}

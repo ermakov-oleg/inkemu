@@ -1,0 +1,21 @@
+{
+  "spec": "§16",
+  "about": "grow and shrink split the free space with cumulative rounding (the later child gets the remainder), shrink weighs by shrink × base, min and max freeze a child and the loop runs again; percentages take the inner box (probe-confirmed)",
+  "expect": {
+    "grow_1_1_1": {"value": "33,33,34", "spec": "§16"},
+    "grow_1_2_3": {"value": "16,34,50", "spec": "§16"},
+    "grow_gap_10": {"value": "26,27,27", "spec": "§16"},
+    "grow_max_w": {"value": "20,40,40", "spec": "§16"},
+    "grow_min_w": {"value": "60,20,20", "spec": "§16"},
+    "grow_on_a_base": {"value": "65,35", "spec": "§16"},
+    "shrink_by_base": {"value": "40,40,20", "spec": "§16"},
+    "shrink_0": {"value": "60,26,14", "spec": "§16"},
+    "shrink_min_w": {"value": "55,30,15", "spec": "§16"},
+    "shrink_2": {"value": "56,44", "spec": "§16"},
+    "no_fit_at_min": {"value": "80,80", "spec": "§16"},
+    "shrink_to_min_then_again": {"value": "54,42,4", "spec": "§16"},
+    "percent_of_inner": {"value": "0,0,200,50 [10,10,90,30 | 100,10,45,30 | 145,10,45,30]", "spec": "§16"}
+  },
+  "files": {"layout_box.lua": "layout_box.util.lua"},
+  "errors": []
+}

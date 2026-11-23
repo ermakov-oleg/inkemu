@@ -1,0 +1,12 @@
+{
+  "spec": "§16",
+  "about": "a container is drawn under its children: its background in the four halftone bands of 2.16 (rounded corners one dot row at a time, 2r + 2 calls), then the border inside the box, then dividers halfway in the gap across the box less the inset, none beside a spacer (probe-confirmed)",
+  "expect": {
+    "bands": {"value": true, "spec": "§16"},
+    "rounded_and_border": {"value": true, "spec": "§16"},
+    "dividers": {"value": true, "spec": "§16"}
+  },
+  "files": {"canvas_log.lua": "canvas_log.util.lua"},
+  "pixels": [[50, 30, 0], [110, 100, 1], [100, 184, 1], [100, 183, 0], [320, 275, 1], [320, 277, 0]],
+  "errors": []
+}

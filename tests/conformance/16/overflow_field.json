@@ -1,0 +1,15 @@
+{
+  "spec": "§16",
+  "about": "a container whose child leaves its inner box on either axis gets overflow, the index (in children, skipped ones counted) of the earliest such child; otherwise the field is absent, and a nested container reports only its own (probe-confirmed where the oracle covered it)",
+  "expect": {
+    "none": {"value": "0,0,100,100 [0,0,100,60 | 0,60,100,40]", "spec": "§16"},
+    "past_the_end": {"value": "0,0,100,100!2 [0,0,100,60 | 0,60,100,60]", "spec": "§16"},
+    "before_the_start": {"value": "0,0,50,30!1 [-5,0,20,30 | 15,0,20,30 | 35,0,20,30]", "spec": "§16"},
+    "into_padding": {"value": "0,0,100,50!2 [10,10,70,30 | 80,10,20,30]", "spec": "§16"},
+    "after_a_skipped_child": {"value": "0,0,100,100!3 [false | 0,0,100,60 | 0,60,100,60]", "spec": "§16"},
+    "cross_axis": {"value": "0,0,100,30!1 [0,0,10,40]", "spec": "§16"},
+    "nested_only": {"value": "0,0,200,200 [0,0,200,50 | 0,50,200,50!2 [0,50,150,50 | 150,50,150,50]]", "spec": "§16"}
+  },
+  "files": {"layout_box.lua": "layout_box.util.lua"},
+  "errors": []
+}
