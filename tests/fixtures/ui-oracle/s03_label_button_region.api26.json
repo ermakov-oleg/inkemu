@@ -1,0 +1,538 @@
+{
+  "expect_mismatches": [],
+  "file": "s03_label_button_region.api26.json",
+  "input": {
+    "api": "2.26",
+    "canvas": [480,800],
+    "steps": [
+      {"name":"ui","op":"create"},
+      {"name":"uo","op":"create","opts":{"focus_style":"outline"}},
+      {
+        "calls": [
+          {"id":"l_default","m":"label","o":{"h":40,"text":"Label text","w":220,"x":10,"y":0}},
+          {"id":"l_color","m":"label","o":{"color":8,"h":40,"text":"Label text","w":220,"x":10,"y":40}},
+          {
+            "id": "l_right",
+            "m": "label",
+            "o": {"align":"right","h":40,"text":"Label text","valign":"bottom","w":220,"x":10,"y":80}
+          },
+          {
+            "id": "l_center",
+            "m": "label",
+            "o": {"align":"center","font":"@font:large","h":40,"text":"Label text","valign":"middle","w":220,"x":10,"y":120}
+          },
+          {"id":"l_bold","m":"label","o":{"bold":true,"h":40,"tabular":true,"text":"Label text","w":220,"x":10,"y":160}},
+          {"id":"l_multi","m":"label","o":{"h":60,"text":"one\ntwo\nthree","w":220,"x":10,"y":200}},
+          {
+            "id": "l_long",
+            "m": "label",
+            "o": {"h":40,"text":"A label that is much too long for its box","w":120,"x":10,"y":260}
+          },
+          {
+            "id": "l_fmin",
+            "m": "label",
+            "o": {"font":"@font:large","font_min":16,"h":40,"text":"Shrinking text","w":170,"x":10,"y":300}
+          },
+          {
+            "id": "l_fmin2",
+            "m": "label",
+            "o": {"font":"@font:large","font_min":16,"h":40,"text":"Shrinking text that never fits","w":170,"x":10,"y":340}
+          },
+          {"id":"l_empty","m":"label","o":{"h":40,"text":"","w":220,"x":10,"y":380}},
+          {"id":"l_notext","m":"label","o":{"h":40,"text":"Label text","w":220,"x":10,"y":420}}
+        ],
+        "font_calls": true,
+        "note": "labels",
+        "op": "frame"
+      },
+      {
+        "calls": [
+          {"id":"b_norm","m":"button","o":{"h":56,"text":"Button","w":200,"x":250,"y":0}},
+          {"id":"b_r8","m":"button","o":{"h":56,"radius":8,"text":"Button","w":200,"x":250,"y":60}},
+          {"id":"b_sel","m":"button","o":{"h":56,"selected":true,"text":"Button","w":200,"x":250,"y":120}},
+          {"id":"b_emp","m":"button","o":{"emphasis":true,"h":56,"text":"Button","w":200,"x":250,"y":180}},
+          {"id":"b_nob","m":"button","o":{"border":false,"h":56,"text":"Button","w":200,"x":250,"y":240}},
+          {"id":"b_left","m":"button","o":{"align":"left","h":56,"text":"Left","w":200,"x":250,"y":300}},
+          {"id":"b_right","m":"button","o":{"align":"right","h":56,"text":"Right","w":200,"x":250,"y":360}},
+          {"id":"b_badge","m":"button","o":{"badge":"3","h":56,"text":"Button","w":200,"x":250,"y":420}},
+          {
+            "id": "b_badge2",
+            "m": "button",
+            "o": {"badge":"12345","h":56,"radius":12,"text":"Button","w":200,"x":250,"y":480}
+          },
+          {"id":"b_badge0","m":"button","o":{"badge":"","h":56,"text":"Button","w":200,"x":250,"y":540}},
+          {"id":"b_dis","m":"button","o":{"enabled":false,"h":56,"text":"Button","w":200,"x":250,"y":600}},
+          {
+            "id": "b_dissel",
+            "m": "button",
+            "o": {"badge":"9","enabled":false,"h":56,"selected":true,"text":"Button","w":200,"x":250,"y":660}
+          },
+          {
+            "id": "b_bold",
+            "m": "button",
+            "o": {"bold":true,"font":"@font:small","h":56,"text":"Button","w":200,"x":250,"y":720}
+          },
+          {"id":"b_long","m":"button","o":{"h":40,"text":"A button text that does not fit","w":150,"x":10,"y":740}},
+          {
+            "id": "b_fmin",
+            "m": "button",
+            "o": {"font":"@font:large","font_min":12,"h":40,"text":"Shrink me","w":120,"x":10,"y":690}
+          }
+        ],
+        "font_calls": true,
+        "note": "buttons; focus not drawn yet (no key event)",
+        "op": "frame"
+      },
+      {
+        "calls": [
+          {"id":"r_plain","m":"region","o":{"draw":"@rec","h":50,"w":100,"x":10,"y":460}},
+          {"id":"r_sel","m":"region","o":{"draw":"@rec","h":50,"selected":true,"w":100,"x":120,"y":460}},
+          {"id":"r_dis","m":"region","o":{"draw":"@rec","enabled":false,"h":50,"w":100,"x":10,"y":520}},
+          {"id":"r_badge","m":"region","o":{"badge":"7","draw":"@rec","h":50,"w":100,"x":120,"y":520}},
+          {"id":"r_nodraw","m":"region","o":{"draw":"@none","h":50,"w":100,"x":10,"y":580}},
+          {"id":"r_rect","m":"region","o":{"badge":"1","draw":"@rect","h":50,"w":100,"x":120,"y":580}}
+        ],
+        "note": "regions: draw(g, r, st) called at end_frame in declaration order; disabled region gets no dots",
+        "op": "frame"
+      },
+      {"args":["b_norm"],"n":1,"op":"focus","ui":"ui"},
+      {
+        "ev": {"key":"back","phase":"down","time_ms":0,"type":"key"},
+        "note": "any key event switches focus drawing on",
+        "op": "event",
+        "ui": "ui"
+      },
+      {
+        "calls": [
+          {"id":"b_norm","m":"button","o":{"h":56,"text":"Button","w":200,"x":10,"y":0}},
+          {"id":"b_r8","m":"button","o":{"h":56,"radius":8,"text":"Button","w":200,"x":10,"y":70}},
+          {"id":"b_sel","m":"button","o":{"h":56,"selected":true,"text":"Button","w":200,"x":10,"y":140}},
+          {"id":"b_emp","m":"button","o":{"emphasis":true,"h":56,"text":"Button","w":200,"x":10,"y":210}},
+          {"id":"b_nob","m":"button","o":{"border":false,"h":56,"text":"Button","w":200,"x":10,"y":280}},
+          {"id":"r_plain","m":"region","o":{"draw":"@rec","h":56,"w":200,"x":10,"y":350}}
+        ],
+        "note": "focus drawn on b_norm (ui)",
+        "op": "frame",
+        "ui": "ui"
+      },
+      {"args":["b_r8"],"n":1,"op":"focus","ui":"ui"},
+      {
+        "ev": {"key":"back","phase":"down","time_ms":0,"type":"key"},
+        "note": "any key event switches focus drawing on",
+        "op": "event",
+        "ui": "ui"
+      },
+      {
+        "calls": [
+          {"id":"b_norm","m":"button","o":{"h":56,"text":"Button","w":200,"x":10,"y":0}},
+          {"id":"b_r8","m":"button","o":{"h":56,"radius":8,"text":"Button","w":200,"x":10,"y":70}},
+          {"id":"b_sel","m":"button","o":{"h":56,"selected":true,"text":"Button","w":200,"x":10,"y":140}},
+          {"id":"b_emp","m":"button","o":{"emphasis":true,"h":56,"text":"Button","w":200,"x":10,"y":210}},
+          {"id":"b_nob","m":"button","o":{"border":false,"h":56,"text":"Button","w":200,"x":10,"y":280}},
+          {"id":"r_plain","m":"region","o":{"draw":"@rec","h":56,"w":200,"x":10,"y":350}}
+        ],
+        "note": "focus drawn on b_r8 (ui)",
+        "op": "frame",
+        "ui": "ui"
+      },
+      {"args":["b_sel"],"n":1,"op":"focus","ui":"ui"},
+      {
+        "ev": {"key":"back","phase":"down","time_ms":0,"type":"key"},
+        "note": "any key event switches focus drawing on",
+        "op": "event",
+        "ui": "ui"
+      },
+      {
+        "calls": [
+          {"id":"b_norm","m":"button","o":{"h":56,"text":"Button","w":200,"x":10,"y":0}},
+          {"id":"b_r8","m":"button","o":{"h":56,"radius":8,"text":"Button","w":200,"x":10,"y":70}},
+          {"id":"b_sel","m":"button","o":{"h":56,"selected":true,"text":"Button","w":200,"x":10,"y":140}},
+          {"id":"b_emp","m":"button","o":{"emphasis":true,"h":56,"text":"Button","w":200,"x":10,"y":210}},
+          {"id":"b_nob","m":"button","o":{"border":false,"h":56,"text":"Button","w":200,"x":10,"y":280}},
+          {"id":"r_plain","m":"region","o":{"draw":"@rec","h":56,"w":200,"x":10,"y":350}}
+        ],
+        "note": "focus drawn on b_sel (ui)",
+        "op": "frame",
+        "ui": "ui"
+      },
+      {"args":["b_emp"],"n":1,"op":"focus","ui":"ui"},
+      {
+        "ev": {"key":"back","phase":"down","time_ms":0,"type":"key"},
+        "note": "any key event switches focus drawing on",
+        "op": "event",
+        "ui": "ui"
+      },
+      {
+        "calls": [
+          {"id":"b_norm","m":"button","o":{"h":56,"text":"Button","w":200,"x":10,"y":0}},
+          {"id":"b_r8","m":"button","o":{"h":56,"radius":8,"text":"Button","w":200,"x":10,"y":70}},
+          {"id":"b_sel","m":"button","o":{"h":56,"selected":true,"text":"Button","w":200,"x":10,"y":140}},
+          {"id":"b_emp","m":"button","o":{"emphasis":true,"h":56,"text":"Button","w":200,"x":10,"y":210}},
+          {"id":"b_nob","m":"button","o":{"border":false,"h":56,"text":"Button","w":200,"x":10,"y":280}},
+          {"id":"r_plain","m":"region","o":{"draw":"@rec","h":56,"w":200,"x":10,"y":350}}
+        ],
+        "note": "focus drawn on b_emp (ui)",
+        "op": "frame",
+        "ui": "ui"
+      },
+      {"args":["b_nob"],"n":1,"op":"focus","ui":"ui"},
+      {
+        "ev": {"key":"back","phase":"down","time_ms":0,"type":"key"},
+        "note": "any key event switches focus drawing on",
+        "op": "event",
+        "ui": "ui"
+      },
+      {
+        "calls": [
+          {"id":"b_norm","m":"button","o":{"h":56,"text":"Button","w":200,"x":10,"y":0}},
+          {"id":"b_r8","m":"button","o":{"h":56,"radius":8,"text":"Button","w":200,"x":10,"y":70}},
+          {"id":"b_sel","m":"button","o":{"h":56,"selected":true,"text":"Button","w":200,"x":10,"y":140}},
+          {"id":"b_emp","m":"button","o":{"emphasis":true,"h":56,"text":"Button","w":200,"x":10,"y":210}},
+          {"id":"b_nob","m":"button","o":{"border":false,"h":56,"text":"Button","w":200,"x":10,"y":280}},
+          {"id":"r_plain","m":"region","o":{"draw":"@rec","h":56,"w":200,"x":10,"y":350}}
+        ],
+        "note": "focus drawn on b_nob (ui)",
+        "op": "frame",
+        "ui": "ui"
+      },
+      {"args":["r_plain"],"n":1,"op":"focus","ui":"ui"},
+      {
+        "ev": {"key":"back","phase":"down","time_ms":0,"type":"key"},
+        "note": "any key event switches focus drawing on",
+        "op": "event",
+        "ui": "ui"
+      },
+      {
+        "calls": [
+          {"id":"b_norm","m":"button","o":{"h":56,"text":"Button","w":200,"x":10,"y":0}},
+          {"id":"b_r8","m":"button","o":{"h":56,"radius":8,"text":"Button","w":200,"x":10,"y":70}},
+          {"id":"b_sel","m":"button","o":{"h":56,"selected":true,"text":"Button","w":200,"x":10,"y":140}},
+          {"id":"b_emp","m":"button","o":{"emphasis":true,"h":56,"text":"Button","w":200,"x":10,"y":210}},
+          {"id":"b_nob","m":"button","o":{"border":false,"h":56,"text":"Button","w":200,"x":10,"y":280}},
+          {"id":"r_plain","m":"region","o":{"draw":"@rec","h":56,"w":200,"x":10,"y":350}}
+        ],
+        "note": "focus drawn on r_plain (ui)",
+        "op": "frame",
+        "ui": "ui"
+      },
+      {"args":["b_norm"],"n":1,"op":"focus","ui":"uo"},
+      {
+        "ev": {"key":"back","phase":"down","time_ms":0,"type":"key"},
+        "note": "any key event switches focus drawing on",
+        "op": "event",
+        "ui": "uo"
+      },
+      {
+        "calls": [
+          {"id":"b_norm","m":"button","o":{"h":56,"text":"Button","w":200,"x":10,"y":0}},
+          {"id":"b_r8","m":"button","o":{"h":56,"radius":8,"text":"Button","w":200,"x":10,"y":70}},
+          {"id":"b_sel","m":"button","o":{"h":56,"selected":true,"text":"Button","w":200,"x":10,"y":140}},
+          {"id":"b_emp","m":"button","o":{"emphasis":true,"h":56,"text":"Button","w":200,"x":10,"y":210}},
+          {"id":"b_nob","m":"button","o":{"border":false,"h":56,"text":"Button","w":200,"x":10,"y":280}},
+          {"id":"r_plain","m":"region","o":{"draw":"@rec","h":56,"w":200,"x":10,"y":350}}
+        ],
+        "note": "focus drawn on b_norm (uo)",
+        "op": "frame",
+        "ui": "uo"
+      },
+      {"args":["b_r8"],"n":1,"op":"focus","ui":"uo"},
+      {
+        "ev": {"key":"back","phase":"down","time_ms":0,"type":"key"},
+        "note": "any key event switches focus drawing on",
+        "op": "event",
+        "ui": "uo"
+      },
+      {
+        "calls": [
+          {"id":"b_norm","m":"button","o":{"h":56,"text":"Button","w":200,"x":10,"y":0}},
+          {"id":"b_r8","m":"button","o":{"h":56,"radius":8,"text":"Button","w":200,"x":10,"y":70}},
+          {"id":"b_sel","m":"button","o":{"h":56,"selected":true,"text":"Button","w":200,"x":10,"y":140}},
+          {"id":"b_emp","m":"button","o":{"emphasis":true,"h":56,"text":"Button","w":200,"x":10,"y":210}},
+          {"id":"b_nob","m":"button","o":{"border":false,"h":56,"text":"Button","w":200,"x":10,"y":280}},
+          {"id":"r_plain","m":"region","o":{"draw":"@rec","h":56,"w":200,"x":10,"y":350}}
+        ],
+        "note": "focus drawn on b_r8 (uo)",
+        "op": "frame",
+        "ui": "uo"
+      },
+      {"args":["b_sel"],"n":1,"op":"focus","ui":"uo"},
+      {
+        "ev": {"key":"back","phase":"down","time_ms":0,"type":"key"},
+        "note": "any key event switches focus drawing on",
+        "op": "event",
+        "ui": "uo"
+      },
+      {
+        "calls": [
+          {"id":"b_norm","m":"button","o":{"h":56,"text":"Button","w":200,"x":10,"y":0}},
+          {"id":"b_r8","m":"button","o":{"h":56,"radius":8,"text":"Button","w":200,"x":10,"y":70}},
+          {"id":"b_sel","m":"button","o":{"h":56,"selected":true,"text":"Button","w":200,"x":10,"y":140}},
+          {"id":"b_emp","m":"button","o":{"emphasis":true,"h":56,"text":"Button","w":200,"x":10,"y":210}},
+          {"id":"b_nob","m":"button","o":{"border":false,"h":56,"text":"Button","w":200,"x":10,"y":280}},
+          {"id":"r_plain","m":"region","o":{"draw":"@rec","h":56,"w":200,"x":10,"y":350}}
+        ],
+        "note": "focus drawn on b_sel (uo)",
+        "op": "frame",
+        "ui": "uo"
+      },
+      {"args":["b_emp"],"n":1,"op":"focus","ui":"uo"},
+      {
+        "ev": {"key":"back","phase":"down","time_ms":0,"type":"key"},
+        "note": "any key event switches focus drawing on",
+        "op": "event",
+        "ui": "uo"
+      },
+      {
+        "calls": [
+          {"id":"b_norm","m":"button","o":{"h":56,"text":"Button","w":200,"x":10,"y":0}},
+          {"id":"b_r8","m":"button","o":{"h":56,"radius":8,"text":"Button","w":200,"x":10,"y":70}},
+          {"id":"b_sel","m":"button","o":{"h":56,"selected":true,"text":"Button","w":200,"x":10,"y":140}},
+          {"id":"b_emp","m":"button","o":{"emphasis":true,"h":56,"text":"Button","w":200,"x":10,"y":210}},
+          {"id":"b_nob","m":"button","o":{"border":false,"h":56,"text":"Button","w":200,"x":10,"y":280}},
+          {"id":"r_plain","m":"region","o":{"draw":"@rec","h":56,"w":200,"x":10,"y":350}}
+        ],
+        "note": "focus drawn on b_emp (uo)",
+        "op": "frame",
+        "ui": "uo"
+      },
+      {"args":["b_nob"],"n":1,"op":"focus","ui":"uo"},
+      {
+        "ev": {"key":"back","phase":"down","time_ms":0,"type":"key"},
+        "note": "any key event switches focus drawing on",
+        "op": "event",
+        "ui": "uo"
+      },
+      {
+        "calls": [
+          {"id":"b_norm","m":"button","o":{"h":56,"text":"Button","w":200,"x":10,"y":0}},
+          {"id":"b_r8","m":"button","o":{"h":56,"radius":8,"text":"Button","w":200,"x":10,"y":70}},
+          {"id":"b_sel","m":"button","o":{"h":56,"selected":true,"text":"Button","w":200,"x":10,"y":140}},
+          {"id":"b_emp","m":"button","o":{"emphasis":true,"h":56,"text":"Button","w":200,"x":10,"y":210}},
+          {"id":"b_nob","m":"button","o":{"border":false,"h":56,"text":"Button","w":200,"x":10,"y":280}},
+          {"id":"r_plain","m":"region","o":{"draw":"@rec","h":56,"w":200,"x":10,"y":350}}
+        ],
+        "note": "focus drawn on b_nob (uo)",
+        "op": "frame",
+        "ui": "uo"
+      },
+      {"args":["r_plain"],"n":1,"op":"focus","ui":"uo"},
+      {
+        "ev": {"key":"back","phase":"down","time_ms":0,"type":"key"},
+        "note": "any key event switches focus drawing on",
+        "op": "event",
+        "ui": "uo"
+      },
+      {
+        "calls": [
+          {"id":"b_norm","m":"button","o":{"h":56,"text":"Button","w":200,"x":10,"y":0}},
+          {"id":"b_r8","m":"button","o":{"h":56,"radius":8,"text":"Button","w":200,"x":10,"y":70}},
+          {"id":"b_sel","m":"button","o":{"h":56,"selected":true,"text":"Button","w":200,"x":10,"y":140}},
+          {"id":"b_emp","m":"button","o":{"emphasis":true,"h":56,"text":"Button","w":200,"x":10,"y":210}},
+          {"id":"b_nob","m":"button","o":{"border":false,"h":56,"text":"Button","w":200,"x":10,"y":280}},
+          {"id":"r_plain","m":"region","o":{"draw":"@rec","h":56,"w":200,"x":10,"y":350}}
+        ],
+        "note": "focus drawn on r_plain (uo)",
+        "op": "frame",
+        "ui": "uo"
+      }
+    ],
+    "touch": true
+  },
+  "output": [
+    {"i":1,"op":"create","ret":"ui object"},
+    {"i":2,"op":"create","ret":"ui object"},
+    {
+      "begin": [],
+      "calls": [{"id":"l_default","m":"label","ret":[]},{"id":"l_color","m":"label","ret":[]},{"id":"l_right","m":"label","ret":[]},{"id":"l_center","m":"label","ret":[]},{"id":"l_bold","m":"label","ret":[]},{"id":"l_multi","m":"label","ret":[]},{"id":"l_long","m":"label","ret":[]},{"id":"l_fmin","m":"label","ret":[]},{"id":"l_fmin2","m":"label","ret":[]},{"id":"l_empty","m":"label","ret":[]},{"id":"l_notext","m":"label","ret":[]}],
+      "end": [],
+      "focused_after": [null],
+      "font_calls": [{"f":"large","h":40,"m":"layout","opts":{"overflow":"clip"},"ret":[1,30,10],"text":"Shrinking text","w":170},{"f":"medium","h":40,"m":"layout","opts":{"overflow":"clip"},"ret":[1,24,14],"text":"Shrinking text","w":170},{"f":"large","h":40,"m":"layout","opts":{"overflow":"clip"},"ret":[1,30,10],"text":"Shrinking text that never fits","w":170},{"f":"medium","h":40,"m":"layout","opts":{"overflow":"clip"},"ret":[1,24,15],"text":"Shrinking text that never fits","w":170},{"f":"small","h":40,"m":"layout","opts":{"overflow":"clip"},"ret":[2,40,30],"text":"Shrinking text that never fits","w":170}],
+      "i": 3,
+      "note": "labels",
+      "op": "frame",
+      "op_counts": {"text_box":11},
+      "stream": [{"a":[10,0,220,40,"Label text",{"font":"@font:medium","overflow":"ellipsis"}],"op":"text_box"},{"a":[10,40,220,40,"Label text",{"color":8,"font":"@font:medium","overflow":"ellipsis"}],"op":"text_box"},{"a":[10,80,220,40,"Label text",{"align":"right","font":"@font:medium","overflow":"ellipsis","valign":"bottom"}],"op":"text_box"},{"a":[10,120,220,40,"Label text",{"align":"center","font":"@font:large","overflow":"ellipsis","valign":"middle"}],"op":"text_box"},{"a":[10,160,220,40,"Label text",{"bold":true,"font":"@font:medium","overflow":"ellipsis","tabular":true}],"op":"text_box"},{"a":[10,200,220,60,"one\ntwo\nthree",{"font":"@font:medium","overflow":"ellipsis"}],"op":"text_box"},{"a":[10,260,120,40,"A label that is much too long for its box",{"font":"@font:medium","overflow":"ellipsis"}],"op":"text_box"},{"a":[10,300,170,40,"Shrinking text",{"font":"@font:medium","overflow":"ellipsis"}],"op":"text_box"},{"a":[10,340,170,40,"Shrinking text that never fits",{"font":"@font:small","overflow":"ellipsis"}],"op":"text_box"},{"a":[10,380,220,40,"",{"font":"@font:medium","overflow":"ellipsis"}],"op":"text_box"},{"a":[10,420,220,40,"Label text",{"font":"@font:medium","overflow":"ellipsis"}],"op":"text_box"}]
+    },
+    {
+      "begin": [],
+      "calls": [{"id":"b_norm","m":"button","ret":[]},{"id":"b_r8","m":"button","ret":[]},{"id":"b_sel","m":"button","ret":[]},{"id":"b_emp","m":"button","ret":[]},{"id":"b_nob","m":"button","ret":[]},{"id":"b_left","m":"button","ret":[]},{"id":"b_right","m":"button","ret":[]},{"id":"b_badge","m":"button","ret":[]},{"id":"b_badge2","m":"button","ret":[]},{"id":"b_badge0","m":"button","ret":[]},{"id":"b_dis","m":"button","ret":[]},{"id":"b_dissel","m":"button","ret":[]},{"id":"b_bold","m":"button","ret":[]},{"id":"b_long","m":"button","ret":[]},{"id":"b_fmin","m":"button","ret":[]}],
+      "end": [],
+      "focused_after": ["b_norm"],
+      "font_calls": [{"f":"small","m":"measure","ret":10,"text":"3"},{"f":"small","m":"measure","ret":50,"text":"12345"},{"f":"small","m":"measure","ret":10,"text":"9"},{"f":"large","m":"measure","ret":135,"text":"Shrink me"},{"f":"medium","m":"measure","ret":108,"text":"Shrink me"}],
+      "i": 4,
+      "note": "buttons; focus not drawn yet (no key event)",
+      "op": "frame",
+      "op_counts": {"pattern":2,"rect":20,"text_box":18},
+      "stream": [{"a":[250,0,200,56,{"fill":false,"radius":0}],"op":"rect"},{"a":[250,0,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[250,60,200,56,{"fill":false,"radius":8}],"op":"rect"},{"a":[250,60,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[250,120,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[250,120,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[250,180,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[250,180,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[250,240,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[250,300,200,56,{"fill":false,"radius":0}],"op":"rect"},{"a":[250,300,200,56,"Left",{"align":"left","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[250,360,200,56,{"fill":false,"radius":0}],"op":"rect"},{"a":[250,360,200,56,"Right",{"align":"right","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[250,420,200,56,{"fill":false,"radius":0}],"op":"rect"},{"a":[250,420,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[420,422,28,28,{"color":0,"fill":true,"radius":14}],"op":"rect"},{"a":[422,424,24,24,{"color":15,"fill":true,"radius":12}],"op":"rect"},{"a":[422,424,24,24,"3",{"align":"center","color":0,"font":"@font:small","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[250,480,200,56,{"fill":false,"radius":12}],"op":"rect"},{"a":[250,480,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[386,482,62,28,{"color":0,"fill":true,"radius":14}],"op":"rect"},{"a":[388,484,58,24,{"color":15,"fill":true,"radius":12}],"op":"rect"},{"a":[388,484,58,24,"12345",{"align":"center","color":0,"font":"@font:small","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[250,540,200,56,{"fill":false,"radius":0}],"op":"rect"},{"a":[250,540,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[250,600,200,56,{"fill":false,"radius":0}],"op":"rect"},{"a":[250,600,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[250,600,200,56,{"color":0,"density":50,"kind":"dot"}],"op":"pattern"},{"a":[250,660,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[250,660,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[420,662,28,28,{"color":0,"fill":true,"radius":14}],"op":"rect"},{"a":[422,664,24,24,{"color":15,"fill":true,"radius":12}],"op":"rect"},{"a":[422,664,24,24,"9",{"align":"center","color":0,"font":"@font:small","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[250,660,200,56,{"color":0,"density":50,"kind":"dot"}],"op":"pattern"},{"a":[250,720,200,56,{"fill":false,"radius":0}],"op":"rect"},{"a":[250,720,200,56,"Button",{"align":"center","bold":true,"color":15,"font":"@font:small","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,740,150,40,{"fill":false,"radius":0}],"op":"rect"},{"a":[10,740,150,40,"A button text that does not fit",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,690,120,40,{"fill":false,"radius":0}],"op":"rect"},{"a":[10,690,120,40,"Shrink me",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"}]
+    },
+    {
+      "begin": [],
+      "calls": [{"id":"r_plain","m":"region","ret":[]},{"id":"r_sel","m":"region","ret":[]},{"id":"r_dis","m":"region","ret":[]},{"id":"r_badge","m":"region","ret":[]},{"id":"r_nodraw","m":"region","ret":[]},{"id":"r_rect","m":"region","ret":[]}],
+      "end": [],
+      "focused_after": ["r_plain"],
+      "i": 5,
+      "note": "regions: draw(g, r, st) called at end_frame in declaration order; disabled region gets no dots",
+      "op": "frame",
+      "op_counts": {"@draw":5,"rect":5,"text_box":2},
+      "stream": [{"g_is_frame_canvas":true,"id":"r_plain","op":"@draw","r":{"h":50,"w":100,"x":10,"y":460},"st":{"enabled":true,"focused":false,"selected":false}},{"g_is_frame_canvas":true,"id":"r_sel","op":"@draw","r":{"h":50,"w":100,"x":120,"y":460},"st":{"enabled":true,"focused":false,"selected":true}},{"g_is_frame_canvas":true,"id":"r_dis","op":"@draw","r":{"h":50,"w":100,"x":10,"y":520},"st":{"enabled":false,"focused":false,"selected":false}},{"g_is_frame_canvas":true,"id":"r_badge","op":"@draw","r":{"h":50,"w":100,"x":120,"y":520},"st":{"enabled":true,"focused":false,"selected":false}},{"a":[190,522,28,28,{"color":0,"fill":true,"radius":14}],"op":"rect"},{"a":[192,524,24,24,{"color":15,"fill":true,"radius":12}],"op":"rect"},{"a":[192,524,24,24,"7",{"align":"center","color":0,"font":"@font:small","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"g_is_frame_canvas":true,"id":"r_rect","op":"@draw","r":{"h":50,"w":100,"x":120,"y":580},"st":{"enabled":true,"focused":false,"selected":false}},{"a":[120,580,100,50,{"color":15}],"op":"rect"},{"a":[190,582,28,28,{"color":0,"fill":true,"radius":14}],"op":"rect"},{"a":[192,584,24,24,{"color":15,"fill":true,"radius":12}],"op":"rect"},{"a":[192,584,24,24,"1",{"align":"center","color":0,"font":"@font:small","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"}]
+    },
+    {"args":["b_norm"],"focused":["b_norm"],"i":6,"op":"focus","ret":[]},
+    {"focused":["b_norm"],"i":7,"note":"any key event switches focus drawing on","op":"event","ret":[null,null]},
+    {
+      "begin": [],
+      "calls": [{"id":"b_norm","m":"button","ret":[]},{"id":"b_r8","m":"button","ret":[]},{"id":"b_sel","m":"button","ret":[]},{"id":"b_emp","m":"button","ret":[]},{"id":"b_nob","m":"button","ret":[]},{"id":"r_plain","m":"region","ret":[]}],
+      "end": [],
+      "focused_after": ["b_norm"],
+      "i": 8,
+      "note": "focus drawn on b_norm (ui)",
+      "op": "frame",
+      "op_counts": {"@draw":1,"rect":4,"text_box":5},
+      "stream": [{"a":[10,0,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[10,0,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,70,200,56,{"fill":false,"radius":8}],"op":"rect"},{"a":[10,70,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,140,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[10,140,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,210,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[10,210,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,280,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"g_is_frame_canvas":true,"id":"r_plain","op":"@draw","r":{"h":56,"w":200,"x":10,"y":350},"st":{"enabled":true,"focused":false,"selected":false}}]
+    },
+    {"args":["b_r8"],"focused":["b_r8"],"i":9,"op":"focus","ret":[]},
+    {"focused":["b_r8"],"i":10,"note":"any key event switches focus drawing on","op":"event","ret":[null,null]},
+    {
+      "begin": [],
+      "calls": [{"id":"b_norm","m":"button","ret":[]},{"id":"b_r8","m":"button","ret":[]},{"id":"b_sel","m":"button","ret":[]},{"id":"b_emp","m":"button","ret":[]},{"id":"b_nob","m":"button","ret":[]},{"id":"r_plain","m":"region","ret":[]}],
+      "end": [],
+      "focused_after": ["b_r8"],
+      "i": 11,
+      "note": "focus drawn on b_r8 (ui)",
+      "op": "frame",
+      "op_counts": {"@draw":1,"rect":4,"text_box":5},
+      "stream": [{"a":[10,0,200,56,{"fill":false,"radius":0}],"op":"rect"},{"a":[10,0,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,70,200,56,{"fill":true,"radius":8}],"op":"rect"},{"a":[10,70,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,140,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[10,140,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,210,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[10,210,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,280,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"g_is_frame_canvas":true,"id":"r_plain","op":"@draw","r":{"h":56,"w":200,"x":10,"y":350},"st":{"enabled":true,"focused":false,"selected":false}}]
+    },
+    {"args":["b_sel"],"focused":["b_sel"],"i":12,"op":"focus","ret":[]},
+    {"focused":["b_sel"],"i":13,"note":"any key event switches focus drawing on","op":"event","ret":[null,null]},
+    {
+      "begin": [],
+      "calls": [{"id":"b_norm","m":"button","ret":[]},{"id":"b_r8","m":"button","ret":[]},{"id":"b_sel","m":"button","ret":[]},{"id":"b_emp","m":"button","ret":[]},{"id":"b_nob","m":"button","ret":[]},{"id":"r_plain","m":"region","ret":[]}],
+      "end": [],
+      "focused_after": ["b_sel"],
+      "i": 14,
+      "note": "focus drawn on b_sel (ui)",
+      "op": "frame",
+      "op_counts": {"@draw":1,"rect":5,"text_box":5},
+      "stream": [{"a":[10,0,200,56,{"fill":false,"radius":0}],"op":"rect"},{"a":[10,0,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,70,200,56,{"fill":false,"radius":8}],"op":"rect"},{"a":[10,70,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,140,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[7,137,206,62,{"line_width":2,"radius":0}],"op":"rect"},{"a":[10,140,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,210,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[10,210,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,280,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"g_is_frame_canvas":true,"id":"r_plain","op":"@draw","r":{"h":56,"w":200,"x":10,"y":350},"st":{"enabled":true,"focused":false,"selected":false}}]
+    },
+    {"args":["b_emp"],"focused":["b_emp"],"i":15,"op":"focus","ret":[]},
+    {"focused":["b_emp"],"i":16,"note":"any key event switches focus drawing on","op":"event","ret":[null,null]},
+    {
+      "begin": [],
+      "calls": [{"id":"b_norm","m":"button","ret":[]},{"id":"b_r8","m":"button","ret":[]},{"id":"b_sel","m":"button","ret":[]},{"id":"b_emp","m":"button","ret":[]},{"id":"b_nob","m":"button","ret":[]},{"id":"r_plain","m":"region","ret":[]}],
+      "end": [],
+      "focused_after": ["b_emp"],
+      "i": 17,
+      "note": "focus drawn on b_emp (ui)",
+      "op": "frame",
+      "op_counts": {"@draw":1,"rect":5,"text_box":5},
+      "stream": [{"a":[10,0,200,56,{"fill":false,"radius":0}],"op":"rect"},{"a":[10,0,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,70,200,56,{"fill":false,"radius":8}],"op":"rect"},{"a":[10,70,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,140,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[10,140,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,210,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[7,207,206,62,{"line_width":2,"radius":0}],"op":"rect"},{"a":[10,210,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,280,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"g_is_frame_canvas":true,"id":"r_plain","op":"@draw","r":{"h":56,"w":200,"x":10,"y":350},"st":{"enabled":true,"focused":false,"selected":false}}]
+    },
+    {"args":["b_nob"],"focused":["b_nob"],"i":18,"op":"focus","ret":[]},
+    {"focused":["b_nob"],"i":19,"note":"any key event switches focus drawing on","op":"event","ret":[null,null]},
+    {
+      "begin": [],
+      "calls": [{"id":"b_norm","m":"button","ret":[]},{"id":"b_r8","m":"button","ret":[]},{"id":"b_sel","m":"button","ret":[]},{"id":"b_emp","m":"button","ret":[]},{"id":"b_nob","m":"button","ret":[]},{"id":"r_plain","m":"region","ret":[]}],
+      "end": [],
+      "focused_after": ["b_nob"],
+      "i": 20,
+      "note": "focus drawn on b_nob (ui)",
+      "op": "frame",
+      "op_counts": {"@draw":1,"rect":5,"text_box":5},
+      "stream": [{"a":[10,0,200,56,{"fill":false,"radius":0}],"op":"rect"},{"a":[10,0,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,70,200,56,{"fill":false,"radius":8}],"op":"rect"},{"a":[10,70,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,140,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[10,140,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,210,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[10,210,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,280,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[10,280,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"g_is_frame_canvas":true,"id":"r_plain","op":"@draw","r":{"h":56,"w":200,"x":10,"y":350},"st":{"enabled":true,"focused":false,"selected":false}}]
+    },
+    {"args":["r_plain"],"focused":["r_plain"],"i":21,"op":"focus","ret":[]},
+    {"focused":["r_plain"],"i":22,"note":"any key event switches focus drawing on","op":"event","ret":[null,null]},
+    {
+      "begin": [],
+      "calls": [{"id":"b_norm","m":"button","ret":[]},{"id":"b_r8","m":"button","ret":[]},{"id":"b_sel","m":"button","ret":[]},{"id":"b_emp","m":"button","ret":[]},{"id":"b_nob","m":"button","ret":[]},{"id":"r_plain","m":"region","ret":[]}],
+      "end": [],
+      "focused_after": ["r_plain"],
+      "i": 23,
+      "note": "focus drawn on r_plain (ui)",
+      "op": "frame",
+      "op_counts": {"@draw":1,"rect":4,"text_box":5},
+      "stream": [{"a":[10,0,200,56,{"fill":false,"radius":0}],"op":"rect"},{"a":[10,0,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,70,200,56,{"fill":false,"radius":8}],"op":"rect"},{"a":[10,70,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,140,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[10,140,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,210,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[10,210,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,280,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"g_is_frame_canvas":true,"id":"r_plain","op":"@draw","r":{"h":56,"w":200,"x":10,"y":350},"st":{"enabled":true,"focused":true,"selected":false}}]
+    },
+    {"args":["b_norm"],"focused":["b_norm"],"i":24,"op":"focus","ret":[]},
+    {"focused":["b_norm"],"i":25,"note":"any key event switches focus drawing on","op":"event","ret":[null,null]},
+    {
+      "begin": [],
+      "calls": [{"id":"b_norm","m":"button","ret":[]},{"id":"b_r8","m":"button","ret":[]},{"id":"b_sel","m":"button","ret":[]},{"id":"b_emp","m":"button","ret":[]},{"id":"b_nob","m":"button","ret":[]},{"id":"r_plain","m":"region","ret":[]}],
+      "end": [],
+      "focused_after": ["b_norm"],
+      "i": 26,
+      "note": "focus drawn on b_norm (uo)",
+      "op": "frame",
+      "op_counts": {"@draw":1,"rect":5,"text_box":5},
+      "stream": [{"a":[10,0,200,56,{"fill":false,"radius":0}],"op":"rect"},{"a":[7,-3,206,62,{"line_width":2,"radius":0}],"op":"rect"},{"a":[10,0,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,70,200,56,{"fill":false,"radius":8}],"op":"rect"},{"a":[10,70,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,140,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[10,140,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,210,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[10,210,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,280,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"g_is_frame_canvas":true,"id":"r_plain","op":"@draw","r":{"h":56,"w":200,"x":10,"y":350},"st":{"enabled":true,"focused":false,"selected":false}}]
+    },
+    {"args":["b_r8"],"focused":["b_r8"],"i":27,"op":"focus","ret":[]},
+    {"focused":["b_r8"],"i":28,"note":"any key event switches focus drawing on","op":"event","ret":[null,null]},
+    {
+      "begin": [],
+      "calls": [{"id":"b_norm","m":"button","ret":[]},{"id":"b_r8","m":"button","ret":[]},{"id":"b_sel","m":"button","ret":[]},{"id":"b_emp","m":"button","ret":[]},{"id":"b_nob","m":"button","ret":[]},{"id":"r_plain","m":"region","ret":[]}],
+      "end": [],
+      "focused_after": ["b_r8"],
+      "i": 29,
+      "note": "focus drawn on b_r8 (uo)",
+      "op": "frame",
+      "op_counts": {"@draw":1,"rect":5,"text_box":5},
+      "stream": [{"a":[10,0,200,56,{"fill":false,"radius":0}],"op":"rect"},{"a":[10,0,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,70,200,56,{"fill":false,"radius":8}],"op":"rect"},{"a":[7,67,206,62,{"line_width":2,"radius":11}],"op":"rect"},{"a":[10,70,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,140,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[10,140,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,210,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[10,210,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,280,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"g_is_frame_canvas":true,"id":"r_plain","op":"@draw","r":{"h":56,"w":200,"x":10,"y":350},"st":{"enabled":true,"focused":false,"selected":false}}]
+    },
+    {"args":["b_sel"],"focused":["b_sel"],"i":30,"op":"focus","ret":[]},
+    {"focused":["b_sel"],"i":31,"note":"any key event switches focus drawing on","op":"event","ret":[null,null]},
+    {
+      "begin": [],
+      "calls": [{"id":"b_norm","m":"button","ret":[]},{"id":"b_r8","m":"button","ret":[]},{"id":"b_sel","m":"button","ret":[]},{"id":"b_emp","m":"button","ret":[]},{"id":"b_nob","m":"button","ret":[]},{"id":"r_plain","m":"region","ret":[]}],
+      "end": [],
+      "focused_after": ["b_sel"],
+      "i": 32,
+      "note": "focus drawn on b_sel (uo)",
+      "op": "frame",
+      "op_counts": {"@draw":1,"rect":5,"text_box":5},
+      "stream": [{"a":[10,0,200,56,{"fill":false,"radius":0}],"op":"rect"},{"a":[10,0,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,70,200,56,{"fill":false,"radius":8}],"op":"rect"},{"a":[10,70,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,140,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[7,137,206,62,{"line_width":2,"radius":0}],"op":"rect"},{"a":[10,140,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,210,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[10,210,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,280,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"g_is_frame_canvas":true,"id":"r_plain","op":"@draw","r":{"h":56,"w":200,"x":10,"y":350},"st":{"enabled":true,"focused":false,"selected":false}}]
+    },
+    {"args":["b_emp"],"focused":["b_emp"],"i":33,"op":"focus","ret":[]},
+    {"focused":["b_emp"],"i":34,"note":"any key event switches focus drawing on","op":"event","ret":[null,null]},
+    {
+      "begin": [],
+      "calls": [{"id":"b_norm","m":"button","ret":[]},{"id":"b_r8","m":"button","ret":[]},{"id":"b_sel","m":"button","ret":[]},{"id":"b_emp","m":"button","ret":[]},{"id":"b_nob","m":"button","ret":[]},{"id":"r_plain","m":"region","ret":[]}],
+      "end": [],
+      "focused_after": ["b_emp"],
+      "i": 35,
+      "note": "focus drawn on b_emp (uo)",
+      "op": "frame",
+      "op_counts": {"@draw":1,"rect":5,"text_box":5},
+      "stream": [{"a":[10,0,200,56,{"fill":false,"radius":0}],"op":"rect"},{"a":[10,0,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,70,200,56,{"fill":false,"radius":8}],"op":"rect"},{"a":[10,70,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,140,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[10,140,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,210,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[7,207,206,62,{"line_width":2,"radius":0}],"op":"rect"},{"a":[10,210,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,280,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"g_is_frame_canvas":true,"id":"r_plain","op":"@draw","r":{"h":56,"w":200,"x":10,"y":350},"st":{"enabled":true,"focused":false,"selected":false}}]
+    },
+    {"args":["b_nob"],"focused":["b_nob"],"i":36,"op":"focus","ret":[]},
+    {"focused":["b_nob"],"i":37,"note":"any key event switches focus drawing on","op":"event","ret":[null,null]},
+    {
+      "begin": [],
+      "calls": [{"id":"b_norm","m":"button","ret":[]},{"id":"b_r8","m":"button","ret":[]},{"id":"b_sel","m":"button","ret":[]},{"id":"b_emp","m":"button","ret":[]},{"id":"b_nob","m":"button","ret":[]},{"id":"r_plain","m":"region","ret":[]}],
+      "end": [],
+      "focused_after": ["b_nob"],
+      "i": 38,
+      "note": "focus drawn on b_nob (uo)",
+      "op": "frame",
+      "op_counts": {"@draw":1,"rect":5,"text_box":5},
+      "stream": [{"a":[10,0,200,56,{"fill":false,"radius":0}],"op":"rect"},{"a":[10,0,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,70,200,56,{"fill":false,"radius":8}],"op":"rect"},{"a":[10,70,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,140,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[10,140,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,210,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[10,210,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[7,277,206,62,{"line_width":2,"radius":0}],"op":"rect"},{"a":[10,280,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"g_is_frame_canvas":true,"id":"r_plain","op":"@draw","r":{"h":56,"w":200,"x":10,"y":350},"st":{"enabled":true,"focused":false,"selected":false}}]
+    },
+    {"args":["r_plain"],"focused":["r_plain"],"i":39,"op":"focus","ret":[]},
+    {"focused":["r_plain"],"i":40,"note":"any key event switches focus drawing on","op":"event","ret":[null,null]},
+    {
+      "begin": [],
+      "calls": [{"id":"b_norm","m":"button","ret":[]},{"id":"b_r8","m":"button","ret":[]},{"id":"b_sel","m":"button","ret":[]},{"id":"b_emp","m":"button","ret":[]},{"id":"b_nob","m":"button","ret":[]},{"id":"r_plain","m":"region","ret":[]}],
+      "end": [],
+      "focused_after": ["r_plain"],
+      "i": 41,
+      "note": "focus drawn on r_plain (uo)",
+      "op": "frame",
+      "op_counts": {"@draw":1,"rect":4,"text_box":5},
+      "stream": [{"a":[10,0,200,56,{"fill":false,"radius":0}],"op":"rect"},{"a":[10,0,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,70,200,56,{"fill":false,"radius":8}],"op":"rect"},{"a":[10,70,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,140,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[10,140,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,210,200,56,{"fill":true,"radius":0}],"op":"rect"},{"a":[10,210,200,56,"Button",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,280,200,56,"Button",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"g_is_frame_canvas":true,"id":"r_plain","op":"@draw","r":{"h":56,"w":200,"x":10,"y":350},"st":{"enabled":true,"focused":true,"selected":false}}]
+    }
+  ],
+  "scenario": "s03_label_button_region",
+  "title": "label, button and region drawing: variants, focus look (fill vs outline), badge, disabled dots"
+}
