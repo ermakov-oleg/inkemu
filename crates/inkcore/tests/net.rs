@@ -351,7 +351,11 @@ fn one_request_at_a_time_and_the_slot_frees_before_the_callback() {
     );
 
     let mut core = boot(app("{url = 'http://x.test/a'}", STATUS_BODY), cfg);
-    core.lua_exec("job:cancel()").unwrap();
+    // §14: job:cancel() returns nothing
+    assert_eq!(
+        core.lua_eval("return select('#', job:cancel())").unwrap(),
+        0
+    );
     let started = "return ctx.net:request({url = 'http://x.test/a'}, function() end) ~= nil";
     assert_eq!(core.lua_eval(started).unwrap(), true);
 }

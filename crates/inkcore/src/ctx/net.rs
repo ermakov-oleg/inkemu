@@ -12,7 +12,7 @@ use mlua::{Function, IntoLuaMulti, Lua, MultiValue, Table, Value};
 
 use super::files::{store_capped, Dir, Mode};
 use super::object::{method, new_object};
-use super::{arg, check_arg, int_value, nil, raw, soft_fail};
+use super::{arg, check_arg, int_value, raw, soft_fail};
 use crate::clock::TimerId;
 use crate::config::{NetMode, APP_FILE_SAVE_MAX, STORAGE_WRITE_MAX};
 use crate::emu::{with, Host, Shared, State};
@@ -472,7 +472,7 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
                     }
                     done(s, &job.0);
                 });
-                Ok(nil())
+                Ok(MultiValue::new())
             });
             new_object(lua, "job", &[("cancel", cancel)])?.into_lua_multi(lua)
         })

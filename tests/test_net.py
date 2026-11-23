@@ -293,9 +293,9 @@ def test_request_argument_errors(make_app, emu_factory):
             manifest=NET,
         )
     )
-    # a missing url is a bad option, not a bad argument (14/net_save_invalid ruling); 0.1 raised
+    # a missing url is a bad option, not a bad argument (options-field ruling); 0.1 raised
     assert emu.lua_eval("return msg") == "nilinvalid_argumentnilinvalid_argument", (
-        "a missing url is a bad option, invalid_argument (§14, 14/net_save_invalid ruling)"
+        "Invalid arguments return nil, invalid_argument (API 2.33.1 contract §14; options-field ruling)"
     )
     assert "bad argument #1 to 'request'" in emu.errors[0]
 

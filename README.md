@@ -452,6 +452,9 @@ offset_minutes revision valid`.
   each side on its own, up to 8192 (the contract scales only when both are set, up to 4096), and shrinking the width
   is Lanczos plus dithering, not nearest-neighbour. `color` tints only an image (or `src` region) whose pixels are
   all pure black or white, so an anti-aliased PNG icon is not tinted.
+- `job:cancel()` frees the request slot at once; on the device the cancelled request holds it until the abort
+  finishes, and `request` returns `nil, "busy"` meanwhile. After a cancel, retry from `ctx:after` or the next
+  callback, not straight away.
 - Layers: `draw` inside `on_draw` or inside another `draw` still runs (the contract returns `nil, "busy"`), an error
   in its function fails the app, and `set_bits` and the limit of 4 layers are not emulated.
 - Remote commands (daemon verbs, MCP) freeze the window clock, read-only ones included, so a screenshot is stable;
