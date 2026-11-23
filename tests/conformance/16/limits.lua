@@ -29,4 +29,19 @@ function on_draw(ctx, g)
   T.value("labels_and_buttons.accepted", buttons(1, 68, ok))
   T.call("labels_and_buttons_129th", function() return ui:button("x", { x = 300, y = 700, w = 100, h = 50 }) end)
   ui:end_frame()
+  -- a radio is one control plus one per item
+  local function radio_after_120(n)
+    ui:begin_frame(g)
+    buttons(1, 120, 0)
+    local items = {}
+    for i = 1, n do items[i] = "i" .. i end
+    local r = table.pack(ui:radio("r", { x = 0, y = 400, w = 300, h = 200, items = items }))
+    ui:end_frame()
+    return r
+  end
+  T.value("radio_7_items_fills_128", radio_after_120(7).n)
+  T.call("radio_8_items_is_129", function()
+    local r = radio_after_120(8)
+    return table.unpack(r, 1, r.n)
+  end)
 end

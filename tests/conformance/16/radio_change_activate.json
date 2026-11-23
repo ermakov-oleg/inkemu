@@ -1,0 +1,22 @@
+{
+  "spec": "§16",
+  "about": "activating a radio item that is not the value returns id, change, the item number, and the value item returns id, activate, its number, whether by tap, double tap or ok; press, focus and long_press carry the item number as the third value, a plain control returns two values; a disabled radio takes no taps and loses focus to the nearest control (taps, hold, ok on another item and the disabled fallback probe-confirmed)",
+  "expect": {
+    "tap_other_item": {"value": {"ok": true, "ret": ["r", "change", 4]}, "spec": "§16"},
+    "tap_value_item": {"value": {"ok": true, "ret": ["r", "activate", 2]}, "spec": "§16"},
+    "double_tap_other_item": {"value": {"ok": true, "ret": ["r", "change", 3]}, "spec": "§16"},
+    "hold_item": {"value": {"ok": true, "ret": ["r", "long_press", 5]}, "spec": "§16"},
+    "tap_plain_button": {"value": {"ok": true, "ret": ["top", "activate"]}, "spec": "§16"},
+    "ok_down_part_2": {"value": {"ok": true, "ret": ["r", "press", 2]}, "spec": "§16"},
+    "ok_up_part_2": {"value": {"ok": true, "ret": ["r", "change", 2]}, "spec": "§16"},
+    "down_to_part_3": {"value": {"ok": true, "ret": ["r", "focus", 3]}, "spec": "§16"},
+    "ok_down_part_3": {"value": {"ok": true, "ret": ["r", "press", 3]}, "spec": "§16"},
+    "ok_up_part_3": {"value": {"ok": true, "ret": ["r", "change", 3]}, "spec": "§16"},
+    "ok_down_value": {"value": {"ok": true, "ret": ["r", "press", 4]}, "spec": "§16"},
+    "ok_up_value": {"value": {"ok": true, "ret": ["r", "activate", 4]}, "spec": "§16"},
+    "tap_again_without_update": {"value": {"ok": true, "ret": ["r", "change", 3]}, "spec": "§16"},
+    "tap_disabled": {"value": {"ok": true, "ret": [null, null]}, "spec": "§16"},
+    "ok_after_disabled": {"value": {"ok": true, "ret": ["top", "press"]}, "spec": "§16"}
+  },
+  "errors": []
+}

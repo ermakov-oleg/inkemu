@@ -44,4 +44,11 @@ function on_draw(ctx, g)
     ui:button("O", { x = 300, y = 100, w = 80, h = 60, text = "O" })
   end)
   case(g, "region_target", "up", { up = "R" }, function() ui:region("R", { x = 400, y = 400, w = 50, h = 50 }) end)
+  -- a composite target takes focus on its default part: the value item
+  case(g, "radio_target", "down", { down = "rad" }, function()
+    ui:radio("rad", { x = 0, y = 500, w = 300, h = 120, items = { "a", "b", "c" }, value = 2 })
+  end)
+  case(g, "radio_disabled_target", "down", { down = "rad" }, function()
+    ui:radio("rad", { x = 0, y = 500, w = 300, h = 120, items = { "a", "b", "c" }, value = 2, enabled = false })
+  end)
 end

@@ -987,3 +987,171 @@ fn before_2_15_children_follow_each_other_and_nest() {
         ]
     );
 }
+
+fn radio_text(x: i32, y: i32, w: i32, h: i32, item: &str) -> String {
+    format!(
+        "text_box({x},{y},{w},{h},{item},{{align=left,color=15,font=@medium,overflow=ellipsis,valign=middle,wrap=none}})"
+    )
+}
+
+#[test]
+fn radio_splits_its_box_into_cells_and_draws_each_with_its_focus_frame() {
+    let lua = fixed_library("2.26");
+    let log = frame(
+        &lua,
+        "nil",
+        "st.keys = true st.focus = 'r' st.part = 3",
+        "ui:radio('r', {x = 10, y = 20, w = 200, h = 100, items = {'a', 'b', 'c', 'd', 'e'}, value = 2,\n\
+           columns = 2, gap = 4})",
+    );
+    // columns start at 0 and 4 + 196 // 2; rows at 0, 4 + 92 // 3 and 8 + 2 * 92 // 3; the last ones end at the box
+    assert_eq!(
+        log,
+        [
+            "circle(25,35,15,{line_width=2})".to_string(),
+            radio_text(48, 20, 60, 30, "a"),
+            "circle(127,35,15,{line_width=2})".to_string(),
+            "circle(127,35,10,{fill=true})".to_string(),
+            radio_text(150, 20, 60, 30, "b"),
+            "circle(25,69,15,{line_width=2})".to_string(),
+            radio_text(49, 54, 59, 31, "c"),
+            "rect(7,51,104,37,{line_width=2,radius=0})".to_string(),
+            "circle(127,69,15,{line_width=2})".to_string(),
+            radio_text(151, 54, 59, 31, "d"),
+            "circle(25,104,15,{line_width=2})".to_string(),
+            radio_text(49, 89, 59, 31, "e"),
+        ]
+    );
+}
+
+#[test]
+fn a_radio_cell_too_small_for_the_dot_has_none() {
+    let lua = fixed_library("2.26");
+    let log = frame(
+        &lua,
+        "nil",
+        "",
+        "ui:radio('r', {x = 0, y = 0, w = 100, h = 21, items = {'a', 'b'}, value = 2})",
+    );
+    // cells of 10 and 11: a dot needs a diameter s - 10 of at least 1
+    assert_eq!(
+        log.iter().filter(|c| c.contains("fill=true")).count(),
+        1,
+        "{log:?}"
+    );
+    let log = frame(
+        &lua,
+        "nil",
+        "",
+        "ui:radio('r', {x = 0, y = 0, w = 100, h = 21, items = {'a', 'b'}, value = 1})",
+    );
+    assert!(!log.iter().any(|c| c.contains("fill=true")), "{log:?}");
+}
+
+#[test]
+fn radio_parts_take_hits_focus_and_return_their_number() {
+    let out = events(
+        "2.26",
+        "local function scene(o)\n\
+           o = o or {}\n\
+           frame(function()\n\
+             ui:button('top', {x = 0, y = 0, w = 100, h = 40, nav = o.nav})\n\
+             ui:radio('r', {x = 0, y = 50, w = 200, h = 90, items = {'a', 'b', 'c'}, value = 2, enabled = o.enabled})\n\
+             ui:button('bot', {x = 0, y = 150, w = 100, h = 40})\n\
+           end)\n\
+         end\n\
+         local out = {}\n\
+         local function add(r) out[#out + 1] = r end\n\
+         scene()\n\
+         add(point('up', 10, 60, 10, 60, 'tap')) add(show(ui:focused()))\n\
+         add(point('up', 10, 90, 10, 90, 'tap')) add(point('hold', 10, 120, 10, 120)) add(show(ui:focused()))\n\
+         add(key('down')) add(key('ok')) add(key('ok', 'up')) add(key('down')) add(key('up'))\n\
+         ui:focus('r') add(show(ui:focused())) scene() add(show(ui:focused()))\n\
+         ui:focus('r', 7) scene() add(show(ui:focused()))\n\
+         ui:focus('top') scene() add(key('down'))\n\
+         scene({nav = {down = 'r'}}) ui:focus('top') add(key('down'))\n\
+         ui:focus('r', 3) scene({enabled = false}) add(show(ui:focused()))\n\
+         add(point('up', 10, 60, 10, 60, 'tap'))\n\
+         return table.concat(out, ' ')",
+    );
+    // a part that is not the value changes it, the value part activates; a composite without a part, or with one it
+    // lacks, settles on its value part; the first part is the nearest one below `top`; a nav entry naming the radio
+    // goes to its value part; a disabled radio hands focus to the nearest control and takes no taps
+    assert_eq!(
+        out,
+        "r,change,1 r,1 r,activate,2 r,long_press,3 r,2 r,focus,3 r,press,3 r,change,3 bot,focus r,focus,3 \
+         r r,2 r,2 r,focus,1 r,focus,2 bot nil,nil"
+    );
+}
+
+#[test]
+fn a_radio_counts_itself_and_each_item_against_the_limit() {
+    let out = layout_run(
+        "2.26",
+        "local function try(n)\n\
+           ui:begin_frame(g)\n\
+           for i = 1, 120 do ui:label('l' .. i, {x = 0, y = 0, w = 1, h = 1}) end\n\
+           local items = {} for i = 1, n do items[i] = 'i' end\n\
+           local r = table.pack(ui:radio('r', {x = 0, y = 0, w = 100, h = 100, items = items}))\n\
+           ui:end_frame()\n\
+           return r.n .. ':' .. tostring(r[2])\n\
+         end\n\
+         return try(7), try(8)",
+    );
+    assert_eq!(out, "0:nil,2:limit_exceeded");
+}
+
+#[test]
+fn radio_checks_its_fields() {
+    let code = "ui:begin_frame(g)\n\
+         local function try(o)\n\
+           local t = {x = 0, y = 0, w = 100, h = 100, items = {'a', 'b'}}\n\
+           for k, v in pairs(o) do t[k] = v end\n\
+           local r = table.pack(ui:radio('r' .. tostring(next(o)) .. tostring(select(2, next(o))), t))\n\
+           return r.n == 0 and 'ok' or tostring(r[2])\n\
+         end\n\
+         local out = {}\n\
+         for _, o in ipairs({{value = 0}, {value = 3}, {value = 1.5}, {value = 2.0}, {columns = 3}, {columns = 2},\n\
+           {gap = -1}, {gap = 300}, {align = 'justify'}, {align = 'center'}, {items = {}}, {items = {'a', 5}},\n\
+           {enabled = 1}, {font_min = 7}, {nav = 5}, {bold = 1}, {skin = 'nope'}}) do\n\
+           out[#out + 1] = try(o)\n\
+         end\n\
+         return table.concat(out, ' ')";
+    let bad = "invalid_argument";
+    let ok = "ok";
+    assert_eq!(
+        layout_run("2.26", code),
+        [bad, bad, bad, ok, bad, ok, bad, ok, bad, ok, bad, bad, bad, bad, ok, bad, bad].join(" ")
+    );
+    // `bold` is a 2.16 field
+    assert!(layout_run("2.15", code).ends_with(&format!("{ok} {bad}")));
+    let err = layout_run(
+        "2.26",
+        "ui:begin_frame(g)\nui:radio('r', {x = 0, y = 0, w = 9, h = 9, items = {'a'}, skin = 'iron'})",
+    );
+    assert!(
+        err.starts_with("index.lua:3: ui:radio skin is not implemented in inkemu yet"),
+        "{err}"
+    );
+}
+
+#[test]
+fn a_radio_child_splits_the_box_its_container_gives_it() {
+    let lua = fixed_library("2.26");
+    let log = frame(
+        &lua,
+        "nil",
+        "",
+        "ui:column('c', {x = 0, y = 0, w = 200, h = 100, padding = 10, children = {\n\
+           {kind = 'radio', id = 'r', items = {'a', 'b'}, h = 60}}})",
+    );
+    assert_eq!(
+        log,
+        [
+            "circle(25,25,15,{line_width=2})".to_string(),
+            radio_text(48, 10, 142, 30, "a"),
+            "circle(25,55,15,{line_width=2})".to_string(),
+            radio_text(48, 40, 142, 30, "b"),
+        ]
+    );
+}
