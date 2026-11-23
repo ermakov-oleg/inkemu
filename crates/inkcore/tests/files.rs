@@ -60,7 +60,7 @@ fn storage_round_trips_binary_bytes() {
 }
 
 #[test]
-fn the_513th_file_has_no_space() {
+fn the_513th_file_is_limit_exceeded() {
     let mut core = boot(
         "function on_load(c)\n\
            for i = 1, 512 do assert(c.storage:write('f' .. i, 'x')) end\n\
@@ -72,8 +72,8 @@ fn the_513th_file_has_no_space() {
     assert_eq!(
         core.lua_eval("return {tostring(r), e, again, ctx.storage:usage().files}")
             .unwrap(),
-        json!(["nil", "no_space", true, 512]),
-        "firmware 26112001 inventory: storage:usage() = {{bytes, files, max_bytes, max_files}}"
+        json!(["nil", "limit_exceeded", true, 512]),
+        "API 2.33.1 §9 (09/storage_file_count_limit): the 513th file is limit_exceeded"
     );
 }
 

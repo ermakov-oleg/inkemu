@@ -173,7 +173,8 @@ back for `live` and `record` requests, including their percent-encoded forms. A 
 
 `<state root>/<app_id>/` holds `state.json` (`ctx.state`), `files/` (`ctx.storage`), `appfiles/` (`ctx.files`),
 `lock.json` and `shots/`. On the device `ctx.storage` and `ctx.files` are two directories too (`XTApps/<app_id>/files/`
-and `/AppFiles/<app_id>/`); inkemu applies the quota of 128 MiB and 512 files to each of them. The state root is
+and `/AppFiles/<app_id>/`); inkemu keeps the §9 quota (128 MiB, 512 files) on `files/` and the 512-file limit on
+`appfiles/`. The state root is
 `.emu/` in the working directory, or `$INKEMU_STATE_ROOT`. `--fresh` wipes the app state first, both file directories
 included, then seeds `files/` from `<fixtures dir>/files/`.
 
@@ -213,6 +214,15 @@ included, then seeds `files/` from `<fixtures dir>/files/`.
   with only a log warning. Check the result, or draw fewer commands (a layer or one `g:image`).
 - `ctx:invalidate(x)` with anything but nothing or `"full"`, and `ctx:defer_full_refresh(ms)` outside 1..60000 or
   fractional, return `nil, "invalid_argument"`, and a refused `invalidate` no longer asks for a frame.
+- `ctx.storage` names are `[a-z0-9._-]`, 1 to 64 bytes, not starting or ending with `.`; others return
+  `nil, "invalid_argument"` (0.1 took any name up to 255 bytes). A file already in `files/` with another name is not
+  loaded. `write` of more than 262144 bytes and every quota overrun return `nil, "limit_exceeded"` (0.1: `no_space`),
+  and `remove` of an absent file returns true.
+- `ctx.files` follows §29: names of 1 to 128 bytes without `/ \ : * ? " < > | ~`, a leading `.` or device names
+  (a space inside is legal now); names differing only in case are one file; `list()` returns `{name, size}` items,
+  not bare names; `read(name, offset, len)` returns at most `len` bytes (default and largest 65536) instead of the
+  whole file; the folder has no byte quota, and a 513th file is `limit_exceeded`.
+- `--fresh` seeding skips fixture files whose names `ctx.storage` would refuse (uppercase, braces).
 
 ## Supported API
 
@@ -335,8 +345,12 @@ the start with an error. From each file inkemu takes:
 - `log`: a table with `error`, `info` and `warn`, each logging with its level (`[app] WARN ...`).
 - `capabilities`, `clock` (`now`, `millis`), `device` (`battery`, `firmware`, `model`, `name`, `id_for_app`,
   `lock_timer`), `fonts`.
-- `storage` (`read`, `write`, `exists`, `size`, `remove`, `list`, `usage` = `{bytes, files, max_bytes, max_files}`).
-- `files` (`read`, `write`, `append`, `exists`, `size`, `remove`, `list`; `path` = `/AppFiles/<app_id>`).
+- `storage` (`read`, `write`, `exists`, `size`, `remove`, `list`, `usage` = `{bytes, files, max_bytes, max_files}`;
+  names `[a-z0-9._-]` up to 64 bytes; 262144 bytes per `write`, 512 files, 128 MiB in all, over that is
+  `limit_exceeded`; `remove` of an absent file is true).
+- `files` (`read(name, offset, len)`, `write`, `append`, `exists`, `size`, `remove`, `list` = `{name, size}` items;
+  `path` = `/AppFiles/<app_id>`; names as §29, case-insensitive with the creation spelling kept; 262144 bytes per
+  call, 512 files, no total limit).
 - `package` (`read`, `open_text`, `image`, `exists`, `size`, `cache_stats` = `{}`).
 - `net` (`request`; GET and POST), `dialog` (`confirm`, `toast`), `input` (`text`, `edit`, `keyboard_h` = 436,
   `pointer` = true). `input:edit` checks its options as §4 (`rect`, `text`, `placeholder`, `max_chars`, `kind`,
@@ -392,7 +406,6 @@ offset_minutes revision valid`.
   - the result format of `ctx.hash:hmac_sha256` (raw bytes in inkemu);
   - the level `ctx.frontlight:reset()` goes back to (inkemu: the level at start, 0);
   - `ctx.random:bytes(n)` with `n` below 0 or above 1 MiB: inkemu refuses it with `nil, "invalid_argument"`;
-  - the quota of `ctx.files` (inkemu: the same as `ctx.storage`'s, counted separately);
   - whether `density` changes the `line` and `cross` patterns (inkemu: no); whether `line` and `cross` are anchored
     to the screen like `dot` or to the box (inkemu: the screen; the probe's boxes started where both agree);
   - `g:pattern` with a `density` that is not a number (inkemu: the frame fails with "g: bad values in on_draw");

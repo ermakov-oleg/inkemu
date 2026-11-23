@@ -43,30 +43,6 @@ All §7 checks are green and pinned: `07/text_invalid_utf8`, `07/text_rtl`, `07/
 
 ## §9 Private files
 
-### 09/storage_name_invalid
-- Contract: a name is 1 to 64 bytes from `[a-z0-9._-]` and does not start or end with `.`; any other name returns `nil, "invalid_argument"` from `write`, `read`, `size` and `remove`, and `exists` returns false.
-- Core now: `valid_name` is the 0.1 rule (any UTF-8 up to 255 bytes, no whitespace or slashes), so a capital, a leading or trailing dot and a 65-byte name are stored. Empty names, spaces and slashes are already refused; `09/storage_name_refused` pins them (green).
-- Touch points: `crates/inkcore/src/ctx/files.rs` (`valid_name`; storage and files need separate rules).
-- Source: probe-confirmed for `write` and `remove` with `Bad`, `.x` and 65 bytes, and for `exists('Bad')`; the other names and calls (`read`, `size`) are contract only.
-
-### 09/storage_file_size_limit
-- Contract: a `write` of more than 262144 bytes returns `nil, "limit_exceeded"` and an existing file stays as it was.
-- Core now: no per-file limit, only the total quota. A file of exactly 262144 bytes works (`09/storage_file_size_max`, green).
-- Touch points: `crates/inkcore/src/ctx/files.rs` (`writer`).
-- Source: probe-confirmed for the 262145-byte write on a new name; the unchanged old file is contract only.
-
-### 09/storage_file_count_limit
-- Contract: a `write` that would create a 513th file returns `nil, "limit_exceeded"`; rewriting or removing keeps working.
-- Core now: the same refusal, but the code is `no_space`.
-- Touch points: `crates/inkcore/src/ctx/files.rs` (`writer`).
-- Source: contract only.
-
-### 09/storage_remove_missing
-- Contract: `remove` returns true for a file that does not exist.
-- Core now: `nil, "not_found"`. Removing an existing file is pinned apart (`09/storage_remove_existing`, `09/storage_name_exists_invalid`, green).
-- Touch points: `crates/inkcore/src/ctx/files.rs` (`remove`).
-- Source: probe-confirmed.
-
 Already green and pinned: `09/storage_usage`, `09/storage_name_valid`, `09/storage_name_refused`, `09/storage_file_size_max`, `09/storage_remove_existing`, `09/storage_missing_file`, `09/storage_write_replaces`, `09/storage_list_order` (byte order is contract only; the probe sample was alphabetical), `09/storage_full_quota` (512 full-size files are exactly the 128 MB total, so the total quota is not reachable separately and is covered by this check).
 
 ## §12 Clock, log and memory
@@ -298,54 +274,6 @@ Already green and pinned: `25/act_refresh`, `25/act_inactive_no_lock` (refused `
 Already green and pinned: `26/encoding`, `26/hash_input_max`, `26/encoding_input_max`, `26/base64_decode`, `26/url_encode_decode`, `26/random_bytes_range`, `26/hash_hmac_sha256` (the probe's `k`/`m` vector, RFC 4231 cases 2 and 6), `26/hex_decode`, `26/random_uuid`, `26/hash_crc32` and `26/hash_sha1` (probe-confirmed; fixed in the core).
 
 ## §29 App files
-
-### 29/files_name_illegal, 29/files_name_illegal_calls, 29/files_name_inner_space
-- Contract: a name is 1 to 128 UTF-8 bytes without control characters or any of `/ \ : * ? " < > | ~`, not starting with `.`, not ending with `.` or a space, and not a device name (`CON`, `PRN`, `AUX`, `NUL`, `COM1-9`, `LPT1-9`, case-insensitive, before the first dot); otherwise `invalid_argument` from every call (`exists` is false). Spaces inside a name and non-ASCII letters are legal.
-- Core now: `ctx.files` uses the storage name rule (any UTF-8 up to 255 bytes, no whitespace), so reserved characters other than the slash and backslash, a leading or trailing dot, device names and 129-byte names are accepted and a space inside a name is refused. Names with a slash, backslash, control character, trailing space or nothing at all are already refused (`29/files_name_refused`, `29/files_name_refused_calls`, green); legal names that already work are `29/files_name_accepted` (green).
-- Touch points: `crates/inkcore/src/ctx/files.rs` (`valid_name`, `target`).
-- Source: contract only (the probe only wrote `f`, `f2`, `f3`).
-
-### 29/files_case_insensitive
-- Contract: names differing only in case address one file; `list()` keeps the case used at creation.
-- Core now: names are case-sensitive.
-- Touch points: `crates/inkcore/src/ctx/files.rs` (name lookup for the app directory).
-- Source: contract only.
-
-### 29/files_list_items, 29/files_list_empty
-- Contract: `list()` returns `{ name, size }` items in byte order; an empty folder gives an empty table.
-- Core now: bare names (the empty case already matches).
-- Touch points: `crates/inkcore/src/ctx/files.rs` (`list` for the app directory). Not pinned: a user adding more than 512 files (`limit_exceeded` from `list`), since an app cannot create them.
-- Source: contract only.
-
-### 29/files_read_ranges, 29/files_read_default_len, 29/files_read_arg_errors
-- Contract: `read(name, offset, len)` returns at most `len` bytes from `offset` (default 0), the default `len` is 65536, an `offset` at or past the end gives `""`, a negative `offset` or `len` below 1 is `invalid_argument`, a `len` above 65536 is `limit_exceeded`.
-- Core now: `offset` and `len` are ignored (a warning is logged) and the whole file is returned.
-- Touch points: `crates/inkcore/src/ctx/files.rs` (`read`, files only; `storage:read` keeps whole-file reads).
-- Source: probe-confirmed for the default length, `read(name, 65536)` and `read(name, 0, 10)`; the error cases are contract only.
-
-### 29/files_write_limit, 29/files_append_invalid
-- Contract: `write` and `append` take at most 262144 bytes per call (`limit_exceeded`, file unchanged); `append` checks the name. (A 262144-byte write is `29/files_write_max`; creating and extending with `append` is `29/files_append`; both green.)
-- Core now: no per-call limit; `append` accepts illegal names.
-- Touch points: `crates/inkcore/src/ctx/files.rs` (`writer`).
-- Source: probe-confirmed for the 262145-byte `write`; `append` is contract only.
-
-### 29/files_count_limit
-- Contract: once 512 files exist, creating another through `write` or `append` is `nil, "limit_exceeded"`, while existing files can still change.
-- Core now: refused with `no_space`.
-- Touch points: `crates/inkcore/src/ctx/files.rs` (`writer`).
-- Source: contract only.
-
-### 29/files_no_total_limit
-- Contract: the app folder has no total-bytes limit (only a full card gives `io_error`), so appends keep working past 128 MB.
-- Core now: the 128 MB storage quota also applies to the app folder (`no_space`).
-- Touch points: `crates/inkcore/src/ctx/files.rs` (`writer`: the storage quota applies to both directories today). The check fills 512 full-size files, which takes well under a second.
-- Source: contract only.
-
-### 29/files_remove_missing
-- Contract: `remove` of an absent app file returns true. (`read` and `size` of an absent file are `not_found` and `exists` is false: `29/files_missing_file`, green.)
-- Core now: `remove` returns `nil, "not_found"`.
-- Touch points: `crates/inkcore/src/ctx/files.rs` (`remove`).
-- Source: contract only (the probe removed existing files only).
 
 Already green and pinned: `29/files_name_refused`, `29/files_name_refused_calls`, `29/files_name_accepted`, `29/files_missing_file`, `29/files_write_max`, `29/files_write_replaces`, `29/files_read_whole`, `29/files_remove_existing`, `29/files_append`, `29/files_path_and_separation` (`ctx.files.path` is `/AppFiles/<app_id>`, probe-confirmed; private storage and app files are separate), `29/files_append_past_call_limit`. Not covered: public folders (`ctx.files:folder`, §29 2.31), `io_error` for a subfolder with a file's name, and the opening of files by the reader.
 

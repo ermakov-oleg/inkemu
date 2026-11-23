@@ -184,7 +184,7 @@ fn files_and_storage_are_different_directories() {
 }
 
 #[test]
-fn files_have_their_own_quota_and_append_counts_the_whole_file() {
+fn only_storage_has_a_total_quota_and_both_cap_the_file_count() {
     let mut core = start_with("", (10, 2));
     assert_eq!(
         eval(
@@ -193,21 +193,24 @@ fn files_have_their_own_quota_and_append_counts_the_whole_file() {
              local s = ctx.storage\n\
              local f = ctx.files\n\
              return {r(s:write('s1', '12345')), r(s:write('s2', '12345')), r(s:write('s3', '')),\n\
+               r(s:write('s1', '123456')),\n\
                r(f:write('a', '1234')), r(f:append('a', '12345')), r(f:append('a', '12')), f:read('a'),\n\
                r(f:write('b', '1')), r(f:write('c', '')), r(f:append('new', ''))}"
         ),
         json!([
             "true",
             "true",
-            "nil no_space",
+            "nil limit_exceeded",
+            "nil limit_exceeded",
             "true",
             "true",
-            "nil no_space",
-            "123412345",
             "true",
-            "nil no_space",
-            "nil no_space"
-        ])
+            "12341234512",
+            "true",
+            "nil limit_exceeded",
+            "nil limit_exceeded"
+        ]),
+        "API 2.33.1 §9 and §29 (09/storage_file_count_limit, 29/files_no_total_limit): only storage has a byte quota"
     );
 }
 
@@ -217,11 +220,12 @@ fn files_append_follows_the_write_rules() {
     assert_eq!(
         eval(
             &mut core,
-            "local a, ae = ctx.files:append('bad name', 'x')\n\
+            "local a, ae = ctx.files:append('bad:name', 'x')\n\
              local b, be = ctx.files:append('ok', {})\n\
              return {tostring(a), ae, tostring(b), be}"
         ),
-        json!(["nil", "invalid_argument", "nil", "invalid_argument"])
+        json!(["nil", "invalid_argument", "nil", "invalid_argument"]),
+        "API 2.33.1 §29 (29/files_name_inner_space): a space is legal inside an app file name"
     );
 }
 
