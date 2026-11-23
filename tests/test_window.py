@@ -127,6 +127,21 @@ def test_text_dialog_types_answer(make_window, make_app, monkeypatch):
     assert app.emu.has_text("res Привет")
 
 
+def test_edit_dialog_replaces_the_prefilled_text(make_window, make_app, monkeypatch):
+    app = make_window(
+        make_app(
+            ASKING
+            % (
+                "c.input:edit({title='Note', text='hi', on_end=function(c, s, how) res = s .. ':' .. how; c:invalidate() end})"
+            )
+        )
+    )
+    monkeypatch.setattr(window, "ask_string", lambda parent, title, text, initial: initial + "!")
+    key(app, "Return")
+    app.root.update()
+    assert app.emu.pending is None and app.emu.has_text("res hi!:enter"), "the prefilled text is not doubled"
+
+
 def test_text_dialog_cancel(make_window, make_app, monkeypatch):
     app = make_window(
         make_app(ASKING % ("c.input:text({title='Name', text=''}, function(c, s) res = s; c:invalidate() end)"))

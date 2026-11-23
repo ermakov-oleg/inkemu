@@ -242,7 +242,7 @@ fn random_bytes_system_act_and_small_members() {
         ),
         json!([
             "string", 16, 0, "nil", "invalid_argument", 0, 436, true, 2, 4, true, false, false, false, false,
-            true, true
+            false, true
         ]),
         "API 2.33.1 contract §5 says otherwise: perf:info() is not empty (05/perf_info)"
     );
@@ -264,6 +264,7 @@ fn not_emulated_members_are_nil() {
     for name in [
         "ctx.crypto",
         "ctx.nn",
+        "ctx.ui",
         "ctx.widget",
         "ctx.dialog.choose",
         "ctx.i18n.t",

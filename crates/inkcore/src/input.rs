@@ -114,6 +114,13 @@ impl Host<'_> {
                 let msg = format!("input ignored, {why}: {} {}", ev.kind, ev.phase);
                 return with(self.st, |s| s.log_line(&msg));
             }
+            Gate::Dialog("edit") if ev.key == Some("back") => {
+                if ev.phase == "up" {
+                    with(self.st, |s| s.log_line("back ended the edit"));
+                    let _ = self.answer_now(false);
+                }
+                return;
+            }
             Gate::Dialog(kind) => {
                 if ev.phase == "up" {
                     let how = if matches!(kind, "text" | "edit") {
@@ -147,6 +154,8 @@ impl Host<'_> {
                     }
                 }),
                 type_text: None,
+                submit: None,
+                ok_keeps_open: false,
             };
             self.set_pending("leave", "Leave app?".into(), String::new(), leave);
             with(self.st, |s| {

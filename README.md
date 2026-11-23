@@ -117,8 +117,10 @@ Every input advances virtual time by 350 ms. Daemon discovery goes through `<sta
 
 An open dialog (`ctx.dialog:confirm`, `ctx.input:text`/`edit`, the host's "Leave app?") is drawn as a plate with its
 title, text or field and `Yes`/`No` or `OK`/`Cancel`, so it shows in shots and `texts`. While it is open, input does
-not reach the app (the log says so); tapping a button (`tap-text Yes`) answers it, as do `answer` and `type`.
-The window shows the same dialogs as native Tk dialogs instead.
+not reach the app (the log says so); tapping a button (`tap-text Yes`) answers it, as do `answer` and `type`;
+`key back` ends an `edit` as Back.
+The window shows the same dialogs as native Tk dialogs instead. There, and in the page's text field, the submitted
+value replaces an edit's text (it starts prefilled) before the confirm key, while `type` appends to it.
 
 ### Window keys
 
@@ -188,8 +190,29 @@ included, then seeds `files/` from `<fixtures dir>/files/`.
 - `polyline` and `polygon` with too few points or an odd array return `nil, "invalid_argument"` instead of drawing
   nothing or failing the frame; more than 128 points return `nil, "limit_exceeded"`.
 - `g:pattern` with an unknown `kind` returns `nil, "invalid_argument"`; without `kind` it draws `dot`.
+- `ctx.input:edit`: the edit object's text is the method `ed:text()` (the raw `ed.text` field is gone),
+  `ed:close()` returns the final text, `on_end` gets `how = "back"` instead of `"cancel"`, bad options return
+  `nil, "invalid_argument"`, and a second edit returns `nil, "busy"` instead of replacing the first. `input:text`
+  returns `nil, "busy"` while a text input, an edit or a confirm is open, and `dialog:confirm` while an edit is.
 - Circles and arcs follow the pixel rules of §6: half a pixel smaller than in 0.1, an arc of whole turns draws
   nothing, and a filled `arc` is a stroke, not a pie slice.
+- `g:text_box` with an `h` below one line height draws nothing and succeeds; 0.1 drew one line. Give it at least
+  `font.line_height`. A line that cannot wrap is clipped at the box edge, CJK and Thai text wraps between
+  characters, and packages declaring API 2.16 or later get kinsoku.
+- `ctx.fonts:size(px)` with `px` outside 8..96 or fractional returns `nil, "invalid_argument"`; 0.1 returned the
+  nearest font. Clamp `px` first, or pick `ctx.fonts.small`, `medium` or `large` directly.
+- Text metrics changed: the bundled font's ascents are 17/21/26, DejaVu advances are whole pixels and the baseline
+  moved, so text shifts and pixel or screenshot baselines of 0.1 no longer match. Regenerate them, and measure
+  with `font:measure` instead of assuming widths.
+- `g:text`, `g:text_box`, `font:measure` and `font:layout` return `nil, code` for right-to-left text, invalid
+  UTF-8 and text over the byte limits (8192 per call, 65536 per frame and per `layout` call). Before, `measure`
+  returned a number and the text was drawn or skipped. Check the second result when the text comes from outside.
+- `font:measure` and `font:layout` raise `bad argument #1` for anything but a string or a number; 0.1 measured the
+  printed form of `nil` or a table. Pass `tostring(v)` or a real string.
+- Draw calls after the 1024th command of a frame return `nil, "limit_exceeded"`; 0.1 dropped them
+  with only a log warning. Check the result, or draw fewer commands (a layer or one `g:image`).
+- `ctx:invalidate(x)` with anything but nothing or `"full"`, and `ctx:defer_full_refresh(ms)` outside 1..60000 or
+  fractional, return `nil, "invalid_argument"`, and a refused `invalidate` no longer asks for a frame.
 
 ## Supported API
 
@@ -316,7 +339,11 @@ the start with an error. From each file inkemu takes:
 - `files` (`read`, `write`, `append`, `exists`, `size`, `remove`, `list`; `path` = `/AppFiles/<app_id>`).
 - `package` (`read`, `open_text`, `image`, `exists`, `size`, `cache_stats` = `{}`).
 - `net` (`request`; GET and POST), `dialog` (`confirm`, `toast`), `input` (`text`, `edit`, `keyboard_h` = 436,
-  `pointer` = true).
+  `pointer` = true). `input:edit` checks its options as §4 (`rect`, `text`, `placeholder`, `max_chars`, `kind`,
+  `multiline`, `enter`, else `nil, "invalid_argument"`) and returns `ed` with `set_text`, `text` and `close`;
+  `on_end` gets `how` = `"enter"` or `"back"` (the Back key or `answer no`). While it is open, another `edit`,
+  `input:text` and `dialog:confirm` return `nil, "busy"`; `edit` and `input:text` are also busy while a text input
+  or a confirm is open.
 - `image`, `qr`, `json`, `base64` (`encode`, `decode`), `hex`, `url` (`encode`, `decode`), `zlib`, `random` (`uuid`, `bytes`).
 - `hash`: `sha256`, `md5` and `hmac_sha256` return the raw digest bytes (use `ctx.hex:encode` for text); `sha1` returns the
   20 raw bytes too; `crc32` returns a signed 32-bit integer (values from 2^31 wrap to negative); all verified in QEMU on firmware 26112001.
@@ -345,12 +372,17 @@ offset_minutes revision valid`.
   `16777217.0 == 16777216.0`).
 - The app sees no `io`, `os`, `debug`, `package`, `load`, `loadstring`, `dofile`, `loadfile`, `collectgarbage` or
   `print`, as on the device; `require` searches only the app folder. Lua 5.5's global `warn` is visible to the app.
-- Not emulated, so nil: `ctx.crypto`, `ctx.nn`, `ctx.widget`, `dialog:choose`, `i18n:t`, `url:query`,
+- Not emulated, so nil: `ctx.crypto`, `ctx.nn`, `ctx.ui`, `ctx.widget`, `dialog:choose`, `i18n:t`, `url:query`,
   `input.keys`, `input.listen`, `input.gamepad`, `device.display`, `device.keep_awake`, `device.radios`,
   `screen.occlusion`. No BLE, no WebSocket; only GET and POST get a network callback.
-- `ctx.capabilities` reports what inkemu emulates: `dialog frontlight image_decode image_transform pattern reader ui`
-  are true, `ble identity nn ttf` false. The device reports `ble dialog frontlight identity image_decode
+- `ctx.capabilities` reports what inkemu emulates, except that `image_transform` is true as on the device: `dialog frontlight image_decode image_transform pattern reader`
+  are true, `ble identity nn ui ttf` false. The device reports `ble dialog frontlight identity image_decode
   image_transform nn pattern reader ui` as true and `ttf` as false.
+- Docked input (`ctx.input:edit`) is the dialog plate: the app gets no input while it is open (on the device,
+  pointers outside `rect` and the keys other than Back still reach it), the host draws no text in `rect` (it is
+  checked and logged), `kind` and `placeholder` are only checked, and there is no composition and no full-screen
+  fallback. `type` types the text and presses the confirm key; a newline in it is the confirm key too. With
+  `enter = "newline"`, `type` and `answer yes` insert a line break and the field stays open.
 - `ctx.system:act(s)` needs a string ("string expected" otherwise), as on the device. `"refresh"` makes the next
   frame full, like `ctx:invalidate("full")`; inkemu answers every other string, `"sleep"` and `"power_off"`
   included, with `nil, "invalid_argument"` and logs it.
@@ -381,7 +413,9 @@ offset_minutes revision valid`.
 - `g:image` resolves the image when the command is recorded, not at the end of `on_draw`.
 - Images and layers have no transparency: a new layer is white, not transparent, so a layer covers what lies under
   it and `invert` turns its undrawn area black. `g:image`'s `background` is not emulated (with opaque images there is
-  nothing for it to show through), nor are `gray` and the transforms (`flip_x`, `rotate`, ...). `w` and `h` scale
+  nothing for it to show through), nor are `gray` and the transforms (`flip_x`, `flip_y`, `rotate`, `pivot_x`,
+  `pivot_y`): `ctx.capabilities.image_transform` is true as on the device, but these options are ignored and the
+  log warns once per session. `w` and `h` scale
   each side on its own, up to 8192 (the contract scales only when both are set, up to 4096), and shrinking the width
   is Lanczos plus dithering, not nearest-neighbour. `color` tints only an image (or `src` region) whose pixels are
   all pure black or white, so an anti-aliased PNG icon is not tinted.

@@ -62,15 +62,18 @@ def test_input_edit_object(make_app, emu_factory):
         make_app(
             "function on_load(c)\n"
             "  ed = c.input:edit({text='x', on_change=function() end, on_end=function() end})\n"
-            "  ed:set_text('hello')\n  seen = ed.text\nend\n"
+            "  ed:set_text('hello')\n  seen = ed:text()\nend\n"
             "function on_draw(c, g) g:text(0, 0, seen) end\n"
         )
     )
     assert emu.pending["text"] == "hello" and emu.has_text("hello")
-    emu.lua_exec("on_load(ctx)")  # a second edit replaces the first
-    assert emu.pending["kind"] == "edit"
-    emu.lua_exec("ed:close()")
-    assert emu.pending is None
+    assert emu.lua_eval("local a, b = ctx.input:edit({}) return {a == nil, b}") == [True, "busy"], (
+        "API 2.33.1 contract §4 says otherwise: a second edit is busy, it does not replace the first (H4, 16/field_edit)"
+    )
+    assert emu.lua_eval("return ed:close()") == "hello", (
+        "API 2.33.1 contract §4 says otherwise: close returns the final text (H4, 16/field_edit)"
+    )
+    assert emu.pending is None and emu.lua_eval("return ed:close()") is None
 
 
 def test_confirm_yes_no(make_app, emu_factory):

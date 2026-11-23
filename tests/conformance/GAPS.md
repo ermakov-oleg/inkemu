@@ -177,7 +177,7 @@ Already green and pinned: `14/net_methods_basic`, `14/net_method_empty`, `14/net
 
 ## §15 Lock screen
 
-Lock-screen frames count as app frames in `status()["refresh"]` and `status()["refreshes"]` (see "Refresh kind: proposed interface" under §5): after `lock` the list has the session-start frame of the app first, then the frames of the first session, then one per timer wake. The checks below assume that. Frame counts of a networked session follow the contract's step list (one frame at once with the stored data when requests or timers remain after `on_load`, one final frame).
+Lock-screen frames count as app frames in `status()["refresh"]` and `status()["refreshes"]` (the refresh kinds are described under "Frames" in `README.md`): after `lock` the list has the session-start frame of the app first, then the frames of the first session, then one per timer wake. The checks below assume that. Frame counts of a networked session follow the contract's step list (one frame at once with the stored data when requests or timers remain after `on_load`, one final frame).
 
 ### 15/lock_reason_first
 - Contract: `ctx.lock.reason` is `"first"` in the first session after locking and `"timer"` in a wake.
