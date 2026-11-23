@@ -554,3 +554,24 @@ fn button_image_and_skin_raise_at_the_app_line() {
         );
     }
 }
+
+#[test]
+fn a_canvas_without_pattern_gets_no_dots() {
+    let lua = fixed_library("2.26");
+    let decl = "ui:button('off', {x = 10, y = 0, w = 200, h = 56, text = 'B', enabled = false})";
+    let dots = "pattern(10,0,200,56,{color=0,density=50,kind=dot})".to_string();
+    assert_eq!(
+        frame(&lua, "nil", "", decl),
+        [body(0, false, 0), text(0, 15), dots].to_vec()
+    );
+    // the canvas of a device without the pattern capability, as the oracle's s15
+    let code = format!(
+        "local ui = make() local log = {{}} local g = recorder(log) g.pattern = nil\n\
+         ui:begin_frame(g) {decl} ui:end_frame() return table.concat(log, ' ')"
+    );
+    let r = run(&lua, &code).unwrap();
+    assert_eq!(
+        r.into_iter().next().unwrap().to_string().unwrap(),
+        format!("{} {}", body(0, false, 0), text(0, 15))
+    );
+}
