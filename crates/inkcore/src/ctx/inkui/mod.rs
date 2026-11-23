@@ -6,7 +6,12 @@ use super::object::new_object;
 use crate::app::AppFiles;
 
 /// The library's files, run in this order in one environment: a later file sees what the earlier ones define.
-const FILES: &[(&str, &str)] = &[("ui.lua", include_str!("ui.lua"))];
+const FILES: &[(&str, &str)] = &[
+    ("ui.lua", include_str!("ui.lua")),
+    ("frame.lua", include_str!("frame.lua")),
+    ("focus.lua", include_str!("focus.lua")),
+    ("controls.lua", include_str!("controls.lua")),
+];
 
 /// The standard globals the library may use; the app's own globals stay out of its reach.
 const GLOBALS: [&str; 14] = [

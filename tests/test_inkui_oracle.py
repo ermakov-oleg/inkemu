@@ -29,11 +29,18 @@ NOT_IMPLEMENTED = "not implemented in inkemu yet"
 
 # (scenario, step) -> why the step fails today
 PENDING: dict[tuple[str, int], str] = {
-    ("s01_object_frame.api26", 7): "create does not validate skins yet",
+    ("s01_object_frame.api26", 25): "focus moved by handle_event in step 23 (Task 3)",
+    ("s01_object_frame.api26", 26): "focus moved by handle_event in step 23 (Task 3)",
+    **{
+        ("s03_label_button_region.api26", i): "focus set by ui:focus and drawn after a key event (Task 3)"
+        for i in range(8, 42, 3)
+    },
 }
 
 # (scenario, step) -> the host function the step needs; skipped while the core lacks it
-NEEDS_HOST: dict[tuple[str, int], str] = {}
+NEEDS_HOST: dict[tuple[str, int], str] = {
+    ("s03_label_button_region.api26", 3): "layout",  # label font_min
+}
 
 # step fields that are notes or inputs, not results
 IGNORED = {"i", "op", "note", "font_calls", "expect", "expect_focused"}

@@ -52,7 +52,18 @@ function create(opts)
   elseif not FOCUS_STYLES[focus_style] then
     return nil, "invalid_argument"
   end
+  if opts.skins ~= nil and type(opts.skins) ~= "table" then
+    return nil, "invalid_argument"
+  end
   local obj = setmetatable({}, object_meta)
-  objects[obj] = { focus_style = focus_style }
+  objects[obj] = {
+    focus_style = focus_style,
+    -- the kept focus id, and whether focus is drawn: a device without a touchscreen always draws it
+    focus = nil,
+    keys = not host.pointer,
+    -- the open frame, and the controls of the last frame that was closed
+    frame = nil,
+    last = {},
+  }
   return obj
 end

@@ -237,8 +237,9 @@ the start with an error. From each file inkemu takes:
 - `screen` (`width`, `height`, `orientation`, `set_orientation`, `gray_levels` = 2, `gray_still` = 4),
   `frontlight` (`get`, `set`, `reset`), `system` (`can_open`, `open`, `act`), `i18n` (`locale`), `perf` (`info` =
   `{}`), `gc`, `budget`, `reader` (answers from `<fixtures dir>/reader.json`), `lockscreen`, `lock`.
-- `ui` (§16), in progress: `ctx.ui:create(opts)` works; the methods of a UI object raise "not implemented in inkemu
-  yet".
+- `ui` (§16), in progress: `create`, `begin_frame`/`end_frame`, `focused`, `label`, `button` and `region` work
+  (`font_min` on a `label` needs the host's `font:layout`, so it keeps its font for now); image and skin buttons,
+  and the other methods, raise "not implemented in inkemu yet".
 
 `clock:now()` has `year month day hour minute second weekday hour12 date_order date_sep epoch_sec local_sec
 offset_minutes revision valid`.
