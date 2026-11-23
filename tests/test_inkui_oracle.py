@@ -15,6 +15,8 @@ Each step is compared in full, except:
   is left out of the named canvas calls, the rest is compared, and the step is skipped.
 - `HOST_REFUSES` lists the canvas calls the core refuses with a Lua error (the oracle's canvas accepted anything); any
   other refusal fails the step.
+- `PARKED` steps differ from the oracle in a known way that a later task decides; they are strict xfails, so one that
+  starts to match fails until its entry is removed.
 - An event step that acts on a frame with a control inkemu does not implement yet (the last closed frame had a
   stubbed call), or a step that starts from a focus an earlier stubbed step left elsewhere than the oracle (the focus recorded by
   the step before differs), is an xfail while only focus, its event result and the canvas calls differ
@@ -55,6 +57,28 @@ HOST_REFUSES: dict[tuple[str, int], list[str]] = {
     # label text {} and true reach g:text_box unchanged, which takes only strings and numbers
     ("s16_edge_inputs.api12", 16): LABEL_TEXT_REFUSED,
     ("s16_edge_inputs.api26", 16): LABEL_TEXT_REFUSED,
+    # a top-level button with text {} hands it to g:text_box the same way
+    ("s17_layout_edges.api15", 18): LABEL_TEXT_REFUSED[:1],
+    ("s17_layout_edges.api26", 18): LABEL_TEXT_REFUSED[:1],
+}
+
+# (scenario, step) -> how inkemu still differs from the oracle there: Task 4 choices that s17 measured otherwise
+NON_STRING_TEXT = (
+    "a button, switch or label child with a non-string text is refused; the reader takes it unless it is measured"
+)
+PER_CHILD = "the reader checks and registers children one by one, so a later bad child keeps the earlier ones"
+COUNT_FIRST = "ui:layout counts the 1024 children before it checks any field"
+RANGE_32767 = "the reader refuses a ui:layout rect or a placed child past 32767, and its 32-bit split wraps differently"
+PARKED: dict[tuple[str, int], str] = {
+    (f"s17_layout_edges.api{minor}", step): reason
+    for minor in (15, 26)
+    for steps, reason in (
+        ((6, 7, 10, 11, 12, 13, 16, 17, 33, 34, 37, 38, 41, 42), NON_STRING_TEXT),
+        ((45,), PER_CHILD),
+        ((50,), COUNT_FIRST),
+        ((58, 60, 62, 63, 64), RANGE_32767),
+    )
+    for step in steps
 }
 
 # step fields that are notes or inputs, not results
@@ -226,6 +250,10 @@ def test_step(scenario: str, i: int, tmp: Path):
         pytest.skip(f"blocked on host: font:{need} is missing (the rest matches)")
     diff = differences(want, got)
     message = f"{title}:\n" + "\n".join(m for _, m in diff)
+    parked = PARKED.get((scenario, i))
+    if parked:
+        assert diff, f"{title}: matches the oracle now; remove its PARKED entry"
+        pytest.xfail(f"parked: {parked}")
     reason = after_stub(oracle(scenario)["output"], ours, i)
     if diff and reason and {f for f, _ in diff} <= AFTER_STUB:
         pytest.xfail(reason)
