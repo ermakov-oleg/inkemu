@@ -1,29 +1,15 @@
 -- ctx.ui (§16): the frame. Controls are checked and registered when declared and painted at end_frame, in
 -- declaration order, so whatever the script draws between begin_frame and end_frame ends up below them.
 
-INVALID = "invalid_argument"
 MAX_CONTROLS = 128
 
--- control kinds by name, filled by the control files: { check = function(c, o), paint = function(g, c, look),
--- focusable = bool, cost = controls counted against MAX_CONTROLS (1 when nil) }
+-- control kinds by name, filled by the control files: { check = function(c, o) -> ok[, unsupported message],
+-- paint = function(g, c, look), focusable = bool, cost = controls counted against MAX_CONTROLS (1 when nil) }
 kinds = {}
 
 -- a canvas is the frame's g (or a layer's): host objects that cannot be told apart from Lua, so look at the methods
 function is_canvas(g)
   return type(g) == "table" and type(g.rect) == "function" and type(g.text_box) == "function"
-end
-
-function is_integral(v)
-  return type(v) == "number" and v == v and v - v == 0 and math.floor(v) == v
-end
-
-function is_side(v)
-  return is_integral(v) and v >= 1
-end
-
--- nil or the value's Lua type
-function optional(v, ty)
-  return v == nil or type(v) == ty
 end
 
 methods.begin_frame = function(self, g)
@@ -63,9 +49,9 @@ function reserve(f, n)
   return true
 end
 
--- A control declared at top level by `ui:<name>(id, o)`: checked, counted, then registered for painting.
-function declare(self, name, id, o)
-  local st = state_of(self, name)
+-- A control declared at top level by `ui:<name>(id, o)`: checked, counted, then registered for painting. Returns
+-- nothing, or nil and the error code. `level` is error()'s level of the app's call; callers must not tail-call this.
+function declare(st, name, id, o, level)
   local f = st.frame
   local kind = kinds[name]
   if f == nil or type(id) ~= "string" or id == "" or f.ids[id] or type(o) ~= "table" then
@@ -75,7 +61,11 @@ function declare(self, name, id, o)
     return nil, INVALID
   end
   local c = { kind = kind, id = id, x = o.x, y = o.y, w = o.w, h = o.h }
-  if not kind.check(c, o) then
+  local ok, unsupported = kind.check(c, o)
+  if unsupported then
+    error(unsupported, level)
+  end
+  if not ok then
     return nil, INVALID
   end
   if not reserve(f, kind.cost or 1) then

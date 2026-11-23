@@ -8,8 +8,10 @@ use crate::app::AppFiles;
 /// The library's files, run in this order in one environment: a later file sees what the earlier ones define.
 const FILES: &[(&str, &str)] = &[
     ("ui.lua", include_str!("ui.lua")),
+    ("fields.lua", include_str!("fields.lua")),
     ("frame.lua", include_str!("frame.lua")),
     ("focus.lua", include_str!("focus.lua")),
+    ("paint.lua", include_str!("paint.lua")),
     ("controls.lua", include_str!("controls.lua")),
 ];
 
@@ -43,13 +45,14 @@ pub(super) fn install(lua: &Lua, ctx: &Table, app: &AppFiles) -> mlua::Result<()
     ctx.raw_set("ui", namespace(lua, &env)?)
 }
 
-/// What the library learns from the host: the package's API minor, the touchscreen and `ctx.fonts`.
+/// What the library learns from the host: the package's API minor, the touchscreen, `ctx.fonts` and `ctx.input`.
 fn host(lua: &Lua, ctx: &Table, app: &AppFiles) -> mlua::Result<Table> {
     let host = lua.create_table()?;
     host.raw_set("api_minor", api_minor(app))?;
     // the X4 Pro has a touchscreen, as `ctx.input.pointer` says
     host.raw_set("pointer", true)?;
     host.raw_set("fonts", ctx.raw_get::<Value>("fonts")?)?;
+    host.raw_set("input", ctx.raw_get::<Value>("input")?)?;
     Ok(host)
 }
 

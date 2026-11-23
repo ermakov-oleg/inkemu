@@ -325,12 +325,13 @@ end
 "#;
 
 /// The library for a package of `api` with [`FIXED_FONTS`], and globals for the app chunk: `make` (create),
-/// `state` (an object's private state), `fonts` and `recorder` ([`RECORDER`]).
+/// `state` (an object's private state), `fonts`, `input` (`ctx.input`) and `recorder` ([`RECORDER`]).
 fn fixed_library(api: &str) -> Lua {
     let lua = new_lua();
     let ctx = lua.create_table().unwrap();
     let fonts: Table = lua.load(FIXED_FONTS).eval().unwrap();
     ctx.set("fonts", fonts).unwrap();
+    ctx.set("input", lua.create_table().unwrap()).unwrap();
     let manifest = format!(r#"{{"app_id": "testapp", "api": "{api}"}}"#);
     let host = host(&lua, &ctx, &app_files(&manifest, "")).unwrap();
     let mut files = FILES.to_vec();
@@ -340,6 +341,7 @@ fn fixed_library(api: &str) -> Lua {
     g.set("make", env.get::<Function>("create").unwrap())
         .unwrap();
     g.set("fonts", ctx.get::<Table>("fonts").unwrap()).unwrap();
+    g.set("input", ctx.get::<Table>("input").unwrap()).unwrap();
     g.set("state", env.get::<Function>("state").unwrap())
         .unwrap();
     g.set("recorder", lua.load(RECORDER).eval::<Function>().unwrap())
@@ -573,5 +575,76 @@ fn a_canvas_without_pattern_gets_no_dots() {
     assert_eq!(
         r.into_iter().next().unwrap().to_string().unwrap(),
         format!("{} {}", body(0, false, 0), text(0, 15))
+    );
+}
+
+#[test]
+fn a_button_without_text_draws_only_its_box() {
+    let lua = fixed_library("2.26");
+    let decl = "ui:button('a', {x = 10, y = 0, w = 200, h = 56})\n\
+         ui:button('b', {x = 10, y = 70, w = 200, h = 56, text = ''})\n\
+         ui:button('c', {x = 10, y = 140, w = 200, h = 56, text = 42, font_min = 8})";
+    let num = "text_box(10,140,200,56,42,{align=center,color=15,font=@medium,overflow=ellipsis,valign=middle,wrap=none})";
+    assert_eq!(
+        frame(&lua, "nil", "", decl),
+        [
+            body(0, false, 0),
+            body(70, false, 0),
+            body(140, false, 0),
+            num.to_string()
+        ]
+        .to_vec()
+    );
+}
+
+#[test]
+fn a_label_hands_any_text_to_text_box() {
+    let lua = fixed_library("2.26");
+    let decl = "ui:label('n', {x = 0, y = 0, w = 10, h = 10, text = 42, font_min = 8})\n\
+         ui:label('t', {x = 0, y = 0, w = 10, h = 10, text = true, font_min = 8})\n\
+         ui:label('f', {x = 0, y = 0, w = 10, h = 10, text = false})\n\
+         ui:label('z', {x = 0, y = 0, w = 10, h = 10})";
+    let label =
+        |text: &str| format!("text_box(0,0,10,10,{text},{{font=@medium,overflow=ellipsis}})");
+    assert_eq!(
+        frame(&lua, "nil", "", decl),
+        [label("42"), label("true"), label("false"), label("")].to_vec()
+    );
+}
+
+#[test]
+fn a_device_without_a_touchscreen_draws_focus_from_the_start() {
+    let lua = fixed_library("2.26");
+    let decl = "ui:button('n', {x = 10, y = 0, w = 200, h = 56, text = 'B'})";
+    // the library reads ctx.input.pointer when the object is created
+    let code = format!(
+        "input.pointer = false local ui = make() input.pointer = true local log = {{}}\n\
+         for _ = 1, 2 do log = {{}} ui:begin_frame(recorder(log)) {decl} ui:end_frame() end\n\
+         return table.concat(log, ' ')"
+    );
+    let r = run(&lua, &code).unwrap();
+    assert_eq!(
+        r.into_iter().next().unwrap().to_string().unwrap(),
+        format!("{} {}", body(0, true, 0), text(0, 0))
+    );
+}
+
+#[test]
+fn a_label_text_the_canvas_refuses_is_an_app_error() {
+    let core = Core::new(
+        app_files(
+            r#"{"app_id": "testapp", "entry": "index.lua", "api": "2.33"}"#,
+            "local ui = ctx.ui:create()\nfunction on_draw(ctx, g)\n  ui:begin_frame(g)\n\
+             ui:label('a', {x = 0, y = 0, w = 10, h = 10, text = {}})\n  ui:end_frame()\nend",
+        ),
+        Config::default(),
+        Persisted::default(),
+    );
+    let errors = core.errors().to_vec();
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.contains("bad argument #5 to 'text_box' (string expected, got table)")),
+        "{errors:?}"
     );
 }

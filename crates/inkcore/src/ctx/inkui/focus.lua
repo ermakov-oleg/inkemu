@@ -4,9 +4,10 @@ local function available(c)
   return c.kind.focusable and c.enabled
 end
 
+-- in floats: the squares of far-apart integer centres overflow 32 bits
 local function center_distance(a, b)
-  local dx = (a.x * 2 + a.w) - (b.x * 2 + b.w)
-  local dy = (a.y * 2 + a.h) - (b.y * 2 + b.h)
+  local dx = (a.x * 2.0 + a.w) - (b.x * 2.0 + b.w)
+  local dy = (a.y * 2.0 + a.h) - (b.y * 2.0 + b.h)
   return dx * dx + dy * dy
 end
 

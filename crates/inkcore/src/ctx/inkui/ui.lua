@@ -37,6 +37,15 @@ end
 
 local FOCUS_STYLES = { fill = true, outline = true }
 
+-- whether the device has a touchscreen, as `ctx.input.pointer` says when the object is created
+local function touch()
+  local input = host.input
+  if type(input) == "table" and input.pointer ~= nil then
+    return input.pointer == true
+  end
+  return host.pointer
+end
+
 function create(opts)
   if opts == nil then
     opts = {}
@@ -60,7 +69,7 @@ function create(opts)
     focus_style = focus_style,
     -- the kept focus id, and whether focus is drawn: a device without a touchscreen always draws it
     focus = nil,
-    keys = not host.pointer,
+    keys = not touch(),
     -- the open frame, and the controls of the last frame that was closed
     frame = nil,
     last = {},
