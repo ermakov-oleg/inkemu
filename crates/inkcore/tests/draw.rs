@@ -183,14 +183,16 @@ fn perf_counts_the_screen_frame_only() {
 }
 
 #[test]
-fn pattern_rect_is_checker() {
-    let f = draw("g:pattern_rect(0, 0, 10, 10)").raw_frame();
-    let px: Vec<u8> = (0..10)
-        .flat_map(|y| (0..10).map(move |x| (x, y)))
-        .map(|(x, y)| f.get(x, y))
-        .collect();
-    assert_eq!(px.iter().filter(|&&p| p == 1).count(), 50);
-    assert_ne!(f.get(0, 0), f.get(1, 0));
+fn the_0_1_extras_of_g_are_gone() {
+    let mut core = draw("G = g");
+    let gone = core
+        .lua_eval("return G.round_rect == nil and G.pattern_rect == nil and G.fill_pattern == nil")
+        .unwrap();
+    assert_eq!(
+        gone,
+        serde_json::json!(true),
+        "API 2.33.1 contract §6 says otherwise: firmware 26112001 has no g:pattern_rect (06/g_methods)"
+    );
 }
 
 #[test]
@@ -226,11 +228,26 @@ fn wrap_splits_words_and_long_words() {
 fn huge_values_are_clipped_not_looped() {
     let core = draw(
         "g:rect(-1e9, -1e9, 2e9, 2e9); g:circle(240, 400, 1e9, {fill=true}); g:line(-1e9, 0, 1e9, 799, {width=3})
-         g:arc(0, 0, 1e9, 0, 90); g:round_rect(0, 0, 1e9, 1e9, 1e9, {fill=true}); g:pattern_rect(-1e9, -1e9, 2e9, 2e9)
+         g:arc(0, 0, 1e9, 0, 90); g:rect(0, 0, 1e9, 1e9, {radius=1e9, fill=true}); g:pattern(-1e9, -1e9, 2e9, 2e9)
          g:polygon({-1e9, 0, 1e9, 0, 0, 1e9}, {fill=true}); g:text(1e30, 0, 'ab'); g:text(0, math.maxinteger, 'a')
          g:text_box(0, 1e30, 100, 100, 'a b'); g:text(-1e30, -1e30, 'ab', {align='right', valign='bottom'})",
     );
-    assert!(black(&core.raw_frame()) > 0);
+    assert!(
+        black(&core.raw_frame()) > 0,
+        "API 2.33.1 contract §6 says otherwise: round_rect and pattern_rect are gone (06/g_methods)"
+    );
+}
+
+#[test]
+fn a_layer_g_kept_after_its_draw_is_inactive() {
+    let mut core = boot(
+        "function on_load(c) l = c.layers:create(10, 10) l:draw(function(g) kept = g end) end\n\
+         function on_draw(c, g) end\n",
+    );
+    let r = core
+        .lua_eval("local a, b = kept:rect(0, 0, 5, 5) local c, d = kept:size() return {a == nil, b, c == nil, d}")
+        .unwrap();
+    assert_eq!(r, serde_json::json!([true, "inactive", true, "inactive"]));
 }
 
 #[test]
@@ -295,4 +312,80 @@ fn error_overlay_is_a_plate_in_frame_and_texts() {
         ),
         (0, 1, 1, 0)
     );
+}
+
+/// `g:image` of a 20×10 layer, drawn by `layer` in `on_load`, onto a white screen by `body`.
+fn layer_frame(layer: &str, body: &str) -> Frame {
+    let core = boot(&format!(
+        "function on_load(c) l = c.layers:create(20, 10) l:draw(function(g) g:clear(0) {layer} end) end\n\
+         function on_draw(c, g) g:clear(0) {body} end\n"
+    ));
+    assert!(core.errors().is_empty(), "{:?}", &*core.errors());
+    core.raw_frame()
+}
+
+/// A 20×10 layer, black on its left half.
+fn half_black_layer(body: &str) -> Frame {
+    layer_frame("g:rect(0, 0, 10, 10, {fill=true})", body)
+}
+
+fn row(f: &Frame, x: u32, y: u32, n: u32) -> Vec<u8> {
+    (x..x + n).map(|x| f.get(x, y)).collect()
+}
+
+#[test]
+fn image_src_draws_only_its_region_named_or_positional() {
+    let f = half_black_layer(
+        "g:image(l, 100, 100, {src = {x = 5, y = 0, w = 10, h = 10}})
+         g:image(l, 100, 200, {src = {5, 0, 10, 10}})",
+    );
+    for y in [100, 109, 200, 209] {
+        assert_eq!(
+            row(&f, 99, y, 12),
+            [0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+            "row {y}"
+        );
+    }
+    for y in [99, 110, 199, 210] {
+        assert_eq!(row(&f, 99, y, 12), [0; 12], "row {y}");
+    }
+}
+
+#[test]
+fn image_src_is_scaled_to_w_and_h() {
+    // 8 black and 2 white columns, doubled
+    let f = half_black_layer(
+        "g:image(l, 100, 100, {src = {x = 2, y = 0, w = 10, h = 10}, w = 20, h = 20})",
+    );
+    let want: Vec<u8> = (0..22).map(|i| u8::from((1..17).contains(&i))).collect();
+    for y in [100, 119] {
+        assert_eq!(row(&f, 99, y, 22), want, "row {y}");
+    }
+    assert_eq!(row(&f, 99, 120, 22), [0; 22]);
+}
+
+#[test]
+fn image_invert_swaps_black_and_white_of_the_region_only() {
+    let f = half_black_layer(
+        "g:image(l, 100, 100, {invert = true})
+         g:image(l, 100, 200, {src = {x = 5, y = 0, w = 10, h = 10}, invert = true})",
+    );
+    let mut want = vec![0];
+    want.extend([0; 10]);
+    want.extend([1; 10]);
+    want.push(0);
+    assert_eq!(row(&f, 99, 105, 22), want);
+    assert_eq!(row(&f, 99, 205, 12), [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0]);
+    assert_eq!(row(&f, 99, 210, 12), [0; 12]);
+}
+
+#[test]
+fn image_radius_clips_like_a_rounded_rect_and_white_color_tints_ink() {
+    let black_layer = |body: &str| layer_frame("g:clear(1)", body);
+    let clipped = black_layer("g:image(l, 30, 30, {radius = 4})");
+    let rect = black_layer("g:rect(30, 30, 20, 10, {radius = 4, fill = true})");
+    assert_eq!(clipped, rect);
+    assert_eq!((clipped.get(30, 30), clipped.get(34, 34)), (0, 1));
+    assert_eq!(black(&black_layer("g:image(l, 30, 30, {color = 0})")), 0);
+    assert_eq!(black(&black_layer("g:image(l, 30, 30, {color = 8})")), 200);
 }

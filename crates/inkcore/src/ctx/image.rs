@@ -27,9 +27,9 @@ pub(super) fn new_image(
     });
     let release = {
         let st = st.clone();
-        method(move |_, _| {
+        method(move |lua, _| {
             with(&st, |s| s.images.remove(&id));
-            Ok(MultiValue::new())
+            true.into_lua_multi(lua)
         })
     };
     let mut all = vec![("release", release)];

@@ -1,7 +1,7 @@
 //! One frame's draw commands, as 0.1 `draw.Canvas`: up to 1024 are accepted, text is laid out as it is recorded.
 use std::rc::Rc;
 
-use super::image::{self, Gray};
+use super::image::{self, Gray, Look};
 use super::pattern::{self, Pattern};
 use super::raster::Style;
 use super::text::{Fonts, LayoutOpts, Overflow, Paint};
@@ -84,22 +84,14 @@ pub enum Cmd {
         text: String,
         opts: TextOpts,
     },
-    /// An image as it was when the command was recorded.
+    /// An image (its `src` region already cut out) as it was when the command was recorded.
     Image {
         img: Rc<Gray>,
         x: i64,
         y: i64,
         w: u32,
         h: u32,
-    },
-    /// Counted, draws nothing (`g:image` of something that is not an image, `g:pattern` of an unknown kind).
-    Skip,
-    /// `g:pattern_rect` / `g:fill_pattern`.
-    Checker {
-        x: i32,
-        y: i32,
-        w: i32,
-        h: i32,
+        look: Look,
     },
     Pattern {
         x: i32,
@@ -128,8 +120,7 @@ pub struct Canvas {
     /// What the last finished frame drew and showed.
     ops: Vec<Op>,
     texts: Vec<TextItem>,
-    /// The frame being recorded: a `g` kept by the app and called outside `on_draw` lands here and is dropped by
-    /// the next `begin_frame`, as in 0.1.
+    /// The frame being recorded.
     rec_ops: Vec<Op>,
     rec_texts: Vec<TextItem>,
     /// Commands accepted in the frame being recorded.
@@ -142,6 +133,8 @@ pub struct Canvas {
     text_bytes: usize,
     warnings: Vec<String>,
     bad: Option<String>,
+    /// Inside the callback that owns this canvas's `g`; outside it every `g` call is `nil, "inactive"` (§6).
+    active: bool,
 }
 
 /// Python's `round()`: halves go to the even neighbour.
@@ -165,11 +158,21 @@ impl Canvas {
             text_bytes: 0,
             warnings: vec![],
             bad: None,
+            active: false,
         }
     }
 
     pub fn fonts(&self) -> Fonts {
         self.fonts.clone()
+    }
+
+    pub fn active(&self) -> bool {
+        self.active
+    }
+
+    /// Opens or closes the canvas to its `g`; the previous state, for nested callbacks to restore.
+    pub fn set_active(&mut self, on: bool) -> bool {
+        std::mem::replace(&mut self.active, on)
     }
 
     pub fn resize(&mut self, w: u32, h: u32) {
@@ -402,7 +405,6 @@ fn draw(f: &mut Frame, cmd: &Cmd) {
             width,
             ink,
         } if pts.len() >= 2 => f.polyline(pts, width, ink),
-        Cmd::Checker { x, y, w, h } => pattern::checker(f, x, y, w, h),
         Cmd::Pattern {
             x,
             y,
@@ -417,7 +419,8 @@ fn draw(f: &mut Frame, cmd: &Cmd) {
             y,
             w,
             h,
-        } => image::paste(f, img, x, y, w, h),
+            look,
+        } => image::paste(f, img, (x, y), (w, h), look),
         _ => {}
     }
 }

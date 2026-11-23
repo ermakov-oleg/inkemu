@@ -176,9 +176,13 @@ fn measure_is_the_sum_of_the_bdf_advances() {
     );
     let mut core = boot_with(
         user_fonts(),
-        "function on_draw(c, g) w = g:measure('AB W', {font = c.fonts.large}) end\n",
+        "function on_draw(c, g) w = c.fonts.large:measure('AB W') end\n",
     );
-    assert_eq!(core.lua_eval("return w").unwrap(), json!(33));
+    assert_eq!(
+        core.lua_eval("return w").unwrap(),
+        json!(33),
+        "API 2.33.1 contract §6 says otherwise: g:measure is gone, font:measure replaces it (06/g_methods)"
+    );
 }
 
 #[test]
