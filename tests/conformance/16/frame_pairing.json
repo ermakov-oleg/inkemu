@@ -1,0 +1,16 @@
+{
+  "spec": "§16",
+  "about": "begin_frame while a frame is open is busy, end_frame with no open frame and begin_frame without a canvas are invalid_argument, success returns nothing (probe-confirmed), and an empty frame does not clear the screen",
+  "expect": {
+    "end_without_begin": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "begin_nil": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "begin_plain_table": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "end_after_refused_begin": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "begin": {"value": {"ok": true, "ret": []}, "spec": "§16"},
+    "begin_again": {"value": {"ok": true, "ret": [null, "busy"]}, "spec": "§16"},
+    "end": {"value": {"ok": true, "ret": []}, "spec": "§16"},
+    "end_twice": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"}
+  },
+  "pixels": [[30, 30, 1], [10, 10, 1], [49, 49, 1], [50, 50, 0], [5, 5, 0]],
+  "errors": []
+}

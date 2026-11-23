@@ -1,0 +1,15 @@
+{
+  "spec": "§16",
+  "about": "a button is a stroked box with its text centred in 15; selected and (2.14) emphasis fill it with 15 and draw the text in 0; radius rounds it; border false drops the stroke; align and font reach the text",
+  "expect": {
+    "normal": {"value": true, "spec": "§16"},
+    "radius": {"value": true, "spec": "§16"},
+    "selected": {"value": true, "spec": "§16"},
+    "emphasis": {"value": true, "spec": "§16"},
+    "borderless": {"value": true, "spec": "§16"},
+    "align_and_font": {"value": true, "spec": "§16"}
+  },
+  "files": {"canvas_log.lua": "canvas_log.util.lua"},
+  "pixels": [[20, 48, 1], [25, 25, 0], [20, 20, 1], [20, 90, 0], [25, 165, 1], [25, 235, 1], [20, 328, 0], [219, 328, 0]],
+  "errors": []
+}

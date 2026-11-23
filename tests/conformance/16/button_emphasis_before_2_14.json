@@ -1,0 +1,11 @@
+{
+  "spec": "§16",
+  "about": "a package for 2.13 gets the 2.14 emphasis look, a filled box, where the contract gives 2.13 a 3 px stroke",
+  "manifest": {"api": "2.13"},
+  "expect": {
+    "emphasis.filled": {"value": true, "deviation": "D3", "spec_value": false}
+  },
+  "files": {"canvas_log.lua": "canvas_log.util.lua"},
+  "pixels": [[25, 25, 1]],
+  "errors": []
+}

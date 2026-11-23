@@ -31,6 +31,16 @@ no radio and is not the device, so panel timing and network completion were not 
 - Status: measured on 26112001.
 - Checks: `06/poly_over_128`.
 
+### D3 - emphasis button below API 2.14
+
+- Contract says: before 2.14 an `emphasis` button is drawn with a 3 px stroke and filled only when focus is drawn;
+  2.14 changed it to a filled box with text in 0 (§16).
+- Reader does: the filled look for every package, 2.12 and 2.13 included (the reader's UI library from 26112001, run
+  as a black box with our scenarios).
+- inkemu does: the filled look for every package.
+- Status: measured on 26112001.
+- Checks: `16/button_emphasis_before_2_14`.
+
 ## Notes
 
 ### N1 - completion of PUT, PATCH and DELETE
@@ -63,8 +73,9 @@ Earlier notes got these wrong; do not reintroduce them.
 
 ## Not emulated
 
-BLE (§31), home screen widgets (§33), native inference `ctx.nn` (§30), `ctx.crypto`, the UI library (§16), user TTF
-fonts, and the battery and Wi-Fi rules of the lock screen (§15). These are nil or ignored in inkemu.
+BLE (§31), home screen widgets (§33), native inference `ctx.nn` (§30), `ctx.crypto`, user TTF fonts, and the battery
+and Wi-Fi rules of the lock screen (§15). These are nil or ignored in inkemu. The UI library (§16) is in progress; see
+the README.
 
 ## inkemu choices where the contract is silent
 
@@ -74,3 +85,7 @@ fonts, and the battery and Wi-Fi rules of the lock screen (§15). These are nil 
   (see `tests/conformance/GAPS.md`).
 - Unfixtured replay requests answer `no_fixture`, which the contract does not know.
 - Time stands still for remote commands so that screenshots are stable.
+- `ctx.ui`: a control declared with no open frame returns `nil, "invalid_argument"`. `begin_frame` takes as a canvas
+  any table with the canvas's `rect` and `text_box` methods, since Lua cannot tell host objects apart. An error raised
+  by a region's `draw` still closes the frame, so the next `begin_frame` is not `busy`, as measured with the reader's
+  library; check `16/region_draw_args`.

@@ -1,0 +1,12 @@
+{
+  "spec": "§16",
+  "about": "a disabled button is drawn as usual and then covered with white dots (pattern dot, density 50, colour 0), after its badge; a disabled region gets no dots and sees enabled = false instead",
+  "expect": {
+    "button.dots_last": {"value": true, "spec": "§16"},
+    "patterns": {"value": 1, "spec": "§16"},
+    "region.no_dots": {"value": true, "spec": "§16"},
+    "region.st_enabled": {"value": false, "spec": "§16"}
+  },
+  "files": {"canvas_log.lua": "canvas_log.util.lua"},
+  "errors": []
+}
