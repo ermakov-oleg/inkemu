@@ -237,6 +237,8 @@ the start with an error. From each file inkemu takes:
 - `screen` (`width`, `height`, `orientation`, `set_orientation`, `gray_levels` = 2, `gray_still` = 4),
   `frontlight` (`get`, `set`, `reset`), `system` (`can_open`, `open`, `act`), `i18n` (`locale`), `perf` (`info` =
   `{}`), `gc`, `budget`, `reader` (answers from `<fixtures dir>/reader.json`), `lockscreen`, `lock`.
+- `ui` (§16), in progress: `ctx.ui:create(opts)` works; the methods of a UI object raise "not implemented in inkemu
+  yet".
 
 `clock:now()` has `year month day hour minute second weekday hour12 date_order date_sep epoch_sec local_sec
 offset_minutes revision valid`.
@@ -249,12 +251,12 @@ offset_minutes revision valid`.
   `16777217.0 == 16777216.0`).
 - The app sees no `io`, `os`, `debug`, `package`, `load`, `loadstring`, `dofile`, `loadfile`, `collectgarbage` or
   `print`, as on the device; `require` searches only the app folder. Lua 5.5's global `warn` is visible to the app.
-- Not emulated, so nil: `ctx.crypto`, `ctx.nn`, `ctx.ui`, `ctx.widget`, `dialog:choose`, `i18n:t`, `url:query`,
+- Not emulated, so nil: `ctx.crypto`, `ctx.nn`, `ctx.widget`, `dialog:choose`, `i18n:t`, `url:query`,
   `input.keys`, `input.listen`, `input.gamepad`, `device.display`, `device.keep_awake`, `device.radios`,
   `screen.occlusion`, and the fields of `perf:info()` (`asset_hit asset_miss cmd_count draw_frame draw_us image_count
   tick_us` on the device). No BLE, no WebSocket; only GET and POST get a network callback.
-- `ctx.capabilities` reports what inkemu emulates: `dialog frontlight image_decode image_transform pattern reader`
-  are true, `ble identity nn ui ttf` false. The device reports `ble dialog frontlight identity image_decode
+- `ctx.capabilities` reports what inkemu emulates: `dialog frontlight image_decode image_transform pattern reader ui`
+  are true, `ble identity nn ttf` false. The device reports `ble dialog frontlight identity image_decode
   image_transform nn pattern reader ui` as true and `ttf` as false.
 - `ctx.system:act(s)` needs a string ("string expected" otherwise), as on the device. Which strings the device
   accepts is unknown, so inkemu answers every one with `nil, "invalid_argument"` and logs it.

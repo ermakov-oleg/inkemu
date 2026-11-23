@@ -403,14 +403,14 @@ def test_capabilities_i18n_and_stubs(make_app, emu_factory):
         make_app,
         emu_factory,
         "local cap = ctx.capabilities\nlocal parts = {tostring(cap.image_decode), tostring(cap.ui), tostring(cap.ttf), ctx.i18n.locale,\n"
-        "  tostring(ctx.ui), tostring(ctx.system:can_open('http://x')), tostring(ctx.system:open('http://x')),\n"
+        "  type(ctx.ui), tostring(ctx.system:can_open('http://x')), tostring(ctx.system:open('http://x')),\n"
         "  type(ctx.perf:info()), type(ctx.gc:count()), tostring(ctx.gc:collect()), tostring(ctx.budget:extend()),\n"
         "  ctx.frontlight:get(), tostring(ctx.display)}\n"
         "ctx.frontlight:set(7)\n"
         "parts[#parts + 1] = ctx.frontlight:get()\nmsg = table.concat(parts, '|')",
     )
     inventory = "firmware 26112001 inventory: ctx has no display"
-    assert emu.has_text("msg true|false|false|en|nil|false|false|table|number|nil|true|0|nil|7"), inventory
+    assert emu.has_text("msg true|true|false|en|table|false|false|table|number|nil|true|0|nil|7"), inventory
     assert any("http://x" in line for line in emu.log)
 
 

@@ -6,6 +6,7 @@ mod device;
 pub(crate) mod files;
 mod fonts;
 mod image;
+mod inkui;
 mod layers;
 mod lock;
 pub(crate) mod net;
@@ -135,6 +136,7 @@ pub(crate) fn new_ctx(
         reader::install(lua, &ctx, st)?;
     }
     ui::install(lua, &ctx, st)?;
+    inkui::install(lua, &ctx, app)?;
     image::install(lua, &ctx, st)?;
     layers::install(lua, &ctx, st)?;
     lock::install(lua, &ctx, st, lockscreen_api)?;
