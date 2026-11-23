@@ -1,23 +1,24 @@
 //! One frame's draw commands, as 0.1 `draw.Canvas`: up to 1024 are accepted, text is laid out as it is recorded.
 use std::rc::Rc;
 
-use unicode_bidi::{bidi_class, BidiClass};
-
 use super::image::{self, Gray};
 use super::pattern::{self, Pattern};
 use super::raster::Style;
-use super::text::Fonts;
+use super::text::{Fonts, LayoutOpts, Overflow, Paint};
 use super::{Frame, TextItem};
-use crate::log::py_repr_str;
 
 /// A frame accepts this many draw commands; the device refuses every call past it.
 pub const CAP: usize = 1024;
+/// All text of one frame, in bytes (§7).
+pub const FRAME_TEXT_BYTES: usize = 65536;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Align {
     Start,
     Middle,
     End,
+    /// `valign = "baseline"`: `y` is the baseline (`text_box` treats it as the top).
+    Baseline,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -27,6 +28,8 @@ pub struct TextOpts {
     pub valign: Align,
     /// 1 black, 0 white.
     pub ink: u8,
+    /// The style, and for `text_box` the wrapping options.
+    pub layout: LayoutOpts,
 }
 
 /// A draw command with its values already checked.
@@ -110,10 +113,11 @@ pub enum Cmd {
 
 enum Op {
     Draw(Cmd),
+    /// Lines of text: the left and top of each line box, the text, its width and whether `paint.clip` cuts it.
     Lines {
         font: &'static str,
-        ink: u8,
-        lines: Vec<(i32, i32, String)>,
+        paint: Paint,
+        lines: Vec<(i32, i32, String, i32, bool)>,
     },
 }
 
@@ -134,6 +138,8 @@ pub struct Canvas {
     tried: usize,
     /// `g:image` commands accepted.
     images: usize,
+    /// Bytes of text accepted in the frame being recorded.
+    text_bytes: usize,
     warnings: Vec<String>,
     bad: Option<String>,
 }
@@ -156,6 +162,7 @@ impl Canvas {
             n: 0,
             tried: 0,
             images: 0,
+            text_bytes: 0,
             warnings: vec![],
             bad: None,
         }
@@ -175,51 +182,53 @@ impl Canvas {
         self.rec_ops.clear();
         self.rec_texts.clear();
         self.warnings.clear();
-        (self.n, self.tried, self.images) = (0, 0, 0);
+        (self.n, self.tried, self.images, self.text_bytes) = (0, 0, 0, 0);
         self.bad = None;
     }
 
-    /// Adds a command if the frame has room for it, else refuses it whole (false). Each line of a text box is
-    /// one command. `Err` is a value the device cannot draw: the frame fails at `end_frame`.
-    pub fn record(&mut self, cmd: Result<Cmd, String>) -> bool {
-        if self.n >= CAP {
-            self.tried += 1;
-            return false;
-        }
+    /// Adds a command if the frame has room for it, else refuses it whole with `limit_exceeded`. Each line of a
+    /// text box is one command, and each underline or strikethrough of a line one more. `Err` is a value the
+    /// device cannot draw: the frame fails at `end_frame`.
+    pub fn record(&mut self, cmd: Result<Cmd, String>) -> Result<(), &'static str> {
         let cmd = match cmd {
             Ok(c) => c,
             Err(msg) => {
-                (self.n, self.tried) = (self.n + 1, self.tried + 1);
+                self.tried += 1;
+                if self.n >= CAP {
+                    return Err("limit_exceeded");
+                }
+                self.n += 1;
                 self.bad.get_or_insert(msg);
-                return true;
+                return Ok(());
             }
         };
+        let bytes = match &cmd {
+            Cmd::Text { text, .. } | Cmd::TextBox { text, .. } => text.len(),
+            _ => 0,
+        };
+        if self.text_bytes + bytes > FRAME_TEXT_BYTES {
+            return Err("limit_exceeded");
+        }
         let (op, text, cost) = match cmd {
-            Cmd::Text { .. } | Cmd::TextBox { .. } => match self.layout(&cmd) {
-                Some((op, text)) => {
-                    let lines = match &op {
-                        Op::Lines { lines, .. } if matches!(cmd, Cmd::TextBox { .. }) => {
-                            lines.len()
-                        }
-                        _ => 1,
-                    };
-                    (Some(op), Some(text), lines)
-                }
-                None => (None, None, 1),
-            },
+            Cmd::Text { .. } | Cmd::TextBox { .. } => self.layout(&cmd),
             c => (Some(Op::Draw(c)), None, 1),
         };
         self.tried += cost;
         if self.n + cost > CAP {
-            return false;
+            return Err("limit_exceeded");
         }
         self.n += cost;
+        self.text_bytes += bytes;
         if let Some(Op::Draw(Cmd::Image { .. })) = op {
             self.images += 1;
         }
         self.rec_texts.extend(text);
         self.rec_ops.extend(op);
-        true
+        Ok(())
+    }
+
+    pub fn warn(&mut self, msg: String) {
+        self.warnings.push(msg);
     }
 
     /// Shows the recorded frame; the number of commands asked for, accepted or not.
@@ -228,7 +237,7 @@ impl Canvas {
         self.texts = std::mem::take(&mut self.rec_texts);
         if self.tried > CAP {
             let msg = format!(
-                "{} draw commands in one frame; the device drops everything after {CAP}",
+                "{} draw commands in one frame; the device refuses every call past {CAP}",
                 self.tried
             );
             self.warnings.insert(0, msg);
@@ -255,56 +264,63 @@ impl Canvas {
         self.texts.clone()
     }
 
-    fn layout(&mut self, cmd: &Cmd) -> Option<(Op, TextItem)> {
-        let (op, s, opts) = match cmd {
-            Cmd::Text { text, opts, .. } => ("text", text, opts),
-            Cmd::TextBox { text, opts, .. } => ("text_box", text, opts),
-            _ => return None,
+    /// The lines of a text command, what `texts()` lists of it, and the commands it costs.
+    fn layout(&self, cmd: &Cmd) -> (Option<Op>, Option<TextItem>, usize) {
+        let (s, opts) = match cmd {
+            Cmd::Text { text, opts, .. } | Cmd::TextBox { text, opts, .. } => (text, opts),
+            _ => return (None, None, 0),
         };
-        if s.chars()
-            .any(|c| matches!(bidi_class(c), BidiClass::R | BidiClass::AL))
-        {
-            self.warnings.push(format!(
-                "g:{op} with RTL text is not drawn by the device: {}",
-                py_repr_str(s)
-            ));
-            return None;
-        }
-        let (font, f) = (opts.font, self.fonts.clone());
-        let lh = f64::from(f.line_height(font));
+        let (font, f, style) = (opts.font, &self.fonts, opts.layout.style);
+        let lh = f.line_height(font);
         let place = |at: f64, size: f64, room: f64, a: Align| match a {
             Align::Middle => at + (room - size) / 2.0,
             Align::End => at + room - size,
-            Align::Start => at,
+            Align::Start | Align::Baseline => at,
+        };
+        // a stroke under a line of width 0 is not drawn
+        let cost = |w: i32| 1 + if w > 0 { style.strokes() } else { 0 };
+        let mut paint = Paint {
+            ink: opts.ink,
+            style,
+            clip: None,
         };
         let (item, lines) = match *cmd {
             Cmd::Text { x, y, .. } => {
-                let bw = f.measure(font, s);
+                let bw = f.measure_with(font, s, style);
                 let bx = py_round(place(x, f64::from(bw), 0.0, opts.align));
-                let by = py_round(place(y, lh, 0.0, opts.valign));
-                let item = (bx, by, bw, lh as i32);
-                (item, vec![(bx, by, s.clone())])
+                let by = match opts.valign {
+                    Align::Baseline => py_round(y).saturating_sub(f.ascent(font)),
+                    a => py_round(place(y, f64::from(lh), 0.0, a)),
+                };
+                ((bx, by, bw, lh), vec![(bx, by, s.clone(), bw, false)])
             }
             Cmd::TextBox { x, y, w, h, .. } => {
-                let mut lines = self.wrap(font, s, w);
-                let keep = (h / lh).floor().max(1.0);
-                if lines.len() as f64 > keep {
-                    lines.truncate(keep as usize);
+                let lay = f.layout(font, s, w, h, &opts.layout);
+                if lay.lines.is_empty() {
+                    return (None, None, 0);
                 }
-                let bh = lines.len() as f64 * lh;
-                let by = py_round(place(y, bh, h, opts.valign));
-                let lines = lines
+                if opts.layout.overflow == Overflow::Clip {
+                    paint.clip = Some((py_round(x), py_round(x + w)));
+                }
+                let by = py_round(place(y, f64::from(lay.height), h, opts.valign));
+                let step = lh.saturating_add(opts.layout.line_gap);
+                let lines = lay
+                    .lines
                     .into_iter()
                     .enumerate()
-                    .map(|(i, line)| {
-                        let lx = place(x, f64::from(f.measure(font, &line)), w, opts.align);
-                        (py_round(lx), by.saturating_add(i as i32 * lh as i32), line)
+                    .map(|(i, l)| {
+                        let lx = py_round(place(x, f64::from(l.width), w, opts.align));
+                        let ly = by.saturating_add((i as i32).saturating_mul(step));
+                        // only a line that cannot wrap is cut; ink overhanging a line that fits stays
+                        let cut = f64::from(l.width) > w;
+                        (lx, ly, l.text, l.width, cut)
                     })
                     .collect();
-                ((py_round(x), by, py_round(w), bh as i32), lines)
+                ((py_round(x), by, py_round(w), lay.height), lines)
             }
-            _ => return None,
+            _ => return (None, None, 0),
         };
+        let cost = lines.iter().map(|l| cost(l.3)).sum();
         let (x, y, w, h) = item;
         let item = TextItem {
             text: s.clone(),
@@ -314,47 +330,13 @@ impl Canvas {
             h,
             font,
         };
-        let op = Op::Lines {
-            font,
-            ink: opts.ink,
-            lines,
-        };
-        Some((op, item))
+        let op = Op::Lines { font, paint, lines };
+        (Some(op), Some(item), cost)
     }
 
-    /// 0.1 `_wrap`: words on spaces, a word wider than `width` split by characters; `\n` starts a new line.
+    /// Word-wrapped lines of at most `width` pixels, every line kept: the host's plates.
     pub fn wrap(&self, font: &str, s: &str, width: f64) -> Vec<String> {
-        let fits = |t: &str| f64::from(self.fonts.measure(font, t)) <= width;
-        let mut out = vec![];
-        for para in s.split('\n') {
-            let mut cur = String::new();
-            for word in para.split(' ') {
-                let cand = if cur.is_empty() {
-                    word.to_string()
-                } else {
-                    format!("{cur} {word}")
-                };
-                if fits(&cand) {
-                    cur = cand;
-                    continue;
-                }
-                if !cur.is_empty() {
-                    out.push(std::mem::take(&mut cur));
-                }
-                let mut word: Vec<char> = word.chars().collect();
-                while word.len() > 1 && !fits(&word.iter().collect::<String>()) {
-                    let mut k = word.len() - 1;
-                    while k > 1 && !fits(&word[..k].iter().collect::<String>()) {
-                        k -= 1;
-                    }
-                    out.push(word[..k].iter().collect());
-                    word.drain(..k);
-                }
-                cur = word.into_iter().collect();
-            }
-            out.push(cur);
-        }
-        out
+        self.fonts.wrap(font, s, width)
     }
 
     pub fn render(&self) -> Frame {
@@ -365,9 +347,14 @@ impl Canvas {
     pub fn render_on(&self, mut f: Frame) -> Frame {
         for op in &self.ops {
             match op {
-                Op::Lines { font, ink, lines } => {
-                    for (x, y, line) in lines {
-                        self.fonts.draw(&mut f, font, *x, *y, line, *ink);
+                Op::Lines { font, paint, lines } => {
+                    for (x, y, line, w, cut) in lines {
+                        let p = Paint {
+                            clip: paint.clip.filter(|_| *cut),
+                            ..*paint
+                        };
+                        self.fonts.draw_styled(&mut f, font, (*x, *y), line, p);
+                        self.fonts.draw_strokes(&mut f, font, (*x, *y, *w), p);
                     }
                 }
                 Op::Draw(cmd) => draw(&mut f, cmd),

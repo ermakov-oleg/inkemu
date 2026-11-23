@@ -31,13 +31,7 @@ Already green and pinned: `03/color_threshold`, `03/device_profile` (the profile
 
 ## §5 Presenting a frame
 
-### 05/cmd_cap_underline
-- Contract: from API 2.28 on, each underline or strikethrough stroke costs one more command of the 1024.
-- Core now: not counted, since the styles are not drawn.
-- Touch points: `crates/inkcore/src/draw/canvas.rs`, `crates/inkcore/src/draw/text.rs`.
-- Source: contract only.
-
-Already green and pinned: `05/cmd_cap_1025`, `05/cmd_cap_clear`, `05/cmd_cap_text_box_lines`, `05/cmd_cap_text_box_counter` (the rectangles that still fit after a refused `text_box`), `05/cmd_cap_underline_text`, `05/invalidate_args`, `05/invalidate_valid`, `05/perf_info`, `05/refresh_first_frame` (an inkemu choice: the contract does not classify the first frame), `05/refresh_plain`, `05/refresh_full_arg`, `05/refresh_full_wins`, `05/refresh_full_in_draw`, `05/refresh_auto_full`, `05/refresh_defer_blocks_auto`, `05/defer_args`.
+Already green and pinned: `05/cmd_cap_1025`, `05/cmd_cap_clear`, `05/cmd_cap_text_box_lines`, `05/cmd_cap_text_box_counter` (the rectangles that still fit after a refused `text_box`), `05/cmd_cap_underline`, `05/cmd_cap_underline_text`, `05/invalidate_args`, `05/invalidate_valid`, `05/perf_info`, `05/refresh_first_frame` (an inkemu choice: the contract does not classify the first frame), `05/refresh_plain`, `05/refresh_full_arg`, `05/refresh_full_wins`, `05/refresh_full_in_draw`, `05/refresh_auto_full`, `05/refresh_defer_blocks_auto`, `05/defer_args`.
 
 ## §6 Drawing
 
@@ -111,54 +105,7 @@ Already green and pinned (the valid cases of the rules above): `06/g_methods_pre
 
 ## §7 Text and fonts
 
-### 07/text_invalid_utf8, 07/text_rtl
-- Contract: text that is not valid UTF-8, or that holds a right-to-left character, returns `nil, "invalid_argument"` from `g:text` and `g:text_box`; invalid UTF-8 is also `invalid_argument` for `font:measure` and `font:layout`.
-- Core now: invalid bytes are converted lossily and drawn; right-to-left text is skipped with a warning; both return nothing.
-- Touch points: `crates/inkcore/src/draw/mod.rs` (`text_of`, `command`), `crates/inkcore/src/draw/canvas.rs` (`layout`), `crates/inkcore/src/ctx/fonts.rs`.
-- Source: contract only.
-
-### 07/text_limits_call, 07/text_limit_frame, 07/layout_limit
-- Contract: `g:text`, `g:text_box`, `font:measure` take at most 8192 bytes per call, all text in a frame at most 65536 bytes, `font:layout` at most 65536 bytes per call; beyond that `nil, "limit_exceeded"`.
-- Core now: no limits; `font:layout` does not exist.
-- Touch points: `crates/inkcore/src/draw/mod.rs`, `crates/inkcore/src/draw/canvas.rs`, `crates/inkcore/src/ctx/fonts.rs`.
-- Source: contract only.
-
-### Performance: text_box wrapping of a long unbreakable word
-- Not a contract rule. The core wraps one unbreakable word of 8192 bytes in a 100 by 100 box in quadratic time (about 150 s). `07/text_limits_call` therefore uses breakable text for its `text_box` cases; the rule it pins is unchanged.
-- Touch points: `crates/inkcore/src/draw/canvas.rs` (`wrap`, `layout`).
-- Source: measured on this core.
-
-### 07/measure_bold
-- Contract: `font:measure(text, { bold = true })` is the plain width plus 1 (empty text stays 0); italic, underline and strike do not change the width.
-- Core now: `measure` ignores its options.
-- Touch points: `crates/inkcore/src/ctx/fonts.rs`, `crates/inkcore/src/draw/text.rs`.
-- Source: contract only.
-
-### 07/measure_control_chars
-- Contract: a tab measures as one space; `\n` and other control characters have width 0.
-- Core now: they are measured as glyphs of the bundled font.
-- Touch points: `crates/inkcore/src/draw/text.rs`.
-- Source: contract only.
-
-### 07/layout_results, 07/layout_paging, 07/layout_matches_text_box, 07/font_object
-- Contract: `font:layout(text, w, h, opts)` returns `lines, height, consumed` as integers (height `n * line_height + (n - 1) * line_gap`, `consumed` on a code-point boundary including a trailing newline), follows the `text_box` rules, and its line count equals the commands `text_box` takes.
-- Core now: font objects have no `layout` method.
-- Touch points: `crates/inkcore/src/ctx/fonts.rs`, `crates/inkcore/src/draw/canvas.rs` (`wrap`, `layout`).
-- Source: probe-confirmed that `layout` exists and returns three integers; the rules are contract only.
-
-### 07/fonts_size_range, 07/fonts_size_sample
-- Contract: `ctx.fonts:size(px, sample)` takes an integer `px` from 8 to 96, else `nil, "invalid_argument"`; `sample` is nil or text, and invalid UTF-8, NUL or right-to-left text is `invalid_argument`; a value that is neither string nor nil raises a Lua error.
-- Core now: any `px` is accepted and `sample` is ignored.
-- Touch points: `crates/inkcore/src/ctx/fonts.rs` (`size`).
-- Source: probe-confirmed for 7 and 97; the rest is contract only.
-
-### 07/font_metrics
-- Contract and reader: system font line heights 20, 24, 30 and ascents 17, 21, 26 on x4_pro.
-- Core now: line heights match, ascents come from the bundled font (16, 19, 23).
-- Touch points: `crates/inkcore/src/draw/text.rs` (`ascent`).
-- Source: probe-confirmed for small (17) and medium (21); large (26) is contract only.
-
-Already green and pinned (the valid cases of the rules above): `07/font_line_heights`, `07/font_object_fields`, `07/fonts_size_valid`, `07/fonts_size_sample_valid`, `07/measure_other_opts`, `07/text_utf8_valid`, `07/text_latin`, `07/text_limit_frame_fit`, `07/text_limits_call_max`, `07/fonts_size_tier`.
+All §7 checks are green and pinned: `07/text_invalid_utf8`, `07/text_rtl`, `07/text_limits_call`, `07/text_limit_frame`, `07/layout_limit`, `07/measure_bold`, `07/measure_control_chars`, `07/layout_results`, `07/layout_paging`, `07/layout_matches_text_box`, `07/font_object`, `07/fonts_size_range`, `07/fonts_size_sample`, `07/font_metrics`, and the valid cases `07/font_line_heights`, `07/font_object_fields`, `07/fonts_size_valid`, `07/fonts_size_sample_valid`, `07/measure_other_opts`, `07/text_utf8_valid`, `07/text_latin`, `07/text_limit_frame_fit`, `07/text_limits_call_max`, `07/fonts_size_tier`.
 
 ## §9 Private files
 

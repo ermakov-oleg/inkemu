@@ -91,7 +91,8 @@ fn command_cap_drops_and_warns() {
     let w = core.warnings();
     assert_eq!(
         &*w,
-        ["1100 draw commands in one frame; the device drops everything after 1024"]
+        ["1100 draw commands in one frame; the device refuses every call past 1024"],
+        "API 2.33.1 contract §5 says otherwise: calls past the cap are refused (05/cmd_cap_1025)"
     );
 }
 

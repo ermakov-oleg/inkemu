@@ -11,14 +11,19 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use mlua::{IntoLuaMulti, Lua, MultiValue, Table, Value};
+use unicode_bidi::{bidi_class, BidiClass};
 
-pub use canvas::{Align, Canvas, Cmd, TextOpts, CAP};
+pub use canvas::{Align, Canvas, Cmd, TextOpts, CAP, FRAME_TEXT_BYTES};
 pub use pattern::Pattern;
 pub use raster::Style;
 
 use crate::ctx::object::{method, new_object, Method};
 use crate::emu::{with, Shared};
 use crate::log::py_repr_str;
+use text::{LayoutOpts, Overflow, TextStyle, Wrap};
+
+/// The bytes one `g:text`, `g:text_box` or `font:measure` call takes (§7).
+pub const CALL_TEXT_BYTES: usize = 8192;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextItem {
@@ -119,15 +124,30 @@ pub(crate) fn new_g(lua: &Lua, st: &Shared, target: Target) -> mlua::Result<Tabl
             method(move |lua, args| {
                 let a = args.into_vec();
                 check(name, spec, &a)?;
+                let text = match name {
+                    "text" => Some(&a[2]),
+                    "text_box" => Some(&a[4]),
+                    _ => None,
+                };
+                let text = match text.map(|v| draw_text(lua, name, v)) {
+                    Some(Err((code, warning))) => {
+                        if let Some(w) = warning {
+                            on_canvas(&st, &target, |c| c.warn(w));
+                        }
+                        return (Value::Nil, code).into_lua_multi(lua);
+                    }
+                    Some(Ok(s)) => s,
+                    None => String::new(),
+                };
                 let cmd = if name == "image" {
                     image_command(&st, &a)
                 } else {
-                    command(lua, name, &a)
+                    let api = with(&st, |s| s.app_api);
+                    command(name, &a, text, api)
                 };
-                if on_canvas(&st, &target, |c| c.record(cmd)) {
-                    Ok(MultiValue::new())
-                } else {
-                    (Value::Nil, "limit_exceeded").into_lua_multi(lua)
+                match on_canvas(&st, &target, |c| c.record(cmd)) {
+                    Ok(()) => Ok(MultiValue::new()),
+                    Err(code) => (Value::Nil, code).into_lua_multi(lua),
                 }
             }),
         ));
@@ -303,10 +323,11 @@ fn font_of(o: &Option<Table>) -> &'static str {
     }
 }
 
-fn text_opts(o: &Option<Table>) -> TextOpts {
+fn text_opts(o: &Option<Table>, api: (u32, u32)) -> TextOpts {
     let pick = |key: &str, mid: &str, end: &str| match get(o, key) {
         Value::String(s) if s == mid => Align::Middle,
         Value::String(s) if s == end => Align::End,
+        Value::String(s) if key == "valign" && s == "baseline" => Align::Baseline,
         _ => Align::Start,
     };
     TextOpts {
@@ -314,7 +335,78 @@ fn text_opts(o: &Option<Table>) -> TextOpts {
         align: pick("align", "center", "right"),
         valign: pick("valign", "middle", "bottom"),
         ink: ink(o),
+        layout: layout_opts(o, api),
     }
+}
+
+/// The text options a package declaring `api` gets: bold and tabular from 2.16, italic, underline and strike
+/// from 2.28. Unknown `wrap`/`overflow` values keep the default; `line_gap` is clamped to 0..255.
+pub(crate) fn layout_opts(o: &Option<Table>, api: (u32, u32)) -> LayoutOpts {
+    let on = |key: &str| !matches!(get(o, key), Value::Nil | Value::Boolean(false));
+    let (v216, v228) = (api >= (2, 16), api >= (2, 28));
+    let word = |key: &str| match get(o, key) {
+        Value::String(s) => s.to_string_lossy(),
+        _ => String::new(),
+    };
+    LayoutOpts {
+        wrap: match word("wrap").as_str() {
+            "char" => Wrap::Char,
+            "none" => Wrap::None,
+            _ => Wrap::Word,
+        },
+        overflow: match word("overflow").as_str() {
+            "ellipsis" => Overflow::Ellipsis,
+            "visible" => Overflow::Visible,
+            _ => Overflow::Clip,
+        },
+        line_gap: as_num(&get(o, "line_gap"))
+            .filter(|n| n.is_finite())
+            .map_or(0, |n| n.trunc().clamp(0.0, 255.0) as i32),
+        style: TextStyle {
+            bold: v216 && on("bold"),
+            tabular: v216 && on("tabular"),
+            italic: v228 && on("italic"),
+            underline: v228 && on("underline"),
+            strike: v228 && on("strike"),
+        },
+        kinsoku: v216,
+    }
+}
+
+/// Text as the device takes it: at most `max` bytes (else `limit_exceeded`), valid UTF-8 (else
+/// `invalid_argument`).
+pub(crate) fn utf8_text(bytes: Vec<u8>, max: usize) -> Result<String, &'static str> {
+    if bytes.len() > max {
+        return Err("limit_exceeded");
+    }
+    String::from_utf8(bytes).map_err(|_| "invalid_argument")
+}
+
+/// Whether `s` holds a right-to-left character, which the device does not lay out.
+pub(crate) fn has_rtl(s: &str) -> bool {
+    s.chars()
+        .any(|c| matches!(bidi_class(c), BidiClass::R | BidiClass::AL))
+}
+
+/// The text of a `g:text`/`g:text_box` call, or its refusal code and a warning.
+fn draw_text(lua: &Lua, op: &str, v: &Value) -> Result<String, (&'static str, Option<String>)> {
+    let bytes = match v {
+        Value::String(s) => s.as_bytes().to_vec(),
+        v => text_of(lua, v).into_bytes(),
+    };
+    let s = utf8_text(bytes, CALL_TEXT_BYTES).map_err(|code| {
+        let w = (code == "invalid_argument")
+            .then(|| format!("g:{op} with invalid UTF-8 is not drawn by the device"));
+        (code, w)
+    })?;
+    if has_rtl(&s) {
+        let w = format!(
+            "g:{op} with RTL text is not drawn by the device: {}",
+            py_repr_str(&s)
+        );
+        return Err(("invalid_argument", Some(w)));
+    }
+    Ok(s)
 }
 
 /// Python `str()` of a checked string-or-number argument, with Lua's number formatting.
@@ -364,8 +456,9 @@ fn points(op: &str, t: &Table, min: usize) -> Result<Vec<(f64, f64)>, String> {
     Ok(flat.chunks(2).map(|p| (p[0], p[1])).collect())
 }
 
-/// The checked command for one `g` call; `Err` is an option value the device cannot draw.
-fn command(lua: &Lua, op: &str, a: &[Value]) -> Result<Cmd, String> {
+/// The checked command for one `g` call (`text` already checked); `Err` is an option value the device cannot
+/// draw.
+fn command(op: &str, a: &[Value], text: String, api: (u32, u32)) -> Result<Cmd, String> {
     let o = |i: usize| opts_at(a, i);
     Ok(match op {
         "clear" => {
@@ -449,8 +542,8 @@ fn command(lua: &Lua, op: &str, a: &[Value]) -> Result<Cmd, String> {
             Cmd::Text {
                 x,
                 y,
-                text: text_of(lua, &a[2]),
-                opts: text_opts(&o(3)),
+                text,
+                opts: text_opts(&o(3), api),
             }
         }
         "text_box" => {
@@ -460,8 +553,8 @@ fn command(lua: &Lua, op: &str, a: &[Value]) -> Result<Cmd, String> {
                 y,
                 w,
                 h,
-                text: text_of(lua, &a[4]),
-                opts: text_opts(&o(5)),
+                text,
+                opts: text_opts(&o(5), api),
             }
         }
         "pattern_rect" | "fill_pattern" => {

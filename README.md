@@ -191,6 +191,34 @@ A frame accepts 1024 commands, and each line a `text_box` draws is one of them. 
 `nil, "limit_exceeded"` and draws nothing (a `text_box` that does not fit whole is refused whole); the frame logs
 one warning with the number of commands asked for.
 
+Text, as in the contract (§7):
+
+- `g:text`, `g:text_box` and `font:measure` take up to 8192 bytes per call, `font:layout` up to 65536, and all text
+  of one frame up to 65536 bytes; past that the call returns `nil, "limit_exceeded"`. Text that is not valid UTF-8
+  is `nil, "invalid_argument"`; so is right-to-left text in `g:text` and `g:text_box`, which log a warning for both.
+- A tab is one space; `\n` and other control characters have no width and are not drawn (`text_box` breaks the line
+  at `\n`).
+- `font:measure(text, {bold, tabular})`: bold adds 1 pixel to a line that has any width; with `tabular` every digit
+  takes the width of the widest digit. `italic`, `underline` and `strike` do not change it.
+- `g:text_box(x, y, w, h, text, opts)` takes `wrap` (`"word"`, `"char"`, `"none"`), `overflow` (`"clip"`,
+  `"ellipsis"`, `"visible"`), `line_gap`, `bold`, `tabular`, `italic`, `underline` and `strike`. `word` breaks at
+  spaces and beside CJK and Thai characters and splits a word wider than the box at a code point; whitespace at
+  either end of a line takes no width; combining marks and Thai vowels stay with their character; a bold line wraps
+  at `w - 1`; from API 2.16 the line-start and line-end punctuation rules move a break back. `clip` keeps the lines
+  that fit whole (none is fine: nothing is drawn, the call succeeds) and cuts a line that cannot wrap at the box
+  edge; `ellipsis` ends the last line that fits with `…` (`...` in a font without one); `visible` keeps every line.
+- `font:layout(text, w, h, opts)` returns `lines, height, consumed`, three integers, by the same rules: `height` is
+  `n * line_height + (n - 1) * line_gap` and `consumed` the bytes taken, on a code-point boundary, with the newline
+  or the space at the page's end. `lines` is the number of commands the same `text_box` costs.
+- `underline` and `strike` draw a line of `max(1, (line_height + 12) // 24)` pixels under or through each line, as
+  long as its `measure` width; each is one more command. `italic` slants the glyphs about 18 %. `valign =
+  "baseline"` puts `y` on the baseline.
+- `bold` and `tabular` work for packages that declare API 2.16 or above, `italic`, `underline` and `strike` for 2.28
+  or above; older packages get the plain text.
+- `ctx.fonts:size(px, sample)`: `px` is a whole number from 8 to 96 and `sample` nil or text (at most 256 bytes,
+  valid UTF-8, no NUL, no right-to-left text), else `nil, "invalid_argument"`; a `sample` that is neither a string,
+  a number nor nil raises an error. The answer is still the nearest of the three system fonts.
+
 Frames: `emu.status()["refresh"]` is the waveform of the last app frame presented, `"partial"` or `"full"`, and
 `emu.status()["refreshes"]` lists the waveforms of the last 64 app frames, oldest first (one step such as a tap can
 present more than one frame). The rules, as in the contract:
@@ -221,8 +249,9 @@ Grey, as measured on 26112001: the canvas is 1-bit, and grey is a pattern of bla
 
 `ctx.fonts.small`, `medium` and `large` on the reader are the firmware's built-in bitmap font: line height 20/24/30,
 ascent 17/21/26, proportional digits, no kerning. That font is proprietary and is not shipped with inkemu. By
-default inkemu draws text in DejaVu Sans, bundled, at the same line heights; its widths and ascents differ from the
-reader's.
+default inkemu draws text in DejaVu Sans, bundled, at the same line heights and ascents (the baseline is drawn at
+`y + ascent`); its widths differ from the reader's. Each character advances a whole number of pixels, so `measure`
+is the drawn width.
 
 If you have the reader's font as BDF files, point inkemu at them: set `INKEMU_FONTS=DIR`, or pass
 `Emu(..., fonts_dir=DIR)`. `DIR` must hold `small.bdf`, `medium.bdf` and `large.bdf`; a missing or broken file stops
@@ -264,8 +293,11 @@ offset_minutes revision valid`.
 
 ## Differences from the device
 
-- Without BDF files (see Fonts) text is DejaVu Sans, so text widths and ascents differ from the device;
-  `ctx.fonts:size(px)` picks the nearest of the three; an app cannot bring its own font.
+- Without BDF files (see Fonts) text is DejaVu Sans, so text widths differ from the device (line heights and
+  ascents are the device's); `ctx.fonts:size(px)` picks the nearest of the three; an app cannot bring its own font.
+- Text rules of §7 not emulated: `align = "justify"` draws as `left`; a character DejaVu Sans lacks draws nothing
+  (the device draws a box; BDF files use their `DEFAULT_CHAR`); `small` does not switch to `medium` for CJK; the
+  line-break rules know CJK, Thai and Tibetan by code point ranges, not by Unicode's line-breaking classes.
 - Lua is 5.5 with 32-bit integers and 32-bit floats, like the device (`math.maxinteger` is 2147483647,
   `16777217.0 == 16777216.0`).
 - The app sees no `io`, `os`, `debug`, `package`, `load`, `loadstring`, `dofile`, `loadfile`, `collectgarbage` or
@@ -298,7 +330,12 @@ offset_minutes revision valid`.
   - the colour threshold in `arc`, `polyline` and `text_box` (the probe tried `rect`, `circle`, `line` and text);
   - `color` outside 0–15: inkemu applies the same threshold (below 8 is white);
   - `g:clear(color)`, which keeps the 0.1 rule (0 white, any other number black);
-  - the `fill` option of shapes, which uses Python-style truthiness in inkemu (0, `""` and `{}` are false).
+  - the `fill` option of shapes, which uses Python-style truthiness in inkemu (0, `""` and `{}` are false);
+  - text options the contract leaves open: `line_gap` outside 0–255 (inkemu clamps it), an unknown `wrap` or
+    `overflow` (inkemu: the default), a newline at the very end of the text (inkemu: no empty line after it),
+    `consumed` when `ellipsis` took characters off the last line (inkemu: the bytes up to the kept ones), a
+    `text_box` with no line that fits in a frame that is already full (inkemu: accepted, it costs nothing), a
+    `ctx.fonts:size` sample over 256 bytes (inkemu: `invalid_argument`) or given as a number (inkemu: accepted).
 - `g:round_rect`, `g:measure`, `g:measure_text`, `g:fill_pattern` and `g:pattern_rect` are not in the device's `g`
   metatable listing and were not verified by a call; inkemu keeps them (`round_rect` as before; the device's way
   is `g:rect` with `radius`).

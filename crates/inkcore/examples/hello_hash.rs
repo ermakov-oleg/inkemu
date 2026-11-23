@@ -45,7 +45,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     // tests/test_parity.py pins the same value for the Python `Emu`
-    const PINNED: &str = "c8cbd63a6ccc92b539137410455bec2e763b7836ae235d4a2306214079308ccb";
+    const PINNED: &str = "077f5578ec11f69429c25e4db0e2b5c8b016abd240a6a270143021d5fceae4c0";
 
     #[test]
     fn hello_frame_hash_is_pinned() {

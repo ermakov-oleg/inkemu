@@ -7,7 +7,7 @@ use mlua::{Function, IntoLuaMulti, Lua, MultiValue, Table, Value};
 use rand_chacha::rand_core::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 
-use crate::app::{app_id_of, read_manifest, AppFiles};
+use crate::app::{api_of, app_id_of, read_manifest, AppFiles};
 use crate::clock::{iso, DateTime, Due, Run, Scheduler, TimerId, VirtualClock};
 use crate::config::{Config, Persisted};
 use crate::ctx::net::{self, Fetcher, NetResult, NetState, OutRequest};
@@ -121,6 +121,8 @@ pub(crate) struct State {
     pub(crate) images: HashMap<i64, Rc<Gray>>,
     pub(crate) next_image: i64,
     pub(crate) frame_commands: usize,
+    /// The API the running package declares: §7 text options are read from 2.16 and 2.28 on.
+    pub(crate) app_api: (u32, u32),
     pub(crate) locked: bool,
     pub(crate) lock_wakes: u32,
     pub(crate) lock: Lock,
@@ -511,6 +513,7 @@ pub(crate) fn boot(st: &Shared, mode: BootMode) {
             };
         }
         s.frame_commands = 0;
+        s.app_api = api_of(&manifest);
         s.frame_seq += 1;
         s.lua.replace(new)
     });
@@ -663,6 +666,7 @@ impl Core {
             images: HashMap::new(),
             next_image: 0,
             frame_commands: 0,
+            app_api: (0, 8),
             locked: false,
             lock_wakes: 0,
             lock: Lock::default(),
