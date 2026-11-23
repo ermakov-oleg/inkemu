@@ -7,7 +7,6 @@ pub(crate) mod files;
 mod fonts;
 mod image;
 // ctx.ui stays off until the library lands, so non-test builds never call into it
-#[cfg_attr(not(test), allow(dead_code))]
 mod inkui;
 mod layers;
 mod lock;
@@ -143,8 +142,6 @@ pub(crate) fn new_ctx(
         reader::install(lua, &ctx, st)?;
     }
     ui::install(lua, &ctx, st)?;
-    // only the inkui unit tests see ctx.ui; drop the cfg to enable it
-    #[cfg(test)]
     inkui::install(lua, &ctx, app)?;
     image::install(lua, &ctx, st)?;
     layers::install(lua, &ctx, st)?;

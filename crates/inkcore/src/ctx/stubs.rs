@@ -17,7 +17,7 @@ const CAPABILITIES: [(&str, bool); 11] = [
     ("pattern", true),
     ("reader", true),
     // true only for the inkui unit tests, with the `inkui::install` cfg in ctx/mod.rs
-    ("ui", cfg!(test)),
+    ("ui", true),
     ("ttf", false),
 ];
 
