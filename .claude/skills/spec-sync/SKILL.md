@@ -9,7 +9,7 @@ All paths are relative to the repository root. The lock `spec/contract.lock` hol
 tag. Never commit contract text, not even in tests, fixtures, comments or issue bodies: write rules in your own words
 and cite sections as `§N`.
 
-1. See what changed: `uv run python tools/spec_sync.py` (add `--diff` to print the text diff of changed sections; read
+1. See what changed: `uv run python tools/spec_sync.py` (it prints the upstream commit it compared; note it for step 6; add `--diff` to print the text diff of changed sections; read
    it, do not paste it anywhere). `--check` exits 1 on drift, 2 on a network error.
 2. Map each change to rules. Find the checks for the section under `tests/conformance/<SS>/` (`<SS>` is the section
    number) and read `tests/conformance/README.md` for the check format. Write new or adjusted checks first; they go
@@ -25,7 +25,8 @@ and cite sections as `§N`.
 5. Update `spec/deviations.md`: a measured difference gets the next `D<n>` (contract says, reader does, inkemu does,
    status, check ids) and the check carries `"deviation": "D<n>"` with the contract's `spec_value`. Unmeasured ones are
    notes marked "unverified".
-6. Record the new contract last: `uv run python tools/spec_sync.py update`, then commit `spec/contract.lock`.
+6. Record the new contract last, pinned to the commit you reviewed in step 1 (upstream may have moved since):
+   `uv run python tools/spec_sync.py update --ref <that commit sha>`, then commit `spec/contract.lock`.
 
 Before every commit run `uv run pytest -q tests/test_conformance.py tests/test_spec_sync.py` and
 `uv run ruff check && uv run ruff format --check`.

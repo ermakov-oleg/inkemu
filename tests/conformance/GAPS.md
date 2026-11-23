@@ -5,6 +5,10 @@ conformance check listed in `pending.json`; when the core is fixed the check tur
 Source: `probe-confirmed` means the behaviour was measured on the reader (firmware 26112001); `contract only` means the
 contract states it and the reader was not measured. File names are relative to the repository root.
 
+## §1 Globals
+
+Already green and pinned: `01/globals_absent` (the globals that must not exist).
+
 ## §3 Gray frames
 
 ### Gray frames: proposed interface
@@ -22,6 +26,8 @@ A frame is gray when one of its `g:image` calls sets `gray = true` (outside `lay
 - Core now: the shot is always 1-bit, so a rectangle of color 8 or more is full ink and the levels cannot be told apart.
 - Touch points: as for the interface above.
 - Source: contract only.
+
+Already green and pinned: `03/color_threshold`, `03/device_profile` (the profile values, with the keyboard height as deviation D1).
 
 ## §5 Presenting a frame
 
@@ -160,7 +166,7 @@ Already green and pinned (the valid cases of the rules above): `05/cmd_cap_text_
 - Touch points: `crates/inkcore/src/ctx/image.rs`, `crates/inkcore/src/ctx/layers.rs`, `crates/inkcore/src/draw/mod.rs` (`image_command`).
 - Source: contract only.
 
-Already green and pinned (the valid cases of the rules above): `06/g_methods_present`, `06/polyline_points_valid`, `06/polygon_points_valid`, `06/pattern_valid_args`, `06/image_src_valid`.
+Already green and pinned (the valid cases of the rules above): `06/g_methods_present`, `06/polyline_points_valid`, `06/polygon_points_valid`, `06/pattern_valid_args`, `06/image_src_valid`, `06/arc_quadrant`, `06/pattern_unknown_kind`, `06/polygon_fill_stroke`, `06/rect_radius_rows`, `06/rect_stroke_inward`, `06/rect_zero_size`, `06/success_returns_nothing`.
 
 ## §7 Text and fonts
 
@@ -211,7 +217,7 @@ Already green and pinned (the valid cases of the rules above): `06/g_methods_pre
 - Touch points: `crates/inkcore/src/draw/text.rs` (`ascent`).
 - Source: probe-confirmed for small (17) and medium (21); large (26) is contract only.
 
-Already green and pinned (the valid cases of the rules above): `07/font_line_heights`, `07/font_object_fields`, `07/fonts_size_valid`, `07/fonts_size_sample_valid`, `07/measure_other_opts`, `07/text_utf8_valid`, `07/text_latin`, `07/text_limit_frame_fit`, `07/text_limits_call_max`.
+Already green and pinned (the valid cases of the rules above): `07/font_line_heights`, `07/font_object_fields`, `07/fonts_size_valid`, `07/fonts_size_sample_valid`, `07/measure_other_opts`, `07/text_utf8_valid`, `07/text_latin`, `07/text_limit_frame_fit`, `07/text_limits_call_max`, `07/fonts_size_tier`.
 
 ## §9 Private files
 
@@ -439,13 +445,13 @@ Already green and pinned: `25/act_inactive_no_lock` (refused `sleep`/`power_off`
 
 ### 26/hash_sha1, 26/hash_input_limit
 - Contract: `sha1` returns 20 raw bytes; every hash call takes at most 1048576 bytes, more is `nil, "limit_exceeded"` (`hash_input_limit`; the accepted maximum is `26/hash_input_max`, green).
-- Core now: `sha1` returns 40 hex characters (web-emu is already fixing this); no input limit anywhere.
+- Core now: `sha1` returns 40 hex characters; no input limit anywhere.
 - Touch points: `crates/inkcore/src/ctx/utils.rs`.
 - Source: probe-confirmed for `sha1` (`abc` gives 20 bytes); the limit is contract only (§26 gives it for all input; §18 gives the code).
 
 ### 26/hash_crc32
 - Contract: `crc32` is zlib's value as a signed 32-bit integer; `crc32("a") == -390611389`.
-- Core now: an unsigned single-precision float (`3904355840.0`); web-emu is already fixing this.
+- Core now: an unsigned single-precision float (`3904355840.0`).
 - Touch points: `crates/inkcore/src/ctx/utils.rs`.
 - Source: probe-confirmed for `a` and `abc`; `""` and `123456789` are computed from zlib.
 

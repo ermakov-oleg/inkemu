@@ -27,7 +27,7 @@ passes, 2 when a check file or `pending.json` is malformed.
   appendix letter (`A`-`D`). The check id is `<SS>/<name>`.
 - A `.lua` without a sibling `.json` is a helper file that checks copy into their app through `files`.
 - `conformance.lua` is the prelude every check app can `require`.
-- `pending.json` maps check ids of known core gaps to a one-line reason: `{"06/pattern_kind": "returns nothing"}`.
+- `pending.json` maps check ids of known core gaps to a one-line reason: `{"06/pattern_invalid_args": "returns nothing"}`.
   pytest runs them as strict xfail and the CLI reports them apart, so a gap does not turn the suite red, and a gap
   that gets fixed does (remove its entry then). An id with no check is an error.
 
@@ -102,7 +102,8 @@ fields you mean.
   error and other errors are allowed. Error texts differ between cores, so to pin that a call raises, record
   `T.value("raises", not pcall(f))` and expect `true`.
 - `log`: substrings that must appear somewhere in the log.
-- `pixels`: `[x, y, 1]` for ink and `[x, y, 0]` for paper on the final frame, taken with `shot(dialog=False)`. An optional
+- `pixels`: `[x, y, 1]` for ink and `[x, y, 0]` for paper on the final frame, taken with `shot(dialog=False)`. That shot still carries the error and toast plates, so do not combine
+  `pixels` with an expected Lua error. An optional
   fourth value is the gray level 0-3 (the ink steps of a gray frame): `[x, y, 0, 2]`. It is checked only when the shot is
   a gray frame. The proposed way to tell: `Emu.shot()` returns a Pillow image of mode `"L"` for a gray frame, with the
   values 0, 85, 170 and 255 for levels 3, 2, 1 and 0, and mode `"1"` for every other frame. The ink value is always checked

@@ -1,7 +1,7 @@
 # Deviations from the API contract
 
 inkemu is checked against the official InkApp API contract, locked at `api-2.33.1` (see `spec/contract.lock`;
-`tools/spec_sync.py` compares the lock with upstream). The conformance checks in `tests/conformance/` pin every rule.
+`tools/spec_sync.py` compares the lock with upstream). The conformance checks in `tests/conformance/` pin the rules they cover; `tests/conformance/GAPS.md` lists what is pending or not covered.
 
 Rule: the reader beats the contract only when the behaviour was measured on firmware 26112001. Then inkemu follows
 the reader, the check names the deviation id and carries the contract's value as `spec_value`, so a green run never
@@ -26,7 +26,8 @@ no radio and is not the device, so panel timing and network completion were not 
 - Contract says: a wrong point count is `nil, "invalid_argument"` (§6).
 - Reader does: more than 128 points returns `nil, "limit_exceeded"`; too few points and odd coordinate arrays are
   `invalid_argument`, as in the contract (probe).
-- inkemu does: follows the reader for 129 or more points.
+- inkemu target: follows the reader for 129 or more points (`nil, "limit_exceeded"`). The core does not follow yet:
+  `06/poly_over_128` is pending (see `tests/conformance/GAPS.md`).
 - Status: measured on 26112001.
 - Checks: `06/poly_over_128`.
 
@@ -37,7 +38,8 @@ no radio and is not the device, so panel timing and network completion were not 
 - Contract says: the 13 listed methods are accepted and their completion reaches the callback (§14).
 - Reader does: the three methods are accepted synchronously (a job is returned). Whether the callback completes was not
   measured: the probe has no radio, and an older firmware (26102401) hung on them.
-- inkemu does: follows the contract.
+- inkemu target: follows the contract. The core does not follow yet: `14/net_methods_accepted` is pending (see
+  `tests/conformance/GAPS.md`).
 - Status: unverified on 26112001.
 - Checks: `14/net_methods_accepted`.
 
@@ -66,8 +68,9 @@ fonts, and the battery and Wi-Fi rules of the lock screen (§15). These are nil 
 
 ## inkemu choices where the contract is silent
 
-- Which `ctx.system:act` strings beyond `refresh` the reader accepts was not measured; see the README's list of
-  differences for what inkemu answers.
-- `clock:now().weekday` counts from Sunday = 1.
+- The first frame of a session is a full refresh (the screen is blank before it); check `05/refresh_first_frame`.
+- Where the contract names no error code, the checks infer one; `tests/conformance/GAPS.md` marks each such case.
+- `sleep` and `power_off` of `ctx.system:act` were not measured on firmware 26112001; inkemu follows the contract
+  (see `tests/conformance/GAPS.md`).
 - Unfixtured replay requests answer `no_fixture`, which the contract does not know.
 - Time stands still for remote commands so that screenshots are stable.
