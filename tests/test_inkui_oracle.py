@@ -68,7 +68,7 @@ NON_STRING_TEXT = (
 )
 PER_CHILD = "the reader checks and registers children one by one, so a later bad child keeps the earlier ones"
 COUNT_FIRST = "ui:layout counts the 1024 children before it checks any field"
-RANGE_32767 = "the reader refuses a ui:layout rect or a placed child past 32767, and its 32-bit split wraps differently"
+RANGE_32767 = "the reader refuses a ui:layout rect wider than 32767 and a child placed past 32767"
 PARKED: dict[tuple[str, int], str] = {
     (f"s17_layout_edges.api{minor}", step): reason
     for minor in (15, 26)

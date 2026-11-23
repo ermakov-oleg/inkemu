@@ -1155,3 +1155,25 @@ fn a_radio_child_splits_the_box_its_container_gives_it() {
         ]
     );
 }
+
+#[test]
+fn before_2_13_the_arrows_step_through_radio_parts_in_order() {
+    let out = events(
+        "2.12",
+        "frame(function()\n\
+           ui:button('a', {x = 0, y = 0, w = 100, h = 40})\n\
+           ui:radio('r', {x = 0, y = 50, w = 200, h = 90, items = {'x', 'y', 'z'}, value = 2})\n\
+           ui:button('b', {x = 0, y = 150, w = 100, h = 40})\n\
+         end)\n\
+         local out = {}\n\
+         for _, k in ipairs({'down', 'down', 'down', 'down', 'down', 'down', 'up', 'up', 'up', 'up', 'up'}) do\n\
+           out[#out + 1] = key(k)\n\
+         end\n\
+         return table.concat(out, ' ')",
+    );
+    // focus starts on a; each item is a stop of its own, and at either end the same target is returned
+    assert_eq!(
+        out,
+        "r,focus,1 r,focus,2 r,focus,3 b,focus b,focus b,focus r,focus,3 r,focus,2 r,focus,1 a,focus a,focus"
+    );
+}

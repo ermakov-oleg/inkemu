@@ -1,6 +1,6 @@
 {
   "spec": "§16",
-  "about": "from 2.13 a nav entry for the pressed direction moves focus to that id when the last frame has it as an enabled control that takes focus, wherever it is and even the control itself; a radio target takes focus on its value item; a disabled, unknown or label target falls back to the search by position; entries for other directions do nothing (probe-confirmed)",
+  "about": "from 2.13 a nav entry for the pressed direction moves focus to that id when the last frame has it as an enabled control that takes focus, wherever it is and even the control itself; a radio target takes focus on its value item; a disabled, unknown or label target falls back to the search by position; entries for other directions do nothing (probe-confirmed, except that a disabled radio target follows the contract text)",
   "expect": {
     "available": {"value": {"ok": true, "ret": ["Z", "focus"]}, "spec": "§16"},
     "against_the_direction": {"value": {"ok": true, "ret": ["Z", "focus"]}, "spec": "§16"},
