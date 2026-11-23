@@ -17,7 +17,7 @@ end
 
 function on_load(ctx)
   ui = ctx.ui:create()
-  -- a device without a touchscreen, as ctx.input.pointer says when the object is created
+  -- inkemu-only lever: the library reads ctx.input.pointer at create, so false here gives an object with no touch
   local pointer = ctx.input.pointer
   ctx.input.pointer = false
   keyless = ctx.ui:create()

@@ -21,7 +21,7 @@ end
 
 function on_load(ctx)
   ui = ctx.ui:create()
-  send("before_any_frame", key("ok", "down"))
+  send("before_any_frame", key("down", "down"))
 end
 
 local done = false

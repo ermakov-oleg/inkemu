@@ -1,6 +1,6 @@
 {
   "spec": "§16",
-  "about": "on a touch device focus is drawn only after a key event reaches handle_event, even one that gives nil, nil, and stops after any pointer event while focus itself is kept; ui:focus does not change it (probe-confirmed); a UI object created while ctx.input.pointer is false draws focus from its first frame, and a pointer event turns that off too",
+  "about": "on a touch device focus is drawn only after a key event reaches handle_event, even one that gives nil, nil, and stops after any pointer event while focus itself is kept; ui:focus does not change it (probe-confirmed); the keyless records simulate a device with no touch input by setting ctx.input.pointer = false around create, a lever that only inkemu has (its library reads the field at create): such an object draws focus from its first frame, and a pointer event turns that off too",
   "files": {"canvas_log.lua": "canvas_log.util.lua"},
   "expect": {
     "touch": {"value": true, "spec": "§4"},

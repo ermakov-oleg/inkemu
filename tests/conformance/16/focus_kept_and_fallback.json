@@ -1,6 +1,6 @@
 {
   "spec": "§16",
-  "about": "focus is kept by id across frames; an absent id or a label id falls on the first available control; a disabled kept control hands focus to the available control with the nearest centre, ties to the one declared first; no available control means no focus, and the next frame with one takes the first (probe-confirmed); each UI object keeps its own focus",
+  "about": "focus is kept by id across frames; an absent id or a label id moves focus to the first usable control; a disabled kept control hands focus to the available control with the nearest centre, ties to the one declared first; no available control means no focus, and the next frame with one takes the first (probe-confirmed); two UI objects do not share focus",
   "expect": {
     "new_object": {"value": null, "spec": "§16"},
     "first_frame": {"value": "A", "spec": "§16"},

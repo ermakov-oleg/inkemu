@@ -43,6 +43,14 @@ function set_focus(st, id, part)
   st.focus, st.part = id, part
 end
 
+-- what handle_event returns: `id, action`, plus the part number when the target is one of a composite's parts
+function event_result(id, action, part)
+  if part ~= nil then
+    return id, action, part
+  end
+  return id, action
+end
+
 -- in floats: the squares of far-apart integer centres overflow 32 bits
 local function center_distance(a, b)
   local dx = (a.x * 2.0 + a.w) - (b.x * 2.0 + b.w)
@@ -51,7 +59,7 @@ local function center_distance(a, b)
 end
 
 -- The kept focus stays on its target (a part set on a plain control is dropped), moves to the nearest available
--- target when that one is disabled, and falls on the first available target when the id is absent or names a
+-- target when that one is disabled, and goes to the first available target when the id is absent or names a
 -- control that takes no focus.
 function settle_focus(st, list)
   local first = first_available(list)

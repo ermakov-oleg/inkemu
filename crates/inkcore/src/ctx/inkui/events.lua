@@ -4,14 +4,6 @@
 local ARROWS = { up = true, down = true, left = true, right = true }
 local TAPS = { tap = true, double_tap = true }
 
--- `id, action`, with the part as a third value only for a part of a composite control
-function result(id, action, part)
-  if part ~= nil then
-    return id, action, part
-  end
-  return id, action
-end
-
 -- where the finger went down, else where the event happened, or nil
 local function press_point(ev)
   if type(ev.down_x) == "number" and type(ev.down_y) == "number" then
@@ -46,10 +38,10 @@ local function key(st, ev)
     end
     if down then
       st.pressed = true
-      return result(st.focus, "press", st.part)
+      return event_result(st.focus, "press", st.part)
     end
     if pressed then
-      return result(st.focus, "activate", st.part)
+      return event_result(st.focus, "activate", st.part)
     end
     return nil, nil
   end
@@ -70,10 +62,10 @@ local function pointer(st, ev)
     return nil, nil
   end
   if not tap then
-    return result(t.id, "long_press", t.part)
+    return event_result(t.id, "long_press", t.part)
   end
   set_focus(st, t.id, t.part)
-  return result(t.id, "activate", t.part)
+  return event_result(t.id, "activate", t.part)
 end
 
 methods.handle_event = function(self, ev)

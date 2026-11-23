@@ -79,9 +79,9 @@ no radio and is not the device, so panel timing and network completion were not 
 - Status: measured on 26112001 (the reader's UI library and the probe).
 - Checks: `16/nav_order_before_2_13`.
 
-### D8 - a pointer event on a device without a touchscreen
+### D8 - a pointer event on a device with no touch input
 
-- Contract says: a device without a touchscreen always draws focus (§16).
+- Contract says: with no touch input, focus is drawn at all times (§16).
 - Reader does: a pointer event passed to `handle_event` turns focus drawing off there too, until the next key
   event. Such a device produces no pointer events of its own, so only an app that builds one sees this.
 - inkemu does: the same.
@@ -146,6 +146,7 @@ the README.
 - `ctx.ui`, not measured: `begin_frame` takes as a canvas any table with the canvas's `rect` and `text_box` methods,
   since Lua cannot tell host objects apart. A control's box holds the points `x .. x + w - 1` for hits, and boxes that
   only touch do not overlap for the arrows. A key whose `phase` is neither `down` nor `up` (any other value, not only
-  `repeat` or none) is `invalid_argument`, and a refused event leaves focus drawing as it was. `ok`
+  `repeat` or none) is `invalid_argument`, and a refused event leaves focus drawing as it was. A pointer event is
+  accepted whatever its `phase` (none or unknown gives `nil, nil` and turns focus drawing off). `ok`
   on a kept id that is disabled in the last frame gives `nil, nil`. An arrow from a kept id that `ui:focus` set to a
   disabled control starts from that control's place.

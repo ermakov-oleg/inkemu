@@ -1,6 +1,6 @@
 {
   "spec": "§16",
-  "about": "a pointer event hits the last added button or region containing the point; labels are not hit; a disabled control is not hit and blocks the controls below it (probe-confirmed); a control declared after a disabled one is above it and is hit; a box covers x..x+w-1",
+  "about": "a pointer event hits the last added button or region containing the point; labels are not hit; a disabled control takes no hit and lets none through to what lies under it (probe-confirmed); a control declared after a disabled one is above it and is hit; a box covers x..x+w-1",
   "expect": {
     "under_only": {"value": {"ok": true, "ret": ["under", "activate"]}, "spec": "§16"},
     "overlap": {"value": {"ok": true, "ret": ["over", "activate"]}, "spec": "§16"},

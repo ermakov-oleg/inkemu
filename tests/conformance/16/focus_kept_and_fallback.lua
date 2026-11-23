@@ -47,7 +47,7 @@ function on_draw(ctx, g)
   ui:label("lbl", { x = 0, y = 0, w = 100, h = 30, text = "L" })
   ui:end_frame()
   T.value("label_id", ui:focused())
-  -- each object keeps its own focus; one whose begin_frame is not called keeps it unchanged
+  -- two objects do not share focus, and an object with no frame drawn leaves its focus alone
   local other = ctx.ui:create()
   ui:focus("B")
   frame(g, { { "A", 40 }, { "B", 190 } })

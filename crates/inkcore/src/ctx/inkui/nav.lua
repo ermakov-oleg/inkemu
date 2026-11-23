@@ -13,7 +13,7 @@ local FORWARD = { down = true, right = true }
 
 local function moved(st, t)
   set_focus(st, t.id, t.part)
-  return result(t.id, "focus", t.part)
+  return event_result(t.id, "focus", t.part)
 end
 
 -- `nav[dir]` of the current target when it names an available plain control
