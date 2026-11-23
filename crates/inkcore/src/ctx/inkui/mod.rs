@@ -11,6 +11,8 @@ const FILES: &[(&str, &str)] = &[
     ("fields.lua", include_str!("fields.lua")),
     ("frame.lua", include_str!("frame.lua")),
     ("focus.lua", include_str!("focus.lua")),
+    ("nav.lua", include_str!("nav.lua")),
+    ("events.lua", include_str!("events.lua")),
     ("paint.lua", include_str!("paint.lua")),
     ("controls.lua", include_str!("controls.lua")),
 ];

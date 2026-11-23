@@ -138,7 +138,7 @@ fn a_library_error_in_a_callback_is_an_app_error() {
     let core = Core::new(
         app_files(
             r#"{"app_id": "testapp", "entry": "index.lua", "api": "2.33"}"#,
-            "local ui = ctx.ui:create()\nfunction on_draw(ctx, g)\n  ui:handle_event({})\nend",
+            "local ui = ctx.ui:create()\nfunction on_draw(ctx, g)\n  ui:focus(5)\nend",
         ),
         Config::default(),
         Persisted::default(),
@@ -147,7 +147,7 @@ fn a_library_error_in_a_callback_is_an_app_error() {
     assert!(
         errors
             .iter()
-            .any(|e| e.contains("index.lua:3: ui:handle_event is not implemented in inkemu yet")),
+            .any(|e| e.contains("index.lua:3: ui:focus: id must be a string")),
         "{errors:?}"
     );
 }
@@ -646,5 +646,199 @@ fn a_label_text_the_canvas_refuses_is_an_app_error() {
             .iter()
             .any(|e| e.contains("bad argument #5 to 'text_box' (string expected, got table)")),
         "{errors:?}"
+    );
+}
+
+/// Lua helpers for the event tests: `ui` (a new object), `frame(decl)` (one frame of `decl`, Lua using `ui`),
+/// `ev(t)` (`handle_event(t)`'s returns joined with commas), `key(name[, phase])` and `point(phase, x, y, dx, dy
+/// [, gesture])`.
+const EVENTS: &str = "local ui = make() local g = recorder({})\n\
+    local function show(...) local t = table.pack(...) for i = 1, t.n do t[i] = tostring(t[i]) end\n\
+      return table.concat(t, ',', 1, t.n) end\n\
+    local function frame(decl) ui:begin_frame(g) decl() ui:end_frame() end\n\
+    local function ev(t) return show(ui:handle_event(t)) end\n\
+    local function key(name, phase) return ev({type = 'key', key = name, phase = phase or 'down'}) end\n\
+    local function point(phase, x, y, dx, dy, gesture)\n\
+      return ev({type = 'pointer', phase = phase, x = x, y = y, down_x = dx, down_y = dy, gesture = gesture}) end\n";
+
+fn events(api: &str, body: &str) -> String {
+    let lua = fixed_library(api);
+    let r = run(&lua, &format!("{EVENTS}{body}")).unwrap_or_else(|e| panic!("{e}"));
+    r.into_iter().next().unwrap().to_string().unwrap()
+}
+
+#[test]
+fn handle_event_refuses_what_is_not_a_key_or_pointer_event() {
+    let out = events(
+        "2.26",
+        "return table.concat({ev(nil), ev('ok'), ev({}), ev({type = 'timer', phase = 'down'}),\n\
+           ev({type = 'key', key = 'ok'}), key('ok', 'repeat'), key('down', 'repeat'), key('ok', 'bogus'),\n\
+           ev({type = 'key', phase = 'down'}), key('back'), key('menu'), point('up'), point('down', 1, 1),\n\
+           select('#', ui:handle_event({type = 'key', key = 'menu', phase = 'down'}))}, ' ')",
+    );
+    let bad = "nil,invalid_argument";
+    assert_eq!(
+        out,
+        [
+            bad, bad, bad, bad, bad, bad, bad, bad, "nil,nil", "nil,nil", "nil,nil", "nil,nil",
+            "nil,nil", "2"
+        ]
+        .join(" ")
+    );
+}
+
+#[test]
+fn ok_up_activates_only_after_its_ok_down_on_the_same_focus() {
+    let out = events(
+        "2.26",
+        "local out = {key('ok'), key('ok', 'up')}\n\
+         frame(function()\n\
+           ui:button('a', {x = 0, y = 0, w = 50, h = 50})\n\
+           ui:button('b', {x = 60, y = 0, w = 50, h = 50})\n\
+         end)\n\
+         for _, k in ipairs({'ok', 'ok_up', 'ok_up', 'ok', 'right', 'ok_up', 'ok', 'left', 'right', 'ok_up',\n\
+           'ok', 'right', 'ok_up', 'ok'}) do\n\
+           out[#out + 1] = k == 'ok_up' and key('ok', 'up') or key(k)\n\
+         end\n\
+         frame(function()\n\
+           ui:button('a', {x = 0, y = 0, w = 50, h = 50})\n\
+           ui:button('b', {x = 60, y = 0, w = 50, h = 50})\n\
+         end)\n\
+         out[#out + 1] = key('ok', 'up')\n\
+         ui:focus('b') out[#out + 1] = key('ok') ui:focus('a') ui:focus('b') out[#out + 1] = key('ok', 'up')\n\
+         return table.concat(out, ' ')",
+    );
+    // a right arrow that finds nothing and a frame keep the pair; moving away and back, by arrows or ui:focus, breaks it
+    assert_eq!(
+        out,
+        "nil,nil nil,nil a,press a,activate nil,nil a,press b,focus nil,nil b,press a,focus b,focus nil,nil \
+         b,press nil,nil b,activate b,press b,activate b,press nil,nil"
+    );
+}
+
+#[test]
+fn a_tap_hits_the_last_added_target_at_the_press_point() {
+    let out = events(
+        "2.26",
+        "frame(function()\n\
+           ui:button('a', {x = 0, y = 0, w = 100, h = 100})\n\
+           ui:region('b', {x = 50, y = 50, w = 100, h = 100})\n\
+           ui:button('c', {x = 200, y = 0, w = 100, h = 100})\n\
+           ui:button('d', {x = 200, y = 0, w = 50, h = 50, enabled = false})\n\
+           ui:label('l', {x = 0, y = 0, w = 300, h = 300})\n\
+         end)\n\
+         local out = {}\n\
+         local function add(r) out[#out + 1] = r .. '/' .. tostring(ui:focused()) end\n\
+         add(point('up', 10, 10, nil, nil, 'tap'))\n\
+         add(point('up', 60, 60, 60, 60, 'double_tap'))\n\
+         add(point('up', 10, 10, 260, 60, 'tap'))\n\
+         add(point('up', 260, 60, 10, 10, 'swipe_right'))\n\
+         add(point('hold', 400, 400, 10, 10))\n\
+         add(point('up', 210, 10, 210, 10, 'tap'))\n\
+         add(point('up', 100, 10, 100, 10, 'tap'))\n\
+         add(point('up', 99, 10, 99, 10, 'long'))\n\
+         add(point('move', 10, 10, 10, 10))\n\
+         return table.concat(out, ' ')",
+    );
+    // the label is not hittable; d is disabled and blocks c below it; x = 100 is past a's right edge
+    assert_eq!(
+        out,
+        "a,activate/a b,activate/b c,activate/c nil,nil/c a,long_press/c nil,nil/c nil,nil/c nil,nil/c nil,nil/c"
+    );
+}
+
+#[test]
+fn focus_is_drawn_after_a_key_and_not_after_a_pointer_event() {
+    let lua = fixed_library("2.26");
+    let decl = "ui:button('n', {x = 10, y = 0, w = 200, h = 56, text = 'B'})";
+    let code = format!(
+        "local ui = make() local log\n\
+         local function f() log = {{}} ui:begin_frame(recorder(log)) {decl} ui:end_frame() return log[1] end\n\
+         local out = {{f()}}\n\
+         ui:handle_event({{type = 'key', key = 'back', phase = 'up'}}) out[#out + 1] = f()\n\
+         ui:handle_event({{type = 'pointer', phase = 'move', x = 0, y = 0}}) out[#out + 1] = f()\n\
+         ui:handle_event({{type = 'key', key = 'ok', phase = 'repeat'}}) out[#out + 1] = f()\n\
+         ui:handle_event({{type = 'key', key = 'zz', phase = 'down'}}) out[#out + 1] = f()\n\
+         ui:handle_event({{type = 'pointer'}}) out[#out + 1] = f()\n\
+         return table.concat(out, ' ')"
+    );
+    let r = run(&lua, &code).unwrap();
+    let (off, on) = (body(0, false, 0), body(0, true, 0));
+    assert_eq!(
+        r.into_iter().next().unwrap().to_string().unwrap(),
+        [&off, &on, &off, &off, &on, &off]
+            .map(String::as_str)
+            .join(" ")
+    );
+}
+
+/// A 3×3 grid of 100×60 buttons g1..g9 140 px apart, and `nav` on g5.
+const GRID: &str = "local function grid(nav)\n\
+      frame(function()\n\
+        for i = 1, 9 do\n\
+          ui:button('g' .. i, {x = 40 + (i - 1) % 3 * 140, y = 300 + (i - 1) // 3 * 100, w = 100, h = 60,\n\
+            nav = i == 5 and nav or nil})\n\
+        end\n\
+      end)\n\
+    end\n\
+    local function walk(from, keys)\n\
+      local out = {}\n\
+      for k in string.gmatch(keys, '%a+') do ui:focus(from) out[#out + 1] = key(k) end\n\
+      return table.concat(out, ' ')\n\
+    end\n";
+
+#[test]
+fn arrows_move_by_position_from_2_13_and_in_declaration_order_before() {
+    let body =
+        "grid() local out = {walk('g5', 'up down left right'), walk('g1', 'up left down right'),\n\
+                walk('g9', 'down right up left')}\n\
+                grid({down = 'g1', up = 'nobody'}) out[#out + 1] = walk('g5', 'down up')\n\
+                return table.concat(out, ' / ')";
+    assert_eq!(
+        events("2.26", &format!("{GRID}{body}")),
+        "g2,focus g8,focus g4,focus g6,focus / nil,nil nil,nil g4,focus g2,focus / \
+         nil,nil nil,nil g6,focus g8,focus / g1,focus g2,focus"
+    );
+    assert_eq!(
+        events("2.12", &format!("{GRID}{body}")),
+        "g4,focus g6,focus g4,focus g6,focus / g1,focus g1,focus g2,focus g2,focus / \
+         g9,focus g9,focus g8,focus g8,focus / g6,focus g4,focus"
+    );
+}
+
+#[test]
+fn an_arrow_without_a_known_focus_falls_on_the_first_available_target() {
+    let out = events(
+        "2.26",
+        "local out = {key('down')}\n\
+         frame(function()\n\
+           ui:button('a', {x = 0, y = 0, w = 50, h = 50, enabled = false})\n\
+           ui:button('b', {x = 0, y = 60, w = 50, h = 50})\n\
+         end)\n\
+         ui:focus('ghost') out[#out + 1] = key('up')\n\
+         frame(function() ui:label('l', {x = 0, y = 0, w = 50, h = 50}) end)\n\
+         out[#out + 1] = tostring(ui:focused()) out[#out + 1] = key('down')\n\
+         return table.concat(out, ' ')",
+    );
+    assert_eq!(out, "nil,nil b,focus nil nil,nil");
+}
+
+#[test]
+fn focus_keeps_a_part_until_end_frame() {
+    let out = events(
+        "2.26",
+        "local out = {}\n\
+         local function add(...) out[#out + 1] = show(...) end\n\
+         add(ui:focus('b', 2.0)) add(ui:focused()) add(key('ok'))\n\
+         add(ui:focus('b', 0)) add(ui:focus('b', 1.5)) add(ui:focus('b', '2')) add(ui:focus(''))\n\
+         add(pcall(ui.focus, ui, 5)) add(math.type(select(2, ui:focused())))\n\
+         frame(function() ui:button('b', {x = 0, y = 0, w = 50, h = 50}) end)\n\
+         add(ui:focused())\n\
+         return table.concat(out, ' ')",
+    );
+    assert_eq!(
+        out,
+        " b,2 b,press,2 nil,invalid_argument nil,invalid_argument nil,invalid_argument nil,invalid_argument \
+         false,ui:focus: id must be a string integer b"
     );
 }

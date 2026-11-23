@@ -31,8 +31,8 @@ methods.end_frame = function(self)
   end
   -- closed before painting: an error raised by a region's draw still ends the frame
   st.frame = nil
-  st.last = f.list
-  settle_focus(st, f.list)
+  st.targets = targets_of(f.list)
+  settle_focus(st, st.targets)
   for _, c in ipairs(f.list) do
     if c.kind.paint then
       c.kind.paint(f.g, c, look_of(st, c))

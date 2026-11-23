@@ -15,9 +15,10 @@ Each step is compared in full, except:
   is left out of the named canvas calls, the rest is compared, and the step is skipped.
 - `HOST_REFUSES` lists the canvas calls the core refuses with a Lua error (the oracle's canvas accepted anything); any
   other refusal fails the step.
-- A step after an `event` or `focus` step that was not implemented may find focus elsewhere than the oracle did: it
-  is an xfail while only focus and the canvas calls differ (`AFTER_FOCUS`), a failure when anything else does, and an
-  ordinary pass when it matches.
+- A step that acts on a frame with a control inkemu does not implement yet (the last closed frame had a stubbed
+  call), or that starts from a focus an earlier stubbed step left elsewhere than the oracle (the focus recorded by
+  the step before differs), is an xfail while only focus, its event result and the canvas calls differ
+  (`AFTER_STUB`), a failure when anything else does, and an ordinary pass when it matches.
 
 The JSON files hold inputs we wrote and outputs recorded from the reader's library; see the README next to them.
 """
@@ -38,8 +39,8 @@ FONTS = HERE / "fonts-fixed"
 SCENARIOS = {p.name.removesuffix(".json"): p for p in sorted(ORACLE.glob("s*.json"))}
 NOT_IMPLEMENTED = "not implemented in inkemu yet"
 
-# what a step may get wrong when focus was moved by an earlier event or ui:focus step that inkemu could not run yet
-AFTER_FOCUS = {"focused_after", "stream", "op_counts", "stream_count", "ret", "focused"}
+# what a step may get wrong when it acts on a frame, or starts from a focus, that a stubbed step left different
+AFTER_STUB = {"focused_after", "stream", "op_counts", "stream_count", "ret", "focused"}
 
 # (scenario, step) -> the font method the step needs, and the stream entries (from 0) whose font it picks
 NEEDS_HOST: dict[tuple[str, int], tuple[str, set[int]]] = {
@@ -57,7 +58,7 @@ HOST_REFUSES: dict[tuple[str, int], list[str]] = {
 }
 
 # step fields that are notes or inputs, not results
-IGNORED = {"i", "op", "note", "font_calls", "expect", "expect_focused", "host_errors"}
+IGNORED = {"i", "op", "note", "font_calls", "expect", "expect_focused", "host_errors", "args"}
 
 
 def lua(v) -> str:
@@ -225,8 +226,36 @@ def test_step(scenario: str, i: int, tmp: Path):
         pytest.skip(f"blocked on host: font:{need} is missing (the rest matches)")
     diff = differences(want, got)
     message = f"{title}:\n" + "\n".join(m for _, m in diff)
-    steps = oracle(scenario)["output"]
-    focus_moved = any(steps[k]["op"] in ("event", "focus") and stubbed(ours[k]) for k in range(i - 1))
-    if diff and focus_moved and {f for f, _ in diff} <= AFTER_FOCUS:
-        pytest.xfail("focus moved by an earlier event or ui:focus step that is not implemented yet")
+    reason = after_stub(oracle(scenario)["output"], ours, i)
+    if diff and reason and {f for f, _ in diff} <= AFTER_STUB:
+        pytest.xfail(reason)
     assert not diff, message
+
+
+def focus_record(step: dict):
+    if step["op"] == "focused":
+        return step.get("ret")
+    return step.get("focused_after", step.get("focused"))
+
+
+def after_stub(steps: list[dict], ours: list[dict], i: int) -> str | None:
+    """Why step `i` may differ in focus only: what an earlier stubbed step changed, or None."""
+    if not any(stubbed(ours[k]) for k in range(i - 1)):
+        return None
+    for k in range(i - 2, -1, -1):
+        if steps[k]["op"] not in ("frame", "end"):
+            continue
+        start = k
+        if steps[k]["op"] == "end":
+            while start > 0 and steps[start]["op"] != "begin":
+                start -= 1
+        if any(stubbed(ours[n]) for n in range(start, k + 1)):
+            return f"the last frame (step {k + 1}) has a control that is not implemented yet"
+        break
+    for k in range(i - 2, -1, -1):
+        want = focus_record(steps[k])
+        if want is not None:
+            if not same(want, focus_record(ours[k])):
+                return f"focus differs from step {k + 1} on, after a step that is not implemented yet"
+            break
+    return None

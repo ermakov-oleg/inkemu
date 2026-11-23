@@ -67,12 +67,15 @@ function create(opts)
   local obj = setmetatable({}, object_meta)
   objects[obj] = {
     focus_style = focus_style,
-    -- the kept focus id, and whether focus is drawn: a device without a touchscreen always draws it
+    -- the kept focus (id and part), and whether focus is drawn: a device without a touchscreen always draws it
     focus = nil,
+    part = nil,
     keys = not touch(),
-    -- the open frame, and the controls of the last frame that was closed
+    -- the focus an `ok` down was pressed on, until its `ok` up or a focus move
+    pressed = nil,
+    -- the open frame, and the targets of the last frame that was closed (events and arrows work on these)
     frame = nil,
-    last = {},
+    targets = {},
   }
   return obj
 end
