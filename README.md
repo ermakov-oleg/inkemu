@@ -352,11 +352,13 @@ the start with an error. From each file inkemu takes:
   `{tick_us, draw_us, cmd_count, image_count, asset_hit, asset_miss, draw_frame}`: `cmd_count` and `image_count`
   are the commands and `g:image` calls accepted in the last frame, `draw_frame` the frames of this session), `gc`,
   `budget`, `reader` (answers from `<fixtures dir>/reader.json`), `lockscreen`, `lock`.
-- `ui` (§16), in progress: `create`, `begin_frame`/`end_frame`, `label`, `button`, `region`, `handle_event`,
-  `focus`/`focused` and the arrow keys (by position from API 2.13, in declaration order before it) work, and so do
-  `row`/`column` (the 2.15 flex layout with `wrap`, `baseline`, `aspect_ratio`, percentages and the container look;
-  the earlier rules for packages before 2.15) and `ui:layout`; image and skin buttons, container skins in a frame,
-  `grid`/`stack` from 2.15, and the other controls raise "not implemented in inkemu yet".
+- `ui` (§16), in progress: `create`, `begin_frame`/`end_frame`, `label`, `button`, `region`, `radio` (items as
+  parts with their own hits and focus, `change`/`activate` with the item number), `handle_event`,
+  `focus`/`focused` with parts and the arrow keys (by position from API 2.13, in declaration order before it) work,
+  and so do `row`/`column` (the 2.15 flex layout with `wrap`, `baseline`, `aspect_ratio`, percentages and the
+  container look; the earlier rules for packages before 2.15) and `ui:layout`; image and skin buttons, a radio skin,
+  container skins in a frame, `grid`/`stack` from 2.15, and the other controls raise "not implemented in inkemu
+  yet".
 
 `clock:now()` has `year month day hour minute second weekday hour12 date_order date_sep epoch_sec local_sec
 offset_minutes revision valid`.

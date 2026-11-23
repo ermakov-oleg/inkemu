@@ -198,19 +198,44 @@ the README.
   the 2.15 fields, and refuses `spacer` children; a hidden child's `id` is not checked against the keys of the
   `ui:layout` result; a percentage in a fitted container resolves against the size found for it. Checks:
   `16/row_column_before_2_15`, `16/layout_content_sizes`, `16/layout_hidden_and_false`.
+- `ctx.ui` containers, measured later (oracle scenario s17) and equal to what inkemu does: in a frame a control
+  child without `id` or with `id = ""`, or a child without `kind`, makes the whole call `invalid_argument`, while
+  `ui:layout` takes both and refuses only `id = ""`; `reserve` widens the content width of a label or button whenever
+  the width comes from the content, not only with `w = "fit"` (the contract says only `fit`); the grow and shrink
+  splits wrap in 32-bit integers the same way.
+- `ctx.ui` containers, measured later (s17) and still different in inkemu; the oracle steps are parked in
+  `tests/test_inkui_oracle.py` until a follow-up decides:
+  - inkemu checks the whole tree before it lays out or registers anything, and the first `invalid_argument` or
+    `limit_exceeded` in declaration order wins. The reader checks and registers the children one by one, so a bad
+    field after the 128th control gives `limit_exceeded` with the earlier children drawn, and a child placed past
+    32767 gives `invalid_argument` after the earlier ones were registered.
+  - inkemu counts the 1024 children of `ui:layout` as it checks them (hidden ones included, frames too); the reader
+    counts them all before it checks any field.
+  - inkemu refuses a non-string `text` on a `label`, `button` or `switch` child. The reader takes it and hands it to
+    `g:text_box`, except where the text must be measured: a button with `w = "fit"`, or a label without a numeric
+    `h`.
+  - The reader refuses a `ui:layout` rect wider than 32767; inkemu takes it.
 - `ctx.ui` containers, not measured:
-  - The whole tree is checked before anything is laid out or registered, and the first `invalid_argument` or
-    `limit_exceeded` in declaration order wins; a part inkemu does not implement yet raises only when nothing is
-    invalid.
-  - The 1024 children of `ui:layout` count every child table, hidden ones included, and apply to frames too.
-  - In a frame, a control child needs an `id` and a child without `kind` is invalid. The `text` of a `label`,
-    `button` or `switch` child is a string or nil, in a frame as in `ui:layout` (the oracle measured only the label in
-    `ui:layout`).
+  - A part inkemu does not implement yet raises only when nothing in the tree is invalid.
   - A hidden child's `id` is not reserved in the frame; a zero-size child is not registered, so its `id` is free too.
   - `divider = false` is the same as no divider, and `children = nil` as no children.
   - Dividers are drawn between neighbours that are not spacers even when one of them has zero size.
   - Before 2.15, a nested container places its own children from its own corner, and `gap` must be a non-negative
     integer.
   - A rounded halftone block whose radius takes its whole height gets no middle row.
-  - The freeze loop multiplies the free space by cumulative weights in 32-bit integers; a very large `shrink` × base
-    over many children could wrap.
+  - The `gap` between `tabs` or `radio` cells is any integer from 0 (the contract gives no upper bound), and their
+    1 to 64 `items` are checked the same way in a frame and in `ui:layout`.
+- `ctx.ui` radio, as measured with the reader's UI library run as a black box: a radio works at every API minor (as
+  the other 2.13 and 2.14 controls do), a `nav` on it is accepted and ignored (the contract says composites take no
+  `nav`), a 3 px cell draws no dot, and the fallback to the first control lands on item 1 while `ui:focus(id)` without
+  an item, or with one the radio lacks, lands on the value item. Checks: `16/radio_cells`, `16/radio_focus_parts`,
+  `16/radio_change_activate`, `16/limits`, `16/nav_override`.
+- `ctx.ui` radio, not measured:
+  - A cell gets the value dot only when it is at least 11 px tall, so that the dot's diameter is at least 1.
+  - With `font_min`, each item's font shrinks until its text fits the width after the ring.
+  - A tap in the gap between two cells hits no part of the radio and goes to what lies below.
+  - An item that is `""` still gets its `text_box`.
+  - After `ui:focus(id)` names a composite without an item, the arrows start from its default part, and `ok` gives
+    `press` and `activate` with no item until `end_frame` settles it.
+  - A `nav` entry naming a composite whose default part is unavailable falls back to the search by position.
+  - A registered `skin` on a radio raises "not implemented in inkemu yet"; an unregistered one is `invalid_argument`.
