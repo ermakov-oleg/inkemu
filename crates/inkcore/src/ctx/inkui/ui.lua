@@ -71,7 +71,7 @@ function create(opts)
     focus = nil,
     part = nil,
     keys = not touch(),
-    -- the focus an `ok` down was pressed on, until its `ok` up or a focus move
+    -- an `ok` down came on the kept focus; cleared by its `ok` up and by any focus move
     pressed = nil,
     -- the open frame, and the targets of the last frame that was closed (events and arrows work on these)
     frame = nil,
