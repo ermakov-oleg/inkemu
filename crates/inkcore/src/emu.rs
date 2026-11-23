@@ -103,6 +103,10 @@ pub(crate) struct State {
     pub(crate) quit: bool,
     pub(crate) leaving: bool,
     pub(crate) depth: u32,
+    /// The callback depth of an `on_input` delivering a key or pointer up: §25 `act("sleep"/"power_off")` works there.
+    pub(crate) up_input: Option<u32>,
+    /// `act("sleep")` was called: the device locks once that `on_input` returns.
+    pub(crate) sleep_asked: bool,
     pub(crate) overlay: Option<(String, String)>,
     pub(crate) pending: Option<Pending>,
     /// What answering or typing into `pending` does; set and cleared with it.
@@ -663,6 +667,8 @@ impl Core {
             quit: false,
             leaving: false,
             depth: 0,
+            up_input: None,
+            sleep_asked: false,
             overlay: None,
             pending: None,
             pending_h: None,

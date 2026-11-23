@@ -16,8 +16,5 @@
   "15/lock_reason_first": "ctx.lock.reason is lock instead of first in the first session",
   "15/lock_refresh_kinds": "status() has no refreshes field",
   "15/lock_set_interval_args": "set_interval accepts any positive number and returns true",
-  "15/lock_timer_alignment": "the timer wake comes interval_sec after locking, not at the next whole multiple of the interval",
-  "25/act_inactive": "sleep and power_off return invalid_argument instead of inactive",
-  "25/act_sleep_key": "act(\"sleep\") is not implemented: no on_leave and the device is not locked",
-  "25/act_sleep_tap": "act(\"sleep\") is not implemented: no on_leave and the device is not locked"
+  "15/lock_timer_alignment": "the timer wake comes interval_sec after locking, not at the next whole multiple of the interval"
 }

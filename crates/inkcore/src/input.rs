@@ -5,6 +5,7 @@ use mlua::{Lua, Table, Value};
 
 use crate::dialog::Handler;
 use crate::emu::{with, Host};
+use crate::lockscreen;
 use crate::log::py_repr_str;
 
 /// Every input advances virtual time by this much.
@@ -140,9 +141,22 @@ impl Host<'_> {
             Gate::Go => {}
         }
         let Ok(t) = ev.table(self.lua) else { return };
+        let outer = with(self.st, |s| {
+            let up = (ev.phase == "up").then_some(s.depth + 1);
+            std::mem::replace(&mut s.up_input, up)
+        });
         let handled = self
             .call("on_input", (self.ctx(), t))
             .is_some_and(|v| crate::lua::truthy(&v));
+        let sleep = with(self.st, |s| {
+            s.up_input = outer;
+            std::mem::take(&mut s.sleep_asked) && s.running
+        });
+        if sleep {
+            with(self.st, |s| s.log_line("system:act sleep: locking"));
+            // the lock boots a new Lua state: `self` must not run the app's callbacks after this
+            return lockscreen::lock(self);
+        }
         let offer = ev.key == Some("back")
             && !handled
             && with(self.st, |s| s.running && s.pending.is_none());

@@ -123,18 +123,6 @@ Already green and pinned: `15/lock_reason_timer`, `15/lock_elapsed_first`, `15/l
 
 ## §25 System actions
 
-### 25/act_inactive
-- Contract: `act("sleep")` and `act("power_off")` return `nil, "inactive"` anywhere except inside `on_input` for a key release or pointer release (not in load, timers or pointer press).
-- Core now: `nil, "invalid_argument"`.
-- Touch points: `crates/inkcore/src/ctx/stubs.rs` (`act`), `crates/inkcore/src/emu.rs` (input dispatch must flag an "up" event in progress).
-- Source: contract only (`sleep` and `power_off` were not called in the probe).
-
-### 25/act_sleep_tap, 25/act_sleep_key
-- Contract: `act("sleep")` from a key up or pointer up returns nothing; once the callback ends the session is closed (`on_leave` runs) and the device locks, as with a short power-key press.
-- Core now: the call returns `nil, "invalid_argument"` (logged as not emulated); there is no `on_leave` and no lock.
-- Touch points: `crates/inkcore/src/ctx/stubs.rs` (`act`), `crates/inkcore/src/emu.rs` (lock path).
-- Source: contract only.
-
 Already green and pinned: `25/act_refresh`, `25/act_inactive_no_lock` (refused `sleep`/`power_off` calls do not lock the device), `25/act_args` (unknown name is `nil, "invalid_argument"` - probe-confirmed; a non-string name raises). Not covered: `act("power_off")` with its confirmation dialog and `busy` (contract only, needs system dialog support).
 
 ## §26 Encoding, hashes, random

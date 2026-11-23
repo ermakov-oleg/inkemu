@@ -383,10 +383,10 @@ the start with an error. From each file inkemu takes:
 - `hash`: `sha256`, `md5` and `hmac_sha256` return the raw digest bytes (use `ctx.hex:encode` for text); `sha1` returns the
   20 raw bytes too; `crc32` returns a signed 32-bit integer (values from 2^31 wrap to negative); all verified in QEMU on firmware 26112001.
 - `screen` (`width`, `height`, `orientation`, `set_orientation`, `gray_levels` = 2, `gray_still` = 4),
-  `frontlight` (`get`, `set`, `reset`), `system` (`can_open`, `open`, `act`), `i18n` (`locale`), `perf` (`info` =
-  `{tick_us, draw_us, cmd_count, image_count, asset_hit, asset_miss, draw_frame}`: `cmd_count` and `image_count`
-  are the commands and `g:image` calls accepted in the last frame, `draw_frame` the frames of this session), `gc`,
-  `budget`, `reader` (answers from `<fixtures dir>/reader.json`), `lockscreen`, `lock`.
+  `frontlight` (`get`, `set`, `reset`), `system` (`can_open`, `open`, `act`: `refresh`, `sleep`), `i18n`
+  (`locale`), `perf` (`info` = `{tick_us, draw_us, cmd_count, image_count, asset_hit, asset_miss, draw_frame}`:
+  `cmd_count` and `image_count` are the commands and `g:image` calls accepted in the last frame, `draw_frame` the
+  frames of this session), `gc`, `budget`, `reader` (answers from `<fixtures dir>/reader.json`), `lockscreen`, `lock`.
 
 `clock:now()` has `year month day hour minute second weekday hour12 date_order date_sep epoch_sec local_sec
 offset_minutes revision valid`.
@@ -413,9 +413,13 @@ offset_minutes revision valid`.
   checked and logged), `kind` and `placeholder` are only checked, and there is no composition and no full-screen
   fallback. `type` types the text and presses the confirm key; a newline in it is the confirm key too. With
   `enter = "newline"`, `type` and `answer yes` insert a line break and the field stays open.
-- `ctx.system:act(s)` needs a string ("string expected" otherwise), as on the device. `"refresh"` makes the next
-  frame full, like `ctx:invalidate("full")`; inkemu answers every other string, `"sleep"` and `"power_off"`
-  included, with `nil, "invalid_argument"` and logs it.
+- `ctx.system:act(s)` needs a string ("string expected" otherwise), as on the device; an unknown name returns
+  `nil, "invalid_argument"`. `"refresh"` makes the next frame full, like `ctx:invalidate("full")`. `"sleep"` and
+  `"power_off"` work only in an `on_input` delivering a key or pointer `up`, elsewhere (and in a lock screen
+  session) they return `nil, "inactive"`. `"sleep"` returns nothing; when that `on_input` returns, the app leaves
+  (`on_leave`) and the device locks as with `emu.lock()`, unless the callback failed or called `ctx:quit()`.
+  `"power_off"` is not emulated: there is no confirmation dialog (so no `on_pause`/`on_resume` and never `busy`),
+  the call returns nothing, logs it and the app goes on as if the user cancelled.
 - Not verified on the device:
   - the 2.26 call form `ctx:log(...)`, which still logs;
   - `ctx.perf:info()`'s `tick_us`, `draw_us`, `asset_hit` and `asset_miss`, which measure the device's renderer:

@@ -175,3 +175,119 @@ fn lock_screen_frames_are_recorded_like_app_frames() {
     core.unlock();
     assert_eq!(core.status().refreshes, ["full", "full", "full"]);
 }
+
+fn app_with(index_lua: &str) -> Core {
+    let manifest = r#"{"app_id": "testapp", "entry": "index.lua", "api": "2.33",
+        "lockscreen": {"interval_sec": 60}}"#;
+    let lock = "function on_draw(c, g) g:text(0, 0, 'locked') end\n";
+    let files = AppFiles(BTreeMap::from([
+        ("manifest.json".to_string(), manifest.as_bytes().to_vec()),
+        ("index.lua".to_string(), index_lua.as_bytes().to_vec()),
+        ("lockscreen.lua".to_string(), lock.as_bytes().to_vec()),
+    ]));
+    Core::new(files, Config::default(), Persisted::default())
+}
+
+fn logged(core: &Core, s: &str) -> Option<usize> {
+    core.log().iter().position(|l| l.contains(s))
+}
+
+#[test]
+fn act_sleep_locks_once_the_up_event_on_input_returns() {
+    let mut core = app_with(
+        "function on_draw(c, g) g:text(0, 0, 'app screen') end\n\
+         function on_input(c, ev)\n\
+           if ev.type == 'key' and ev.phase == 'up' then\n\
+             c:log('act ' .. select('#', c.system:act('sleep')))\n\
+             c:log('after act')\n\
+           end\n\
+           return true\n\
+         end\n\
+         function on_leave(c) c:log('on_leave ran') end\n",
+    );
+    core.key("ok").unwrap();
+    let after = logged(&core, "after act").expect("on_input went on after act");
+    let left = logged(&core, "on_leave ran").expect("on_leave ran");
+    assert!(after < left);
+    assert!(logged(&core, "act 0").is_some());
+    assert!(core.locked() && has_text(&core, "locked"));
+    core.unlock();
+    assert!(!core.locked() && has_text(&core, "app screen"));
+}
+
+#[test]
+fn act_sleep_and_power_off_are_inactive_outside_an_up_event() {
+    let mut core = app_with(
+        "function on_input(c, ev)\n\
+           if ev.phase ~= 'up' then\n\
+             local _, e1 = c.system:act('sleep')\n\
+             local _, e2 = c.system:act('power_off')\n\
+             c:log(ev.type .. ' ' .. ev.phase .. ' ' .. tostring(e1) .. ' ' .. tostring(e2))\n\
+           end\n\
+           return true\n\
+         end\n",
+    );
+    core.hold(100, 100, 700).unwrap();
+    core.drag(&[(100, 100), (200, 100)], 100).unwrap();
+    core.key("ok").unwrap();
+    for ev in ["pointer down", "pointer hold", "pointer move", "key down"] {
+        assert!(
+            logged(&core, &format!("{ev} inactive inactive")).is_some(),
+            "{ev}: {:?}",
+            core.log().to_vec()
+        );
+    }
+    assert!(!core.locked());
+}
+
+#[test]
+fn act_sleep_from_an_unhandled_back_locks_without_the_leave_dialog() {
+    let mut core = app_with(
+        "function on_input(c, ev)\n\
+           if ev.key == 'back' and ev.phase == 'up' then c.system:act('sleep') end\n\
+           return ev.phase == 'down'\n\
+         end\n",
+    );
+    core.key("back").unwrap();
+    assert!(core.locked(), "{:?}", core.log().to_vec());
+    assert!(core.status().pending.is_none());
+}
+
+#[test]
+fn act_sleep_does_not_lock_when_the_callback_fails() {
+    let mut core = app_with(
+        "function on_input(c, ev)\n\
+           if ev.phase == 'up' then c.system:act('sleep') error('boom') end\n\
+           return true\n\
+         end\n",
+    );
+    core.tap(10, 10).unwrap();
+    assert!(!core.locked());
+    assert_eq!(core.errors().len(), 1);
+}
+
+#[test]
+fn act_power_off_from_an_up_event_returns_nothing_and_stays() {
+    let mut core = app_with(
+        "function on_input(c, ev)\n\
+           if ev.phase == 'up' then c:log('act ' .. select('#', c.system:act('power_off'))) end\n\
+           return true\n\
+         end\n",
+    );
+    core.tap(10, 10).unwrap();
+    assert!(logged(&core, "act 0").is_some());
+    assert!(logged(&core, "power_off: the confirmation dialog is not emulated").is_some());
+    let st = core.status();
+    assert!(st.running && !st.locked && st.pending.is_none());
+}
+
+#[test]
+fn act_sleep_is_inactive_in_a_lock_screen_session() {
+    let mut core = app_with("");
+    core.lock();
+    assert_eq!(
+        core.lua_eval("return select(2, ctx.system:act('sleep'))")
+            .unwrap(),
+        "inactive"
+    );
+}

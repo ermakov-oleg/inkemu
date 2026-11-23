@@ -246,10 +246,10 @@ fn random_bytes_system_act_and_small_members() {
                caps.ble, caps.identity, caps.nn, caps.ui, caps.dialog}"
         ),
         json!([
-            "string", 16, 1, "nil", "invalid_argument", 0, 436, true, 2, 4, true, false, false, false, false,
+            "string", 16, 1, "nil", "inactive", 0, 436, true, 2, 4, true, false, false, false, false,
             false, true
         ]),
-        "API 2.33.1 contract §5 says otherwise: perf:info() is not empty (05/perf_info); random:bytes(0) is invalid_argument (26/random_bytes)"
+        "API 2.33.1 contract §5 says otherwise: perf:info() is not empty (05/perf_info); random:bytes(0) is invalid_argument (26/random_bytes); §25: power_off outside a key or pointer up is inactive (25/act_inactive)"
     );
     assert!(
         core.log().iter().any(|l| l.contains("power_off")),
