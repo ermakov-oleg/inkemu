@@ -74,45 +74,87 @@ end
 -- what end_frame keeps for a container: it takes no focus and paints only its own look
 local CONTAINER_KIND = { paint = paint_container }
 
--- Registers the placed tree `n` in frame `f` in declaration order, containers before their children. A node
--- with no width or no height is left out with everything in it. False once the frame is full: what was registered
--- before stays.
-local function register(f, n)
-  if n.w <= 0 or n.h <= 0 then
-    return true
+-- The control record of node `n`, checked by its kind's own rules: the record, or nil and the error code, or nil,
+-- nil and the message of a part inkemu does not implement.
+local function control_of(st, n)
+  local c = { kind = kinds[n.kind], id = n.id }
+  local ok, unsupported = c.kind.check(c, n.o, st)
+  if unsupported then
+    return nil, nil, unsupported
+  end
+  if not ok then
+    return nil, INVALID
+  end
+  return c
+end
+
+-- Checks the controls under `n` without registering them (a hidden or zero-size subtree); returns as `register`.
+local function check_only(st, n)
+  if CONTAINERS[n.kind] then
+    for _, child in ipairs(n.nodes or n.children) do
+      if child then
+        local _, err, unsupported = check_only(st, child)
+        if err or unsupported then
+          return nil, err, unsupported
+        end
+      end
+    end
+  elseif CONTROLS[n.kind] then
+    local _, err, unsupported = control_of(st, n)
+    return nil, err, unsupported
+  end
+end
+
+-- Registers the placed tree `n` in frame `f` in declaration order, containers before their children, checking each
+-- control's own fields and box as it comes, as the reader does. A hidden node, or one with no width or no height, is
+-- left out with everything in it, but its controls are still checked. Stops at the first refusal, keeping what was
+-- registered before. Returns nothing, or nil and the error code, or nil, nil and the message of a part inkemu does
+-- not implement.
+local function register(st, f, n)
+  if n.hidden or n.w <= 0 or n.h <= 0 then
+    return check_only(st, n)
   end
   if CONTAINERS[n.kind] then
     if not reserve(f, 1) then
-      return false
+      return nil, "limit_exceeded"
     end
     if n.id then
       f.ids[n.id] = true
     end
     f.list[#f.list + 1] = { kind = CONTAINER_KIND, id = n.id, node = n }
-    for _, child in ipairs(n.children) do
-      if child and not register(f, child) then
-        return false
+    for _, child in ipairs(n.nodes or n.children) do
+      if child then
+        local _, err, unsupported = register(st, f, child)
+        if err or unsupported then
+          return nil, err, unsupported
+        end
       end
     end
-    return true
+    return
   end
-  local c = n.ctl
+  if not CONTROLS[n.kind] then
+    return
+  end
+  local c, err, unsupported = control_of(st, n)
   if c == nil then
-    return true
+    return nil, err, unsupported
   end
   -- placed first: what a control costs may depend on its box
   c.x, c.y, c.w, c.h = n.x, n.y, n.w, n.h
+  if not in_range(c) then
+    return nil, INVALID
+  end
   if not reserve(f, cost_of(c)) then
-    return false
+    return nil, "limit_exceeded"
   end
   f.ids[c.id] = true
   f.list[#f.list + 1] = c
-  return true
 end
 
--- the `w` or `h` of an outermost container: a whole number >= 1, or FIT from 2.15; nil when invalid
+-- the `w` or `h` of an outermost container or a ui:layout rect: a whole number 1..MAX_COORD, or FIT from 2.15; nil
+-- when invalid
 local function outer_side(v)
-  if is_side(v) then
+  if is_side(v) and v <= MAX_COORD then
     return math.tointeger(v)
   end
   if v == FIT and api_at_least(15) then
@@ -141,14 +183,15 @@ local function declare_container(st, kind, id, o, level)
   else
     root, err, unsupported = old_tree(st, f, id, kind, o, x, y, w, h)
   end
+  if not unsupported and root then
+    local _
+    _, err, unsupported = register(st, f, root)
+  end
   if unsupported then
     error(unsupported, level)
   end
-  if not root then
+  if err then
     return nil, err
-  end
-  if not register(f, root) then
-    return nil, "limit_exceeded"
   end
 end
 

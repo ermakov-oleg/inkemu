@@ -57,36 +57,25 @@ HOST_REFUSES: dict[tuple[str, int], list[str]] = {
     # label text {} and true reach g:text_box unchanged, which takes only strings and numbers
     ("s16_edge_inputs.api12", 16): LABEL_TEXT_REFUSED,
     ("s16_edge_inputs.api26", 16): LABEL_TEXT_REFUSED,
-    # a top-level button with text {} hands it to g:text_box the same way
-    ("s17_layout_edges.api15", 18): LABEL_TEXT_REFUSED[:1],
-    ("s17_layout_edges.api26", 18): LABEL_TEXT_REFUSED[:1],
+    # a button or label, at top level or as a child, hands a table or boolean text to g:text_box the same way
+    **{
+        (f"s17_layout_edges.api{minor}", step): refused
+        for minor in (15, 26)
+        for step, refused in (
+            (12, LABEL_TEXT_REFUSED[:1]),
+            (18, LABEL_TEXT_REFUSED[:1]),
+            (37, LABEL_TEXT_REFUSED[1:]),
+            (41, LABEL_TEXT_REFUSED[:1]),
+        )
+    },
 }
 
-# (scenario, step) -> how inkemu still differs from the oracle there: Task 4 choices that s17 measured otherwise
-NON_STRING_TEXT = (
-    "a button, switch or label child with a non-string text is refused; the reader takes it unless it is measured"
-)
-PER_CHILD = (
-    "the reader checks and registers children one by one, so a later child that is bad or placed past 32767 keeps "
-    "the earlier ones"
-)
-COUNT_FIRST = "ui:layout counts the 1024 children before it checks any field"
-RECT_32767 = "the reader refuses a ui:layout rect wider than 32767"
+# (scenario, step) -> how inkemu still differs from the oracle there, until a later task decides
+PARKED: dict[tuple[str, int], str] = {}
 # the fields a parked step may differ in: what a frame and a ui:layout call show
 PARKED_FIELDS = {
     "frame": {"calls", "focused_after", "op_counts", "stream", "stream_count"},
     "layout": {"result"},
-}
-PARKED: dict[tuple[str, int], str] = {
-    (f"s17_layout_edges.api{minor}", step): reason
-    for minor in (15, 26)
-    for steps, reason in (
-        ((6, 7, 10, 11, 12, 13, 16, 17, 33, 34, 37, 38, 41, 42), NON_STRING_TEXT),
-        ((45, 58), PER_CHILD),
-        ((50,), COUNT_FIRST),
-        ((60, 62, 63, 64), RECT_32767),
-    )
-    for step in steps
 }
 
 # step fields that are notes or inputs, not results

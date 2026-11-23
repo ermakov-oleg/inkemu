@@ -43,8 +43,9 @@ local function round(v)
   return math.floor(v + 0.5)
 end
 
+-- a text that is not a string reached here only where its size does not matter (see check_sizing)
 local function width_of(font, text, opts)
-  if text == nil or text == "" then
+  if type(text) ~= "string" or text == "" then
     return 0
   end
   return font:measure(text, opts)
@@ -52,6 +53,9 @@ end
 
 -- the widest of the lines of `text`
 local function widest_line(font, text, opts)
+  if type(text) ~= "string" then
+    return 0
+  end
   local best, from = 0, 1
   while true do
     local at = string.find(text, "\n", from, true)
@@ -118,7 +122,7 @@ content_h = function(n, w)
   local k, lh = n.kind, n.font and n.font.line_height
   v = 0
   if k == "label" then
-    if w >= 1 and n.text ~= "" then
+    if w >= 1 and type(n.text) == "string" and n.text ~= "" then
       local _, height = n.font:layout(n.text, w, 32767, n.mopts)
       v = math.tointeger(height) or 0
     end

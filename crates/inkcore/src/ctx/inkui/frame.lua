@@ -75,7 +75,7 @@ function declare(st, name, id, o, level)
   if unsupported then
     error(unsupported, level)
   end
-  if not ok then
+  if not (ok and in_range(c)) then
     return nil, INVALID
   end
   if not reserve(f, cost_of(c)) then

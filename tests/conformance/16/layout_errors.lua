@@ -62,6 +62,7 @@ local SPECS = {
   radius_256 = col({ { h = 10 } }, { radius = 256 }),
   skin_unknown = col({ { h = 10 } }, { skin = "nope" }),
   label_text_number = col({ { kind = "label", text = 5 } }),
+  button_text_number_fit = col({ { kind = "button", text = 5, w = "fit", h = 40 } }, { align_items = "start" }),
   switch_note_number = col({ { kind = "switch", text = "a", note = 5 } }),
   tabs_without_items = col({ { kind = "tabs", h = 40 } }),
   unknown_kind = col({ { kind = "slider", h = 10 } }),
@@ -95,4 +96,15 @@ function on_load(ctx)
   T.value("not_refused", wrong)
   -- refused before anything else is looked at: the same spec is fine with a valid rect
   T.call("valid", function() return type(ui:layout(R, row({ { w = 10 } }))) end)
+  -- a text that is not a string is fine where it is not measured
+  local function kind_of(rect, spec)
+    local r = table.pack(ui:layout(rect, spec))
+    return type(r[1]) == "table" and "table" or tostring(r[2])
+  end
+  T.value("label_text_number_with_h", kind_of(R, col({ { kind = "label", text = 5, h = 30 } })))
+  T.value("button_text_table_stretched", kind_of(R, col({ { kind = "button", text = {}, h = 40 } })))
+  -- a rect larger than 32767 either way
+  T.value("rect_w_32767", kind_of({ x = 0, y = 0, w = 32767, h = 10 }, row({ { w = 10 } })))
+  T.value("rect_w_32768", kind_of({ x = 0, y = 0, w = 32768, h = 10 }, row({ { w = 10 } })))
+  T.value("rect_h_32768", kind_of({ x = 0, y = 0, w = 10, h = 32768 }, row({ { w = 10 } })))
 end

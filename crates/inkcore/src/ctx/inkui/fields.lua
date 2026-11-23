@@ -10,6 +10,15 @@ function is_side(v)
   return is_integral(v) and v >= 1
 end
 
+-- the largest coordinate and size the reader takes (it refuses a child placed past it and a wider ui:layout rect)
+MAX_COORD = 32767
+
+-- a control's placed box within those coordinates
+function in_range(c)
+  return c.x >= -MAX_COORD - 1 and c.x <= MAX_COORD and c.y >= -MAX_COORD - 1 and c.y <= MAX_COORD
+    and c.w <= MAX_COORD and c.h <= MAX_COORD
+end
+
 function int_in(v, lo, hi)
   return is_integral(v) and v >= lo and v <= hi
 end

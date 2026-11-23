@@ -136,6 +136,30 @@ no radio and is not the device, so panel timing and network completion were not 
 - Status: measured on 26112001 (the reader's UI library run as a black box).
 - Checks: `16/layout_content_sizes` (`reserve_without_fit`).
 
+### D14 - container children checked one by one in a frame
+
+- Contract says: a control whose values break the rules returns `nil, "invalid_argument"` and is not drawn (§16).
+- Reader does: a `row` or `column` in a frame checks and registers its children in declaration order. When a child is
+  refused (a bad field of its own, or a box placed past 32767, see D15), the call returns `invalid_argument` there,
+  and the container and the children registered before stay: they are drawn, hit and take focus. When the 128 controls
+  run out first, the call returns `limit_exceeded` (D9), even if a later child is bad.
+- inkemu does: the same, for a control's own fields and its placed box. Sizing fields are checked for the whole tree
+  before anything is registered.
+- Status: measured on 26112001 (the reader's UI library run as a black box).
+- Checks: `16/layout_limits` (`bad_child.before`, `child_past_32767.before`).
+
+### D15 - coordinates up to 32767
+
+- Contract says: `x`, `y` are integers and `w`, `h` integers of at least 1, with no upper bound; a `ui:layout` rect
+  the same (§16).
+- Reader does: a `ui:layout` rect wider or taller than 32767 is `invalid_argument`; a container child placed at an
+  `x` past 32767 is refused when it is registered (D14).
+- inkemu does: the same; a control's `x` and `y` must lie in -32768..32767 and its `w` and `h` be at most 32767, at
+  top level as in a container, and an outermost container's `w` and `h` at most 32767.
+- Status: measured on 26112001 for the rect's width and a child's `x` (the reader's UI library run as a black box);
+  the other bounds follow from 16-bit coordinates and were not measured.
+- Checks: `16/layout_errors` (`rect_w_32768`, `rect_h_32768`), `16/layout_limits` (`child_past_32767`).
+
 ## Notes
 
 ### N1 - completion of PUT, PATCH and DELETE
@@ -208,24 +232,27 @@ the README.
   the 2.15 fields, and refuses `spacer` children; a hidden child's `id` is not checked against the keys of the
   `ui:layout` result; a percentage in a fitted container resolves against the size found for it. Checks:
   `16/row_column_before_2_15`, `16/layout_content_sizes`, `16/layout_hidden_and_false`.
-- `ctx.ui` containers, measured later (oracle scenario s17) and equal to what inkemu does: in a frame a control
-  child without `id` or with `id = ""`, or a child without `kind`, makes the whole call `invalid_argument`, while
-  `ui:layout` takes both and refuses only `id = ""`; the grow and shrink splits wrap in 32-bit integers the same way
-  (see D13 for `reserve`).
-- `ctx.ui` containers, measured later (s17) and still different in inkemu; the oracle steps are parked in
-  `tests/test_inkui_oracle.py` until a follow-up decides:
-  - inkemu checks the whole tree before it lays out or registers anything, and the first `invalid_argument` or
-    `limit_exceeded` in declaration order wins. The reader checks and registers the children one by one, so a bad
-    field after the 128th control gives `limit_exceeded` with the earlier children drawn, and a child placed past
-    32767 gives `invalid_argument` after the earlier ones were registered.
-  - inkemu counts the 1024 children of `ui:layout` as it checks them (hidden ones included, frames too); the reader
-    counts them all before it checks any field.
-  - inkemu refuses a non-string `text` on a `label`, `button` or `switch` child. The reader takes it and hands it to
-    `g:text_box`, except where the text must be measured: a button with `w = "fit"`, or a label without a numeric
-    `h`.
-  - The reader refuses a `ui:layout` rect wider than 32767; inkemu takes it.
+- `ctx.ui` containers, measured later (oracle scenario s17) and followed by inkemu:
+  - In a frame a control child without `id` or with `id = ""`, or a child without `kind`, makes the whole call
+    `invalid_argument`; `ui:layout` takes both and refuses only `id = ""`.
+  - `ui:layout` counts all the child tables of the tree against 1024 before it checks any field, and does not check
+    control fields that do not size the child, such as `enabled`.
+  - A `label`, `button` or `switch` child takes a `text` that is not a string and hands it to `g:text_box` as it is,
+    except where the text must be measured: a `button` or `switch` with `w = "fit"`, or a `label` without a numeric
+    `h`, is `invalid_argument`.
+  - See D13 (`reserve`), D14 (children checked one by one) and D15 (32767).
+  - The grow and shrink splits multiply in 32-bit integers and wrap with huge weights (six children of `w = 400`
+    and `shrink = 1000` in a 480 px row give one child 1869 px). inkemu does not try to emulate that overflow; its
+    integers are 32-bit too, so the s17 cases come out the same, but no check pins them.
 - `ctx.ui` containers, not measured:
-  - A part inkemu does not implement yet raises only when nothing in the tree is invalid.
+  - A frame checks the structure and the sizing fields of the whole tree first (kinds, ids, sizes, the fields a
+    content size reads), so a bad one anywhere refuses the call before anything is registered; only a control's other
+    fields and its placed box are checked one by one (D14). A missing `id` or `kind` was measured only on the first
+    child.
+  - A part inkemu does not implement yet raises only when nothing in that first pass is invalid.
+  - The 1024 children are counted in frames too.
+  - A control declared at top level is held to the same 32767 limits as a child (D15).
+  - A text that is not a string counts as 0 px wide where an unset `w` takes the content width.
   - A hidden child's `id` is not reserved in the frame; a zero-size child is not registered, so its `id` is free too.
   - `divider = false` is the same as no divider, and `children = nil` as no children.
   - Dividers are drawn between neighbours that are not spacers even when one of them has zero size.

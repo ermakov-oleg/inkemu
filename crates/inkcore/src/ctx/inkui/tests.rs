@@ -1224,3 +1224,28 @@ fn narrow_radio_cells_never_get_a_negative_size() {
     assert_eq!(log[2], "circle(0,100,0,{line_width=2})");
     assert!(!log.iter().any(|c| c.contains(",-")), "{log:?}");
 }
+
+#[test]
+fn a_frame_checks_each_child_as_it_registers_it() {
+    let out = layout_run(
+        "2.26",
+        "local function try(children)\n\
+           ui:begin_frame(g)\n\
+           local r = table.pack(ui:column('c', {x = 0, y = 0, w = 100, h = 100, children = children}))\n\
+           ui:end_frame()\n\
+           return (r.n == 0 and 'ok' or tostring(r[2])) .. ':' .. tostring(ui:focused())\n\
+         end\n\
+         return try({{kind = 'button', id = 'a', h = 20}, {kind = 'button', id = 'b', h = 20, enabled = 'no'}}),\n\
+           try({{kind = 'button', id = 'a', h = 20}, {kind = 'button', id = 'h', h = 20, hidden = true, enabled = 1}}),\n\
+           try({{kind = 'button', id = 'a', h = 20}, {kind = 'button', id = 'z', h = 20, min_h = 0, max_h = 0,\n\
+             enabled = 1}}),\n\
+           try({{kind = 'button', id = 'a', h = 20}, {kind = 'button', id = 'b', h = 20, grow = -1}}),\n\
+           try({{kind = 'button', id = 'a', h = 20, text = 7}, {kind = 'label', id = 'l', h = 20, text = true}})",
+    );
+    // a bad own field keeps the child before it, even on a hidden or zero-height child; a bad sizing field refuses
+    // the whole call; texts that are not strings are taken where nothing measures them
+    assert_eq!(
+        out,
+        "invalid_argument:a,invalid_argument:a,invalid_argument:a,invalid_argument:nil,ok:a"
+    );
+}

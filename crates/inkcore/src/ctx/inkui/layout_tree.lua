@@ -1,11 +1,12 @@
 -- ctx.ui (§16, 2.15): the fields of `row`/`column` containers and their children, checked into a tree of nodes
--- for layout_flex.lua. One walk finds the first invalid field or exceeded limit; a kind inkemu does not implement
--- is remembered and raised by the caller only when nothing is invalid.
+-- for layout_flex.lua. After the children are counted, one walk finds the first invalid field or exceeded limit
+-- among the structure and the sizing fields; a kind inkemu does not implement is remembered and raised by the
+-- caller only when nothing is invalid. In a frame, a control's other fields are checked when it is registered.
 --
 -- A node: `kind` (nil for a plain box), `o` (the script's table), `id`, sizes `w`/`h` (nil, an integer, FIT or
 -- `{ pct = N }`), bounds `lo_w hi_w lo_h hi_h` (nil `hi` is unlimited), `grow`, `shrink`, `align_self`, `aspect`,
--- `can_fit`, `font`, and for a container `pad_t pad_r pad_b pad_l`, the gaps, alignments, `wrap`, the appearance
--- and `children` (a node, or false where the child is skipped). In a frame, `ctl` is the control's record.
+-- `can_fit`, `font`, `hidden`, and for a container `pad_t pad_r pad_b pad_l`, the gaps, alignments, `wrap`, the
+-- appearance, `children` (a node, or false where the child is skipped) and `nodes` (the same with hidden ones).
 
 FIT = "fit"
 local MAX_LEVELS = 16
@@ -15,7 +16,8 @@ local MAX_CHILDREN = 1024
 CONTAINERS = { row = true, column = true, grid = true, stack = true }
 FLEX = { row = true, column = true }
 local GRID_STACK = { grid = true, stack = true }
-local CONTROLS = {
+-- the kinds of control a container child can be
+CONTROLS = {
   label = true, button = true, switch = true, image = true, field = true, region = true,
   tabs = true, radio = true, stepper = true, pager = true, list = true, progress = true,
 }
@@ -159,7 +161,9 @@ local function check_sizing(cx, n, o)
   local k = n.kind
   n.font = is_font(o.font) and o.font or host.fonts.medium
   if k == "label" or k == "button" or k == "switch" then
-    if not optional(o.text, "string") then
+    -- any other text goes to text_box as it is, but cannot be measured: a label's height or a fitted width
+    local measured = k == "label" and type(o.h) ~= "number" or k ~= "label" and o.w == FIT
+    if not optional(o.text, "string") and measured then
       return fail(cx, INVALID)
     end
     n.text = o.text or ""
@@ -274,20 +278,12 @@ end
 
 local node_of
 
--- a control child of a container in a frame: its own checks, and the record end_frame paints (`n.ctl`)
-local function check_control(cx, n, o)
+-- a control child in a frame: a kind inkemu implements; its own fields are checked when it is registered
+local function check_kind(cx, n)
   local ctl = kinds[n.kind]
   if ctl == nil or ctl.check == nil then
-    return not_implemented(cx, "ui:" .. n.kind)
+    not_implemented(cx, "ui:" .. n.kind)
   end
-  local c = { kind = ctl, id = n.id }
-  local ok, unsupported = ctl.check(c, o, cx.st)
-  if unsupported then
-    cx.unsupported = cx.unsupported or unsupported
-  elseif not ok then
-    return fail(cx, INVALID)
-  end
-  n.ctl = c
 end
 
 -- the id of a node: a string never used before in this tree (nor in the open frame); required where `need`
@@ -313,25 +309,44 @@ local function check_children(cx, n, o, level)
   elseif type(list) ~= "table" then
     return fail(cx, INVALID)
   end
-  n.children = {}
+  -- `children` is what the layout places; `nodes` also keeps the hidden ones, whose fields a frame still checks
+  n.children, n.nodes = {}, {}
   for i = 1, #list do
     local item = list[i]
     if item == false then
-      n.children[i] = false
+      n.children[i], n.nodes[i] = false, false
     elseif type(item) ~= "table" then
       return fail(cx, INVALID)
     else
-      cx.count = cx.count + 1
-      if cx.count > MAX_CHILDREN then
-        return fail(cx, "limit_exceeded")
-      end
       local child = node_of(cx, item, n, level)
       if cx.err then
         return
       end
       n.children[i] = (child and not child.hidden) and child or false
+      n.nodes[i] = child or false
     end
   end
+end
+
+-- the child tables of the tree under `o`, counted before anything else is checked; stops past MAX_CHILDREN
+local function count_children(o, n)
+  local list = o.children
+  if type(list) ~= "table" then
+    return n
+  end
+  for i = 1, #list do
+    local item = list[i]
+    if type(item) == "table" then
+      n = n + 1
+      if n > MAX_CHILDREN then
+        return n
+      end
+      if CONTAINERS[item.kind] then
+        n = count_children(item, n)
+      end
+    end
+  end
+  return n
 end
 
 -- the node of `o`, a child of the container `parent` at nesting `level` (the outermost container is level 1)
@@ -378,7 +393,7 @@ node_of = function(cx, o, parent, level)
     return
   end
   if cx.frame and CONTROLS[kind] then
-    check_control(cx, n, o)
+    check_kind(cx, n)
   end
   if CONTAINERS[kind] then
     check_children(cx, n, o, level + 1)
@@ -390,7 +405,7 @@ end
 -- declared in one as `id` (nil for ui:layout); `st` is the UI object's state. Returns the root node, or nil and the
 -- error code, or nil, nil and the message of a part inkemu does not implement.
 function layout_tree(st, frame, id, kind, o)
-  local cx = { st = st, frame = frame, ids = {}, count = 0 }
+  local cx = { st = st, frame = frame, ids = {} }
   if id ~= nil then
     cx.ids[id] = true
   end
@@ -399,6 +414,9 @@ function layout_tree(st, frame, id, kind, o)
   end
   if not CONTAINERS[kind] then
     return nil, INVALID
+  end
+  if count_children(o, 0) > MAX_CHILDREN then
+    return nil, "limit_exceeded"
   end
   local n = { kind = kind, o = o, id = id, can_fit = true }
   check_container(cx, n, o)
@@ -451,7 +469,7 @@ local function old_children(cx, n, o, level)
     if FLEX[kind] then
       old_children(cx, c, item, level + 1)
     else
-      check_control(cx, c, item)
+      check_kind(cx, c)
     end
     if cx.err then
       return
@@ -463,7 +481,7 @@ end
 -- The tree of a row or column declared as `id` in `frame` by a package for API 2.14 or earlier, placed at `x, y`
 -- with size `w` × `h`. Returns as layout_tree does.
 function old_tree(st, frame, id, kind, o, x, y, w, h)
-  local cx = { st = st, frame = frame, ids = { [id] = true }, count = 0 }
+  local cx = { st = st, frame = frame, ids = { [id] = true } }
   local n = { kind = kind, o = o, id = id, x = x, y = y, w = w, h = h }
   old_children(cx, n, o, 1)
   if cx.err then
