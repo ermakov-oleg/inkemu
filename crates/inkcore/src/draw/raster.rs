@@ -128,31 +128,28 @@ impl Frame {
         }
     }
 
-    /// Circle of radius `r` around `x`, `y`; with `arc`, only the part from `a0` to `a1` degrees (clockwise from
-    /// 3 o'clock), a pie slice when filled.
+    /// Circle of radius `r` around the centre of pixel `x`, `y` (§6): fill covers the pixel centres closer than
+    /// `r`, a stroke those of them at `r - width` or more. With `arc`, only the stroke from `a0` clockwise to `a1`
+    /// degrees (0 is 3 o'clock); a span of whole turns draws nothing.
     pub fn circle(&mut self, x: f64, y: f64, r: f64, arc: Option<(f64, f64)>, st: Style) {
-        let (cx, cy, outer) = (x + 0.5, y + 0.5, r + 0.5);
-        let inner = if st.fill {
-            -1.0
+        let span = arc.map(|(a0, a1)| (a0, (a1 - a0).rem_euclid(360.0)));
+        if span.is_some_and(|(_, s)| s == 0.0) {
+            return;
+        }
+        let (cx, cy) = (x + 0.5, y + 0.5);
+        let inner = if st.fill && arc.is_none() {
+            0.0
         } else {
-            outer - f64::from(st.width)
+            (r - f64::from(st.width)).max(0.0)
         };
-        let in_angle = |px: f64, py: f64| match arc {
+        let in_angle = |px: f64, py: f64| match span {
             None => true,
-            Some((a0, a1)) if a1 - a0 >= 360.0 => true,
-            Some((a0, a1)) => {
-                let a = (py - cy).atan2(px - cx).to_degrees();
-                (a - a0).rem_euclid(360.0) <= (a1 - a0).rem_euclid(360.0)
-            }
+            Some((a0, s)) => ((py - cy).atan2(px - cx).to_degrees() - a0).rem_euclid(360.0) <= s,
         };
-        self.paint(
-            (cx - outer, cy - outer, cx + outer, cy + outer),
-            st.ink,
-            |px, py| {
-                let d2 = (px - cx).powi(2) + (py - cy).powi(2);
-                d2 <= outer * outer && (inner < 0.0 || d2 > inner * inner) && in_angle(px, py)
-            },
-        );
+        self.paint((cx - r, cy - r, cx + r, cy + r), st.ink, |px, py| {
+            let d2 = (px - cx).powi(2) + (py - cy).powi(2);
+            d2 < r * r && d2 >= inner * inner && in_angle(px, py)
+        });
     }
 
     pub fn polygon(&mut self, pts: &[(f64, f64)], st: Style) {
@@ -170,6 +167,13 @@ impl Frame {
             self.line(a.0, a.1, b.0, b.1, st.width, st.ink);
         }
     }
+}
+
+/// Whether the point `px`, `py` of a `w`×`h` box at the origin lies inside its corners rounded by `radius`, as
+/// `g:rect{radius}` rounds them (a radius over half the short side is half the short side).
+pub(crate) fn in_rounded(px: f64, py: f64, w: f64, h: f64, radius: f64) -> bool {
+    let rad = radius.max(0.0).min(w / 2.0).min(h / 2.0);
+    in_round_rect(px, py, 0.0, 0.0, w, h, rad)
 }
 
 fn in_round_rect(px: f64, py: f64, l: f64, t: f64, r: f64, b: f64, rad: f64) -> bool {

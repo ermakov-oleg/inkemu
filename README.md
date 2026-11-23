@@ -175,6 +175,22 @@ and `/AppFiles/<app_id>/`); inkemu applies the quota of 128 MiB and 512 files to
 `.emu/` in the working directory, or `$INKEMU_STATE_ROOT`. `--fresh` wipes the app state first, both file directories
 included, then seeds `files/` from `<fixtures dir>/files/`.
 
+## Breaking changes in 0.2
+
+- `g:round_rect`, `g:measure`, `g:measure_text`, `g:fill_pattern` and `g:pattern_rect` are removed because firmware
+  26112001 has none of them. Use `g:rect(x, y, w, h, {radius = r})`, `font:measure(text)` (for example
+  `ctx.fonts.medium:measure("Hi")`) and `g:pattern`. There is no compatibility mode.
+- A `g` kept after its callback returns `nil, "inactive"` instead of drawing into the next frame.
+- `g:image` of something that is not an image is `nil, "invalid_argument"`, and of a released `ctx.image` or
+  `ctx.qr` image or layer `nil, "invalid_handle"`, instead of drawing nothing or failing the frame (a released
+  `ctx.package:image` stays drawable). `layer:draw` on a released layer returns
+  `nil, "invalid_handle"` instead of raising, and `release()` returns true.
+- `polyline` and `polygon` with too few points or an odd array return `nil, "invalid_argument"` instead of drawing
+  nothing or failing the frame; more than 128 points return `nil, "limit_exceeded"`.
+- `g:pattern` with an unknown `kind` returns `nil, "invalid_argument"`; without `kind` it draws `dot`.
+- Circles and arcs follow the pixel rules of §6: half a pixel smaller than in 0.1, an arc of whole turns draws
+  nothing, and a filled `arc` is a stroke, not a pie slice.
+
 ## Supported API
 
 inkemu emulates firmware API 2.33, build 26112001 (`ctx.device.firmware` is `XT Licorice 26112001`, `model`
@@ -185,11 +201,32 @@ Callbacks: `on_load`, `on_resume`, `on_draw(ctx, g)`, `on_input(ctx, ev)` (point
 holds; side-button keys), `on_tick`, `on_leave`. A `lockscreen` block in the manifest runs its own entry file on
 lock and on every `interval_sec` wake, with `ctx.lock` (`reason`, `done`, `set_interval`, ...).
 
-Drawing (`g`): `clear`, `rect`, `round_rect`, `line`, `circle`, `arc`, `polygon`, `polyline`, `text`, `text_box`,
-`image`, `pattern`, `pattern_rect`, `fill_pattern`, `size`, `measure`, `measure_text`, plus layers via `ctx.layers`.
-A frame accepts 1024 commands, and each line a `text_box` draws is one of them. A call past the cap returns
-`nil, "limit_exceeded"` and draws nothing (a `text_box` that does not fit whole is refused whole); the frame logs
-one warning with the number of commands asked for.
+Drawing (`g`): `size`, `clear`, `rect`, `line`, `circle`, `arc`, `polyline`, `polygon`, `pattern`, `text`,
+`text_box` and `image`, plus layers via `ctx.layers`. A `g` works only during its callback (`on_draw` or
+`layer:draw`); after it returns, every method returns `nil, "inactive"`. A frame accepts 1024 commands, and each
+line a `text_box` draws is one of them. A call past the cap returns `nil, "limit_exceeded"` and draws nothing (a
+`text_box` that does not fit whole is refused whole); the frame logs one warning with the number of commands asked
+for.
+
+Shapes and images, as in the contract (§6):
+
+- `polyline` takes 2 to 128 points and `polygon` 3 to 128, as a flat `{x1, y1, x2, y2, ...}` array (inkemu also
+  takes 0.1's `{x, y}` and `{x = , y = }` points). Fewer points or an odd array is `nil, "invalid_argument"`; more
+  than 128 points is `nil, "limit_exceeded"`, as on the reader (deviation D2; the contract says `invalid_argument`).
+- `circle` fills the pixels whose centre is closer than `r` to `(cx + 0.5, cy + 0.5)`; its stroke is the ring of
+  those at `r - line_width` or more. `arc` is that stroke from `start_deg` clockwise to `end_deg` (`fill` does not
+  apply); when the two differ by a whole multiple of 360 nothing is drawn.
+- `g:pattern`: `kind` defaults to `dot` and `density` to 50. An unknown `kind`, or a `density` that is not a whole
+  number from 0 to 100, is `nil, "invalid_argument"` and draws nothing.
+- `g:image(img, x, y, opts)` takes an object from `ctx.package:image`, `ctx.image`, `ctx.qr` or `ctx.layers`.
+  Anything else, or a layer drawn into itself, is `nil, "invalid_argument"`; a released runtime image or layer is
+  `nil, "invalid_handle"`. `src = {x = , y = , w = , h = }`, or `{x, y, w, h}` by position, draws only that region of
+  the image: four whole numbers, `x, y >= 0`, `w, h >= 1`, inside the image, else `nil, "invalid_argument"`; `w` and
+  `h` then scale the region. `invert = true` swaps black and white after dithering, `radius` clips the output to
+  the corners `g:rect{radius}` draws, and a `color` of 0–7 draws the ink of a black-and-white image white.
+- `release()` of an image or a layer returns true and can be repeated. A `ctx.package:image` stays drawable after it
+  (§8); an image from `ctx.image` or `ctx.qr`, or a layer, is then `nil, "invalid_handle"`. `layer:draw` on a
+  released layer returns `nil, "invalid_handle"` without calling the function.
 
 Text, as in the contract (§7):
 
@@ -242,7 +279,7 @@ Grey, as measured on 26112001: the canvas is 1-bit, and grey is a pattern of bla
 - `g:pattern(x, y, w, h, {kind, density, color})` sets the pattern's pixels to `color` and leaves the others as they
   are, so `color = 0` puts white dots over ink. `kind = 'dot'` is an ordered dither, the standard 8×8 Bayer matrix
   anchored to the screen, with `density` percent of ink. `'line'` inks every other row and `'cross'` is a grid with a
-  3 px pitch (about 57 %). Any other kind draws nothing and logs nothing, as on the device.
+  3 px pitch (about 57 %). Any other kind is `nil, "invalid_argument"` and draws nothing, as on the device.
 - `g:rect(x, y, w, h, {radius = r})` rounds the corners; this is how the firmware's own UI draws rounded boxes.
 - A grey PNG or JPEG from `ctx.image` is dithered by `g:image` after scaling.
 
@@ -327,9 +364,8 @@ offset_minutes revision valid`.
   - the level `ctx.frontlight:reset()` goes back to (inkemu: the level at start, 0);
   - `ctx.random:bytes(n)` with `n` below 0 or above 1 MiB: inkemu refuses it with `nil, "invalid_argument"`;
   - the quota of `ctx.files` (inkemu: the same as `ctx.storage`'s, counted separately);
-  - `g:pattern` without `density` (inkemu: 50) or without `kind` (inkemu: nothing, like an unknown kind); whether
-    `density` changes `line` and `cross` (inkemu: no); whether `line` and `cross` are anchored to the screen like
-    `dot` or to the box (inkemu: the screen; the probe's boxes started where both agree);
+  - whether `density` changes the `line` and `cross` patterns (inkemu: no); whether `line` and `cross` are anchored
+    to the screen like `dot` or to the box (inkemu: the screen; the probe's boxes started where both agree);
   - `g:pattern` with a `density` that is not a number (inkemu: the frame fails with "g: bad values in on_draw");
   - the colour threshold in `arc`, `polyline` and `text_box` (the probe tried `rect`, `circle`, `line` and text);
   - `color` outside 0–15: inkemu applies the same threshold (below 8 is white);
@@ -340,11 +376,15 @@ offset_minutes revision valid`.
     `consumed` when `ellipsis` took characters off the last line (inkemu: the bytes up to the kept ones), a
     `text_box` with no line that fits in a frame that is already full (inkemu: accepted, it costs nothing), a
     `ctx.fonts:size` sample over 256 bytes (inkemu: `invalid_argument`).
-- `g:round_rect`, `g:measure`, `g:measure_text`, `g:fill_pattern` and `g:pattern_rect` are not in the device's `g`
-  metatable listing and were not verified by a call; inkemu keeps them (`round_rect` as before; the device's way
-  is `g:rect` with `radius`).
 - `g:image` resolves the image when the command is recorded, not at the end of `on_draw`.
-- Layer semantics and error codes are guesses based on the notes.
+- Images and layers have no transparency: a new layer is white, not transparent, so a layer covers what lies under
+  it and `invert` turns its undrawn area black. `g:image`'s `background` is not emulated (with opaque images there is
+  nothing for it to show through), nor are `gray` and the transforms (`flip_x`, `rotate`, ...). `w` and `h` scale
+  each side on its own, up to 8192 (the contract scales only when both are set, up to 4096), and shrinking the width
+  is Lanczos plus dithering, not nearest-neighbour. `color` tints only an image (or `src` region) whose pixels are
+  all pure black or white, so an anti-aliased PNG icon is not tinted.
+- Layers: `draw` inside `on_draw` or inside another `draw` still runs (the contract returns `nil, "busy"`), an error
+  in its function fails the app, and `set_bits` and the limit of 4 layers are not emulated.
 - Remote commands (daemon verbs, MCP) freeze the window clock, read-only ones included, so a screenshot is stable;
   `resume`, or `P` in the window, lets time run again.
 - A callback (or the lock screen) that runs more than 200 million Lua instructions is aborted as an app error

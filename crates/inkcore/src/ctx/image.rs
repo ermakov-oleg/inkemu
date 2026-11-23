@@ -11,11 +11,19 @@ use super::{bytes_arg, soft_fail};
 use crate::draw::image::{decode, Decoded, Gray};
 use crate::emu::{with, Shared};
 
+/// Whether `release` frees an image: package images stay drawable after it (§8), the others do not.
+#[derive(Clone, Copy, PartialEq)]
+pub(super) enum Kind {
+    Package,
+    Runtime,
+}
+
 /// An image object (`width`, `height`, `_id`, `release` plus `methods`) for a new entry in the image table.
 pub(super) fn new_image(
     lua: &Lua,
     st: &Shared,
     img: Gray,
+    kind: Kind,
     name: &str,
     methods: Vec<(&str, Method)>,
 ) -> mlua::Result<(Table, i64)> {
@@ -27,9 +35,12 @@ pub(super) fn new_image(
     });
     let release = {
         let st = st.clone();
-        method(move |_, _| {
-            with(&st, |s| s.images.remove(&id));
-            Ok(MultiValue::new())
+        method(move |lua, _| {
+            // the device unloads a package image and decodes it again when drawn: invisible to the script
+            if kind == Kind::Runtime {
+                with(&st, |s| s.images.remove(&id));
+            }
+            true.into_lua_multi(lua)
         })
     };
     let mut all = vec![("release", release)];
@@ -42,7 +53,12 @@ pub(super) fn new_image(
 }
 
 /// `image:decode(data)` and `package:image(name)`: the image, or `nil, "decode_failed"`.
-pub(super) fn decode_image(lua: &Lua, st: &Shared, data: &[u8]) -> mlua::Result<MultiValue> {
+pub(super) fn decode_image(
+    lua: &Lua,
+    st: &Shared,
+    data: &[u8],
+    kind: Kind,
+) -> mlua::Result<MultiValue> {
     match decode(data) {
         Decoded::Failed => soft_fail(lua, "decode_failed"),
         Decoded::Image { img, png } => {
@@ -51,7 +67,7 @@ pub(super) fn decode_image(lua: &Lua, st: &Shared, data: &[u8]) -> mlua::Result<
                     s.warn("image:decode: PNG may not decode on the device (older firmware closes the app); use JPEG")
                 });
             }
-            new_image(lua, st, img, "image", vec![])?
+            new_image(lua, st, img, kind, "image", vec![])?
                 .0
                 .into_lua_multi(lua)
         }
@@ -113,7 +129,7 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
         let st = st.clone();
         method(move |lua, args| {
             let data = bytes_arg("decode", 1, args.iter().next().unwrap_or(&Value::Nil))?;
-            decode_image(lua, &st, &data)
+            decode_image(lua, &st, &data, Kind::Runtime)
         })
     };
     ctx.raw_set("image", new_object(lua, "image", &[("decode", decode)])?)?;
@@ -122,7 +138,7 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
         method(move |lua, args| {
             let data = bytes_arg("encode", 1, args.iter().next().unwrap_or(&Value::Nil))?;
             match std::str::from_utf8(&data).ok().and_then(qr) {
-                Some(img) => new_image(lua, &st, img, "image", vec![])?
+                Some(img) => new_image(lua, &st, img, Kind::Runtime, "image", vec![])?
                     .0
                     .into_lua_multi(lua),
                 None => soft_fail(lua, "invalid_argument"),

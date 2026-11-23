@@ -1,7 +1,7 @@
 //! Patterns anchored to the screen, not to the rectangle, so neighbouring blocks join without a seam.
 use super::Frame;
 
-/// The kinds `g:pattern` draws on firmware 26112001; the device silently draws nothing for any other.
+/// The kinds `g:pattern` draws on firmware 26112001; the device refuses any other with `invalid_argument`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Pattern {
     /// Ordered dither: of every 8×8 tile, this many pixels are inked.
@@ -61,15 +61,6 @@ pub fn fill(frame: &mut Frame, rect: (i32, i32, i32, i32), kind: Pattern, ink: u
     each(frame, rect, |f, px, py| {
         if kind.inks(px, py) {
             f.set(px, py, ink);
-        }
-    });
-}
-
-/// 0.1's 50 % checker for `g:pattern_rect` / `g:fill_pattern` over integer coordinates (0.1 truncates them).
-pub fn checker(frame: &mut Frame, x: i32, y: i32, w: i32, h: i32) {
-    each(frame, (x, y, w, h), |f, px, py| {
-        if (px + py) % 2 == 0 {
-            f.set(px, py, 1);
         }
     });
 }

@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use mlua::{IntoLuaMulti, Lua, Table, Value};
 
-use super::image::decode_image;
+use super::image::{decode_image, Kind};
 use super::object::{method, new_object};
 use super::{arg, int_value, py_int, raw, soft_fail};
 use crate::app::AppFiles;
@@ -58,7 +58,7 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared, app: &Rc<AppFiles>) -
     let image = {
         let (read_file, st) = (read_file.clone(), st.clone());
         method(move |lua, args| match read_file(&args.into_vec()) {
-            Ok(data) => decode_image(lua, &st, &data),
+            Ok(data) => decode_image(lua, &st, &data, Kind::Package),
             Err(why) => soft_fail(lua, why),
         })
     };

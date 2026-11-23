@@ -422,12 +422,19 @@ impl Host<'_> {
 
     fn draw(&self) {
         // taken before on_draw: a full request made while drawing is for the next frame
-        let (ctx, g, full) = with(self.st, |s| {
+        let (ctx, g, full, was) = with(self.st, |s| {
             s.canvas.begin_frame();
-            (s.ctx.clone(), s.g.clone(), std::mem::take(&mut s.full_next))
+            let was = s.canvas.set_active(true);
+            (
+                s.ctx.clone(),
+                s.g.clone(),
+                std::mem::take(&mut s.full_next),
+                was,
+            )
         });
         self.call("on_draw", (ctx, g));
         with(self.st, |s| {
+            s.canvas.set_active(was);
             s.frame_seq += 1;
             let n = s.canvas.end_frame();
             for w in s.canvas.take_warnings() {

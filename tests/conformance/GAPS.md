@@ -35,73 +35,7 @@ Already green and pinned: `05/cmd_cap_1025`, `05/cmd_cap_clear`, `05/cmd_cap_tex
 
 ## §6 Drawing
 
-### 06/g_methods
-- Contract: `g` has exactly `size clear line rect circle arc polyline polygon pattern text text_box image`.
-- Core now: also exposes `round_rect`, `measure`, `measure_text`, `fill_pattern`, `pattern_rect` (0.1 leftovers).
-- Touch points: `crates/inkcore/src/draw/mod.rs` (`SPECS`, `new_g`).
-- Source: probe-confirmed.
-
-### 06/canvas_inactive
-- Contract: `g` is valid only during its callback; afterwards every call returns `nil, "inactive"`.
-- Core now: a stored `g` keeps recording.
-- Touch points: `crates/inkcore/src/draw/mod.rs`, `crates/inkcore/src/emu.rs` (frame end), `crates/inkcore/src/ctx/layers.rs`.
-- Source: contract only.
-
-### 06/polyline_points, 06/polygon_points
-- Contract: `polyline` takes 2 to 128 points, `polygon` 3 to 128; a wrong count or an odd array is `nil, "invalid_argument"`.
-- Core now: too few points draw nothing and return nothing; an odd array makes the frame fail with a Lua error.
-- Touch points: `crates/inkcore/src/draw/mod.rs` (`points`, `command`).
-- Source: probe-confirmed.
-
-### 06/poly_over_128 (deviation D2)
-- Reader: more than 128 points returns `nil, "limit_exceeded"` (the contract says `invalid_argument`); inkemu follows the reader.
-- Core now: draws and returns nothing.
-- Touch points: `crates/inkcore/src/draw/mod.rs` (`points`).
-- Source: probe-confirmed.
-
-### 06/pattern_invalid_args
-- Contract: an unknown `kind` or a `density` outside 0..100 returns `nil, "invalid_argument"` and draws nothing.
-- Core now: an unknown kind is skipped silently, density is not range-checked and is drawn.
-- Touch points: `crates/inkcore/src/draw/mod.rs` (`command`, "pattern"), `crates/inkcore/src/draw/pattern.rs`.
-- Source: probe-confirmed (kind `bogus`, density 101); density -1 is contract only.
-
-### 06/arc_full_turn
-- Contract: when start and end differ by a whole multiple of 360 degrees nothing is drawn.
-- Core now: draws a full ring.
-- Touch points: `crates/inkcore/src/draw/raster.rs`.
-- Source: contract only.
-
-### 06/circle_fill_pixels
-- Contract: a filled circle covers pixel centers strictly closer than `r` to `(cx + 0.5, cy + 0.5)`; a stroke is the ring of pixels at distance `r - line_width` or more inside it.
-- Core now: fill includes pixels at distance exactly `r`, and a one-pixel stroke misses the outermost ring (half a pixel off).
-- Touch points: `crates/inkcore/src/draw/raster.rs`.
-- Source: contract only.
-
-### 06/image_invalid_value
-- Contract: `g:image` with anything but an image object returns `nil, "invalid_argument"`.
-- Core now: draws nothing and returns nothing.
-- Touch points: `crates/inkcore/src/draw/mod.rs` (`image_command`).
-- Source: contract only.
-
-### 06/image_layer_self
-- Contract: `g:image` with the layer being drawn as its own source is `nil, "invalid_argument"`.
-- Core now: returns nothing.
-- Touch points: `crates/inkcore/src/ctx/layers.rs`, `crates/inkcore/src/draw/mod.rs`.
-- Source: contract only.
-
-### 06/image_src_invalid
-- Contract: `opts.src` of `g:image` is four integers (named `x y w h` or, since the 2.33 host fix, positional) with `x, y >= 0`, `w, h >= 1`, inside the image; anything else returns `nil, "invalid_argument"`.
-- Core now: `src` is ignored entirely, so no error is returned (and the region is not extracted).
-- Touch points: `crates/inkcore/src/draw/mod.rs` (`image_command`), `crates/inkcore/src/draw/canvas.rs`.
-- Source: contract only.
-
-### 06/image_released
-- Contract: `layer:release()` returns true (repeatedly); afterwards `layer:draw` and any `g:image` using the layer return `nil, "invalid_handle"`.
-- Core now: `release` returns nothing, `layer:draw` raises a Lua error and `g:image` fails the whole frame.
-- Touch points: `crates/inkcore/src/ctx/image.rs`, `crates/inkcore/src/ctx/layers.rs`, `crates/inkcore/src/draw/mod.rs` (`image_command`).
-- Source: contract only.
-
-Already green and pinned (the valid cases of the rules above): `06/g_methods_present`, `06/polyline_points_valid`, `06/polygon_points_valid`, `06/pattern_valid_args`, `06/image_src_valid`, `06/arc_quadrant`, `06/pattern_unknown_kind`, `06/polygon_fill_stroke`, `06/rect_radius_rows`, `06/rect_stroke_inward`, `06/rect_zero_size`, `06/success_returns_nothing`.
+All §6 checks are green and pinned: `06/g_methods`, `06/canvas_inactive`, `06/polyline_points`, `06/polygon_points`, `06/poly_over_128` (deviation D2), `06/pattern_invalid_args`, `06/arc_full_turn`, `06/circle_fill_pixels`, `06/image_invalid_value`, `06/image_layer_self`, `06/image_src_invalid`, `06/image_released`, and the valid cases `06/g_methods_present`, `06/polyline_points_valid`, `06/polygon_points_valid`, `06/pattern_valid_args`, `06/image_src_valid`, `06/arc_quadrant`, `06/pattern_unknown_kind`, `06/polygon_fill_stroke`, `06/rect_radius_rows`, `06/rect_stroke_inward`, `06/rect_zero_size`, `06/success_returns_nothing`.
 
 ## §7 Text and fonts
 
@@ -417,4 +351,4 @@ Already green and pinned: `29/files_name_refused`, `29/files_name_refused_calls`
 
 ## Deviations
 
-Deviations (D1, D2) and the note N1 are listed in `spec/deviations.md`. `06/poly_over_128` above is red only because the core does not follow the reader yet.
+Deviations (D1, D2) and the note N1 are listed in `spec/deviations.md`. The core follows D2: `06/poly_over_128` is green.

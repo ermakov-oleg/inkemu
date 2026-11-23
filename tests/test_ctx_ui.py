@@ -218,16 +218,17 @@ def test_decode_garbage(make_app, emu_factory):
     assert emu.has_text("nil decode_failed")
 
 
-@pytest.mark.allow_errors
-def test_released_image_draw_is_an_error(make_app, emu_factory):
+def test_released_image_draw_is_invalid_handle(make_app, emu_factory):
     app = make_app(
-        "function on_load(c) img = c.image:decode(c.package:read('b.jpg')); img:release() end\n"
-        "function on_draw(c, g) g:image(img, 0, 0) end\n"
+        "function on_load(c) img = c.image:decode(c.package:read('b.jpg')); released = img:release() end\n"
+        "function on_draw(c, g) r = {g:image(img, 0, 0)} end\n"
     )
     (app / "data").mkdir()
     (app / "data" / "b.jpg").write_bytes(jpeg_bytes())
     emu = emu_factory(app)
-    assert emu.errors and "released" in emu.errors[0]
+    assert emu.lua_eval("return {released, r[1] == nil, r[2]}") == [True, True, "invalid_handle"], (
+        "API 2.33.1 contract §6 says otherwise: a released image is nil, invalid_handle (06/image_released)"
+    )
 
 
 def test_qr_encode_draws(make_app, emu_factory):
@@ -291,14 +292,16 @@ def test_layer_accumulates_and_released(make_app, emu_factory):
     assert black(shot, 105, 105) and black(shot, 125, 105)
 
 
-@pytest.mark.allow_errors
-def test_released_layer_draw_is_an_error(make_app, emu_factory):
+def test_released_layer_draw_is_invalid_handle(make_app, emu_factory):
     emu = emu_factory(
         make_app(
-            "function on_load(c) layer = c.layers:create(10, 10); layer:release(); layer:draw(function(g) end) end\n"
+            "function on_load(c) layer = c.layers:create(10, 10); layer:release()\n"
+            "  r = {layer:draw(function(g) called = true end)} end\n"
         )
     )
-    assert emu.errors and "released" in emu.errors[0]
+    assert emu.lua_eval("return {r[1] == nil, r[2], called == nil}") == [True, "invalid_handle", True], (
+        "API 2.33.1 contract §11 says otherwise: draw after release is nil, invalid_handle (06/image_released)"
+    )
 
 
 @pytest.mark.allow_errors

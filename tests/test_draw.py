@@ -50,7 +50,9 @@ def test_dot_call_on_g_errors(draw):
 
 def test_cyrillic_text_measured_and_drawn(draw):
     emu = draw("g:text(10, 10, 'Привет •')")
-    assert emu.lua_eval("return G:measure('Привет •')") > 40
+    assert emu.lua_eval("return ctx.fonts.medium:measure('Привет •')") > 40, (
+        "API 2.33.1 contract §6 says otherwise: g:measure is gone, font:measure replaces it (06/g_methods)"
+    )
     assert ink_bbox(emu.raw_frame()) is not None
     assert emu.texts()[0]["text"] == "Привет •"
 
@@ -66,21 +68,25 @@ def test_white_fill_color_zero(draw):
     assert img.getpixel((15, 15)) == 255 and img.getpixel((5, 5)) == 0
 
 
-def test_pattern_rect_is_checker(draw):
-    img = draw("g:pattern_rect(0, 0, 10, 10)").raw_frame()
-    px = [img.getpixel((x, y)) for y in range(10) for x in range(10)]
-    assert px.count(0) == 50 and img.getpixel((0, 0)) != img.getpixel((1, 0))
+def test_the_0_1_extras_of_g_are_gone(draw):
+    emu = draw("")
+    gone = "return G.round_rect == nil and G.pattern_rect == nil and G.fill_pattern == nil and G.measure_text == nil"
+    assert emu.lua_eval(gone) is True, (
+        "API 2.33.1 contract §6 says otherwise: firmware 26112001 has no g:pattern_rect (06/g_methods)"
+    )
 
 
 def test_shapes_do_not_crash(draw):
     emu = draw(
         """
-      g:round_rect(5, 5, 100, 40, 8, {fill=true}); g:circle(50, 50, 10); g:arc(60, 60, 20, 180, 360, {line_width=3})
+      g:rect(5, 5, 100, 40, {radius=8, fill=true}); g:circle(50, 50, 10); g:arc(60, 60, 20, 180, 360, {line_width=3})
       g:polygon({10,10, 50,10, 30,40}, {fill=true}); g:polyline({1,1, 20,30, 40,5}, {width=2})
       g:line(0, 0, 100, 100, {line_width=2})
     """
     )
-    assert ink_bbox(emu.raw_frame()) is not None
+    assert ink_bbox(emu.raw_frame()) is not None, (
+        "API 2.33.1 contract §6 says otherwise: g:round_rect is gone, g:rect{radius} replaces it (06/g_methods)"
+    )
 
 
 def test_text_box_wraps(draw):
@@ -91,17 +97,28 @@ def test_text_box_wraps(draw):
 
 
 def test_size_and_measure(draw):
-    emu = draw("g:text(0, 0, 'Hi', {font=FONTS.large}); g:text(0, 100, 'Hi')")
+    emu = draw("SIZE = {g:size()}; g:text(0, 0, 'Hi', {font=FONTS.large}); g:text(0, 100, 'Hi')")
     large, medium = emu.texts()
-    assert emu.lua_eval("return (function() local w, h = G:size(); return w * 1000 + h end)()") == 480800
-    assert emu.lua_eval("return G:measure('Hi', {font=FONTS.large})") == large["w"]
-    assert emu.lua_eval("return G:measure_text('Hi')") == medium["w"]
+    assert emu.lua_eval("return SIZE[1] * 1000 + SIZE[2]") == 480800, (
+        "API 2.33.1 contract §6 says otherwise: g:size is read inside the callback (06/canvas_inactive)"
+    )
+    assert emu.lua_eval("return ctx.fonts.large:measure('Hi')") == large["w"], (
+        "API 2.33.1 contract §6 says otherwise: g:measure is gone, font:measure replaces it (06/g_methods)"
+    )
+    assert emu.lua_eval("return ctx.fonts.medium:measure('Hi')") == medium["w"], (
+        "API 2.33.1 contract §6 says otherwise: g:measure is gone, font:measure replaces it (06/g_methods)"
+    )
+    assert emu.lua_eval("return select(2, G:size())") == "inactive", (
+        "API 2.33.1 contract §6 says otherwise: g is valid only during its callback (06/canvas_inactive)"
+    )
 
 
 def test_resize(draw):
-    emu = draw("g:clear(0)", display={"orientation": "landscape"})
+    emu = draw("W = g:size(); g:clear(0)", display={"orientation": "landscape"})
     assert emu.raw_frame().size == (800, 480)
-    assert emu.lua_eval("return (function() local w, h = G:size(); return w end)()") == 800
+    assert emu.lua_eval("return W") == 800, (
+        "API 2.33.1 contract §6 says otherwise: g:size is read inside the callback (06/canvas_inactive)"
+    )
 
 
 def test_image_is_drawn_scaled(make_app, emu_factory):
@@ -153,6 +170,7 @@ def test_frame_with_bad_command_does_not_crash(draw):
     assert emu.frame_commands == 2 and len(emu.texts()) == 1
 
 
+MEASURE_MOVED = "API 2.33.1 contract §6 says otherwise: g:measure is gone, font:measure replaces it (06/g_methods)"
 MEASURE_STRINGS = ["обновлено 13:50", "Сегодня · 20 ноября", "0123456789", "Ёжик…", "· 42 ·"]
 
 
@@ -171,17 +189,18 @@ def test_measure_matches_drawn_advance(draw, font, s):
     bar = _ink_cols(img.crop((0, 60, img.width, 100)))
     cols = _ink_cols(img.crop((0, 10, img.width, 50)))
     bar_w = bar[-1] - bar[0]
-    assert abs((cols[-1] - bar_w - cols[0]) - emu.lua_eval(f"return G:measure('|{s}', {{font=FONTS.{font}}})")) <= 1
+    measured = emu.lua_eval(f"return ctx.fonts.{font}:measure('|{s}')")
+    assert abs((cols[-1] - bar_w - cols[0]) - measured) <= 1, MEASURE_MOVED
 
 
 @pytest.mark.parametrize("font", ["small", "medium", "large"])
 @pytest.mark.parametrize("s", MEASURE_STRINGS)
 def test_right_aligned_text_stays_left_of_x(draw, font, s):
     emu = draw(
-        f"g:text(456, 10, '{s}', {{font=FONTS.{font}, align='right'}}); g:text(456 - g:measure('{s}', {{font=FONTS.{font}}}), 60, '{s}', {{font=FONTS.{font}}})"
+        f"g:text(456, 10, '{s}', {{font=FONTS.{font}, align='right'}}); g:text(456 - c.fonts.{font}:measure('{s}'), 60, '{s}', {{font=FONTS.{font}}})"
     )
     img = emu.raw_frame()
-    measured = emu.lua_eval(f"return G:measure('{s}', {{font=FONTS.{font}}})")
+    measured = emu.lua_eval(f"return ctx.fonts.{font}:measure('{s}')")
     for top in (10, 60):
         cols = _ink_cols(img.crop((0, top, img.width, top + 40)))
-        assert cols[-1] < 456 and cols[0] >= 456 - measured - 1
+        assert cols[-1] < 456 and cols[0] >= 456 - measured - 1, MEASURE_MOVED

@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use mlua::{IntoLuaMulti, Lua, Table};
 
-use super::image::new_image;
+use super::image::{new_image, Kind};
 use super::object::{method, new_object};
 use super::{arg, check_arg, nil, round_ms, soft_fail};
 use crate::draw::image::Gray;
@@ -12,7 +12,6 @@ use crate::draw::{new_g, Canvas, Target};
 use crate::emu::{with, Host, Shared};
 
 const MAX_LAYER_SIDE: i64 = 2048;
-const RELEASED: &str = "layer:draw: the layer was released";
 
 pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
     let create = {
@@ -32,8 +31,12 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
                 h,
                 with(&st, |s| s.fonts.clone()),
             )));
-            let g = new_g(lua, &st, Target::Layer(canvas.clone()))?;
             let id = Rc::new(Cell::new(0));
+            let target = Target::Layer {
+                canvas: canvas.clone(),
+                id: id.clone(),
+            };
+            let g = new_g(lua, &st, target)?;
             let draw = {
                 let (st, id) = (st.clone(), id.clone());
                 method(move |lua, args| {
@@ -41,14 +44,17 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
                     check_arg("draw", 1, arg(&a, 0), "function")?;
                     let id = id.get();
                     if !with(&st, |s| s.images.contains_key(&id)) {
-                        return Err(mlua::Error::runtime(RELEASED));
+                        return soft_fail(lua, "invalid_handle");
                     }
-                    canvas.borrow_mut().begin_frame();
+                    let was = {
+                        let mut c = canvas.borrow_mut();
+                        c.begin_frame();
+                        c.set_active(true)
+                    };
                     let host = Host { lua, st: &st };
-                    if host
-                        .protected_value(arg(&a, 0), g.clone(), "layer:draw callback")
-                        .is_none()
-                    {
+                    let done = host.protected_value(arg(&a, 0), g.clone(), "layer:draw callback");
+                    canvas.borrow_mut().set_active(was);
+                    if done.is_none() {
                         return Ok(nil());
                     }
                     let (warnings, bad) = {
@@ -62,16 +68,24 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
                             "g: bad values in layer:draw: {bad}"
                         )));
                     }
-                    let base = with(&st, |s| s.images.get(&id).cloned())
-                        .ok_or_else(|| mlua::Error::runtime(RELEASED))?;
+                    // released inside its own callback: nothing is left to draw into
+                    let Some(base) = with(&st, |s| s.images.get(&id).cloned()) else {
+                        return soft_fail(lua, "invalid_handle");
+                    };
                     let frame = canvas.borrow().render_on(base.to_frame());
                     let img = Rc::new(Gray::from_frame(&frame));
                     with(&st, |s| s.images.insert(id, img));
                     Ok(nil())
                 })
             };
-            let (obj, new_id) =
-                new_image(lua, &st, Gray::white(w, h), "layer", vec![("draw", draw)])?;
+            let (obj, new_id) = new_image(
+                lua,
+                &st,
+                Gray::white(w, h),
+                Kind::Runtime,
+                "layer",
+                vec![("draw", draw)],
+            )?;
             id.set(new_id);
             obj.into_lua_multi(lua)
         })
