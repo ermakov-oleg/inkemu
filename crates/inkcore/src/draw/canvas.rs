@@ -38,6 +38,8 @@ pub struct TextOpts {
 pub enum Cmd {
     Clear {
         color: u8,
+        /// A normal frame clears black for any colour but 0, as 0.1 did; a gray frame takes `color`'s step.
+        black: bool,
     },
     Rect {
         x: f64,
@@ -407,7 +409,10 @@ fn draw(f: &mut Frame, cmd: &Cmd, depth: Depth) {
         ..st
     };
     match *cmd {
-        Cmd::Clear { color } => f.clear(depth.of(color)),
+        Cmd::Clear { color, black } => f.clear(match depth {
+            Depth::Bits => u8::from(black),
+            Depth::Gray => depth.of(color),
+        }),
         Cmd::Rect {
             x,
             y,

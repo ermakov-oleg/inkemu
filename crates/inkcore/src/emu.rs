@@ -955,12 +955,13 @@ impl Core {
         s.frame_seq
     }
 
-    /// The app's own frame, without plates; a gray frame as the threshold of its steps.
+    /// The app's own frame, without plates; a gray frame (covered or not) as the threshold of its steps.
     pub fn raw_frame(&self) -> Frame {
-        let s = self.st.borrow();
-        match s.gray_frame() {
-            Some(g) => g.threshold(),
-            None => s.canvas.render(),
+        let c = &self.st.borrow().canvas;
+        if c.gray() {
+            c.render_in(Depth::Gray).threshold()
+        } else {
+            c.render()
         }
     }
 

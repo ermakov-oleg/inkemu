@@ -407,3 +407,48 @@ fn a_host_screen_raised_later_shows_the_gray_frame_in_1_bit_while_it_is_up() {
     );
     assert_eq!(core.status().refreshes, ["full", "gray"]);
 }
+
+#[test]
+fn g_clear_takes_its_colour_step_in_a_gray_frame() {
+    for (c, want) in [(0, 0), (3, 0), (4, 1), (8, 2), (15, 3)] {
+        let mut core = gray_app(&format!(
+            "g:clear({c})\n\
+             g:image(layer, 0, 0, {{gray = gray}})"
+        ));
+        let normal = core.raw_frame().get(200, 200);
+        assert_eq!(normal, u8::from(c != 0), "a normal frame keeps 0.1's clear");
+        next(&mut core, true);
+        let g = core.frame_gray().unwrap();
+        assert_eq!(
+            g.get(200, 200),
+            want,
+            "clear({c}): the whole gray frame is drawn in steps (§3)"
+        );
+    }
+}
+
+#[test]
+fn raw_frame_of_a_gray_frame_is_the_steps_threshold_even_when_covered() {
+    // scaled up, the 85 block dithers to a mix in 1 bit but is 2 steps (ink) in the threshold
+    let body = "if gray and toast then c.dialog:toast('saved') end\n\
+                g:image(img, 0, 0, {gray = gray, w = 40, h = 4})";
+    let mut core = gray_app(body);
+    let dithered = core.raw_frame();
+    next(&mut core, true);
+    let steps = core.frame_gray().unwrap().threshold();
+    assert!(steps != dithered, "the normal frame dithers the image");
+    assert!(core.raw_frame() == steps);
+    core.lua_exec("ctx.dialog:toast('later')").unwrap();
+    assert_eq!(core.frame_gray(), None);
+    assert!(
+        core.raw_frame() == steps,
+        "a host screen raised later does not change it"
+    );
+    core.lua_exec("toast = true").unwrap();
+    next(&mut core, true);
+    assert_eq!(core.status().refresh, Some("full"));
+    assert!(
+        core.raw_frame() == steps,
+        "nor does one up when the frame is presented"
+    );
+}

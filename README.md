@@ -243,7 +243,8 @@ included, then seeds `files/` from `<fixtures dir>/files/`.
   not an integer from -1 to 2147483647.
 - `g:image{gray = true}` makes the frame a gray frame (0.1 ignored it), and `emu.shot()` returns a mode `"L"` image
   for it instead of mode `"1"`. Code that reads pixels as 0 or 255 keeps working on the black and white parts; use
-  `emu.raw_frame()` or `.convert("1")` if you need a 1-bit image.
+  `emu.raw_frame()` if you need a 1-bit image (Pillow's `.convert("1")` dithers; for the same threshold use
+  `.point(lambda v: 0 if v < 128 else 255, "1")`).
 
 ## Supported API
 
@@ -332,9 +333,9 @@ steps. Every colour becomes `(color * 4) // 16` steps (3, 4, 8, 12, 15 give 0, 1
 text, patterns and images alike; a black-and-white image or layer keeps its two levels (ink dots in `color`), and a
 grey image takes the step of each pixel's own grey. `gray` inside `layer:draw` has no effect (layers are black and
 white). `emu.shot()` returns a Pillow image of mode `"L"` for a gray frame, with 255, 170, 85 and 0 for 0 to 3 steps,
-and mode `"1"` for every other frame; `emu.raw_frame()` stays mode `"1"`, the steps' threshold (2 and 3 are ink). The
-page shows the frame in gray. While the error
-overlay, a dialog or a toast covers the app, a gray frame is drawn as a normal one and presented as `"full"`.
+and mode `"1"` for every other frame; `emu.raw_frame()` stays mode `"1"`, the steps' threshold (2 and 3 are ink),
+also while the frame is covered. The page shows the frame in gray. While the error overlay, a dialog or a toast
+covers the app, a gray frame is drawn as a normal one and presented as `"full"`.
 
 Grey, as measured on 26112001: the canvas of a normal frame is 1-bit, and grey is a pattern of black and white pixels.
 
@@ -433,12 +434,13 @@ offset_minutes revision valid`.
   (`on_leave`) and the device locks as with `emu.lock()`, unless the callback failed or called `ctx:quit()`.
   `"power_off"` is not emulated: there is no confirmation dialog (so no `on_pause`/`on_resume` and never `busy`),
   the call returns nothing, logs it and the app goes on as if the user cancelled.
-- Gray frames: a grey image is not dithered to the 4 steps but cut to them pixel by pixel; `g:clear(c)` keeps inkemu's
-  rule (any `c` but 0 is black, so 15 in a gray frame); a toast also turns a gray frame into a normal one, and
-  `ctx.image:decode{gray = true}` and the dot patterns of 4-level images in normal frames are not emulated.
+- Gray frames: `ctx.image:decode{gray = true}` and the dot patterns of 4-level images in normal frames are not
+  emulated.
 - Not verified on the device:
   - gray frames as a whole: a probe of 26112001 in an emulator saw only 1-bit app frames, but it never drew a
     `g:image{gray = true}`; inkemu follows the contract;
+  - a toast over a gray frame: §3 names a system input method, dialog or similar screen; inkemu's choice is to treat
+    a toast as one too, so the frame is drawn as a normal one;
   - the 2.26 call form `ctx:log(...)`, which still logs;
   - `ctx.perf:info()`'s `tick_us`, `draw_us`, `asset_hit` and `asset_miss`, which measure the device's renderer:
     always 0 in inkemu;

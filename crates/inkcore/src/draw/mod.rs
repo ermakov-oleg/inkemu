@@ -524,10 +524,13 @@ fn command(op: &str, a: &[Value], text: String, api: (u32, u32)) -> Result<Cmd, 
                 Some(Value::Number(n)) => *n != 0.0,
                 Some(_) => true,
             };
-            // 0.1 cleared black for any colour but 0, in gray frames too
-            Cmd::Clear {
-                color: if black { 15 } else { 0 },
-            }
+            let color = match a.first() {
+                Some(v @ (Value::Integer(_) | Value::Number(_))) => {
+                    as_num(v).map_or(0, |n| n.clamp(0.0, 15.0) as u8)
+                }
+                _ => 15 * u8::from(black),
+            };
+            Cmd::Clear { color, black }
         }
         "rect" => {
             let [x, y, w, h] = nums(op, a, ["x", "y", "w", "h"])?;
