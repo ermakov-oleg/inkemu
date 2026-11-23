@@ -1,5 +1,7 @@
 -- ctx.ui (§16), the core: UI objects, `create` and the method table the other files fill in.
 -- All files of the library share one private environment; `host` comes from the Rust glue.
+-- Call `string.x(s)`, never `s:x()`: the string metatable indexes the app's own, patchable `string` table.
+-- `host.fonts` is the app's live `ctx.fonts`, so an app that patches it changes only its own UI.
 
 -- a UI object is an empty table; its state lives here, out of the app's reach
 objects = setmetatable({}, { __mode = "k" })
@@ -41,7 +43,10 @@ function create(opts)
   elseif type(opts) ~= "table" then
     return nil, "invalid_argument"
   end
-  local focus_style = opts.focus_style
+  local focus_style = nil
+  if api_at_least(16) then
+    focus_style = opts.focus_style
+  end
   if focus_style == nil then
     focus_style = "fill"
   elseif not FOCUS_STYLES[focus_style] then

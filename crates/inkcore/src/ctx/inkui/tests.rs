@@ -16,9 +16,13 @@ fn app_files(manifest: &str, index_lua: &str) -> AppFiles {
 }
 
 fn boot(index_lua: &str) -> Core {
-    let manifest = r#"{"app_id": "testapp", "entry": "index.lua", "api": "2.33"}"#;
+    boot_api("2.33", index_lua)
+}
+
+fn boot_api(api: &str, index_lua: &str) -> Core {
+    let manifest = format!(r#"{{"app_id": "testapp", "entry": "index.lua", "api": "{api}"}}"#);
     let core = Core::new(
-        app_files(manifest, index_lua),
+        app_files(&manifest, index_lua),
         Config::default(),
         Persisted::default(),
     );
@@ -69,6 +73,7 @@ fn create_refuses_what_is_not_an_options_table() {
         "false",
         "{focus_style = 'bold'}",
         "{focus_style = 1}",
+        "{focus_style = false}",
     ] {
         assert_eq!(
             eval(
@@ -79,6 +84,25 @@ fn create_refuses_what_is_not_an_options_table() {
             "{opts}"
         );
     }
+}
+
+#[test]
+fn focus_style_is_a_2_16_field() {
+    let create = "local r, e = ctx.ui:create({focus_style = 'bold'}) return {type(r), tostring(e)}";
+    let mut core = boot_api("2.15", "");
+    assert_eq!(eval(&mut core, create), json!(["table", "nil"]));
+    let mut core = boot_api("2.16", "");
+    assert_eq!(eval(&mut core, create), json!(["nil", "invalid_argument"]));
+}
+
+#[test]
+fn every_fresh_lua_state_gets_the_library() {
+    let mut core = boot("");
+    let create = "local ui = ctx.ui:create() return {type(ui), type(ui.begin_frame)}";
+    core.reload();
+    assert_eq!(eval(&mut core, create), json!(["table", "function"]));
+    core.restart();
+    assert_eq!(eval(&mut core, create), json!(["table", "function"]));
 }
 
 #[test]
@@ -129,11 +153,10 @@ fn a_library_error_in_a_callback_is_an_app_error() {
 }
 
 #[test]
-fn app_globals_and_patched_libraries_do_not_reach_the_library() {
+fn app_replaced_base_functions_do_not_reach_the_library() {
     let mut core = boot(
         "type = function() return 'table' end\n\
-         setmetatable, error = nil, nil\n\
-         string.rep, table.insert, math.floor = nil, nil, nil",
+         setmetatable, error = nil, nil",
     );
     assert_eq!(
         eval(
@@ -166,16 +189,43 @@ fn run(lua: &Lua, code: &str) -> Result<mlua::MultiValue, String> {
 fn the_library_sees_only_its_own_environment() {
     let (lua, env) = library(
         "2.33",
-        "function probe() return SECRET, ctx, require, load, coroutine, print, _G end",
+        "function probe() return SECRET, ctx, require, coroutine, _G end",
     );
     lua.globals().set("SECRET", 1).unwrap();
+    lua.globals()
+        .set("ctx", lua.create_table().unwrap())
+        .unwrap();
     lua.globals()
         .set("probe", env.get::<Function>("probe").unwrap())
         .unwrap();
     let seen = run(&lua, "return select('#', probe()), probe()").unwrap();
     let mut seen = seen.into_iter();
-    assert_eq!(seen.next().unwrap().as_i32(), Some(7));
+    assert_eq!(seen.next().unwrap().as_i32(), Some(5));
     assert!(seen.all(|v| v.is_nil()));
+}
+
+#[test]
+fn the_library_has_its_own_copies_of_the_standard_tables() {
+    let (lua, env) = library(
+        "2.33",
+        "function probe(app)\n\
+           return string.rep ~= nil and table.insert ~= nil and math.floor ~= nil and utf8.char ~= nil,\n\
+             rawequal(string, app[1]) or rawequal(table, app[2]) or rawequal(math, app[3])\n\
+               or rawequal(utf8, app[4])\n\
+         end",
+    );
+    lua.globals()
+        .set("probe", env.get::<Function>("probe").unwrap())
+        .unwrap();
+    let r = run(
+        &lua,
+        "local app = {string, table, math, utf8}\n\
+         string.rep, table.insert, math.floor, utf8.char = nil, nil, nil, nil\n\
+         return probe(app)",
+    )
+    .unwrap();
+    let r: Vec<bool> = r.into_iter().map(|v| v.as_boolean().unwrap()).collect();
+    assert_eq!(r, [true, false]);
 }
 
 #[test]
