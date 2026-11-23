@@ -16,6 +16,8 @@ pub(crate) type TypeFn = Rc<dyn Fn(&Host, &str)>;
 pub(crate) struct Handler {
     pub answer: AnswerFn,
     pub type_text: Option<TypeFn>,
+    /// What a front end's text field submits: the whole text, then the confirm key.
+    pub submit: Option<TypeFn>,
     /// Answering OK leaves the dialog open (an `enter = "newline"` edit inserts a line break).
     pub ok_keeps_open: bool,
 }
@@ -103,8 +105,17 @@ impl Host<'_> {
     }
 
     pub fn type_text(&self, text: &str) -> Result<(), String> {
+        self.text_input(text, |h| h.type_text)
+    }
+
+    /// Like [`Host::type_text`], but an edit's text is replaced by `text` instead of appended to.
+    pub fn submit_text(&self, text: &str) -> Result<(), String> {
+        self.text_input(text, |h| h.submit)
+    }
+
+    fn text_input(&self, text: &str, pick: fn(Handler) -> Option<TypeFn>) -> Result<(), String> {
         let (p, h) = with(self.st, |s| (s.pending.clone(), s.pending_h.clone()));
-        let typing = h.and_then(|h| h.type_text).filter(|_| p.is_some());
+        let typing = h.and_then(pick).filter(|_| p.is_some());
         let Some(typing) = typing else {
             return Err(format!(
                 "no text input is waiting; pending: {}",

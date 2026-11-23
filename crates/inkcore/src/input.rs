@@ -154,6 +154,7 @@ impl Host<'_> {
                     }
                 }),
                 type_text: None,
+                submit: None,
                 ok_keeps_open: false,
             };
             self.set_pending("leave", "Leave app?".into(), String::new(), leave);

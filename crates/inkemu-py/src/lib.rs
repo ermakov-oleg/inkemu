@@ -145,6 +145,11 @@ impl Session {
             .map_err(PyRuntimeError::new_err)
     }
 
+    fn submit_text(&self, py: Python<'_>, text: String) -> PyResult<()> {
+        self.with(py, |s| s.submit_text(&text))
+            .map_err(PyRuntimeError::new_err)
+    }
+
     fn answer(&self, py: Python<'_>, ok: bool) -> PyResult<()> {
         self.with(py, |s| s.answer(ok))
             .map_err(PyRuntimeError::new_err)

@@ -35,7 +35,8 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
                         ok_done(h, &ok_text);
                     }
                 }),
-                type_text: Some(done),
+                type_text: Some(done.clone()),
+                submit: Some(done),
                 ok_keeps_open: false,
             };
             Host { lua, st: &st }.set_pending("text", opt_str(opts, "title")?, default, handler);
@@ -70,14 +71,16 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
             let set_text = {
                 let (st, ed) = (st.clone(), ed.clone());
                 method(move |lua, args| {
+                    let a = args.into_vec();
+                    check_arg("set_text", 1, arg(&a, 0), "string")?;
+                    let Value::String(s) = arg(&a, 0) else {
+                        unreachable!()
+                    };
                     let h = Host { lua, st: &st };
                     if !ed.active(&h) {
                         return soft_fail(lua, "inactive");
                     }
-                    let text = match args.into_iter().next() {
-                        Some(Value::String(s)) => String::from_utf8(s.as_bytes().to_vec()).ok(),
-                        _ => None,
-                    };
+                    let text = String::from_utf8(s.as_bytes().to_vec()).ok();
                     match text.filter(|t| text_ok(t, ed.max_chars, ed.multiline)) {
                         Some(t) => {
                             ed.sync(&h, t);
@@ -114,7 +117,7 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
                 "edit",
                 &[("set_text", set_text), ("text", text), ("close", close)],
             )?;
-            let (on_answer, on_type) = (ed.clone(), ed.clone());
+            let (on_answer, on_type, on_submit) = (ed.clone(), ed.clone(), ed.clone());
             let handler = Handler {
                 answer: Rc::new(move |h, ok| match ok {
                     true if on_answer.newline => {
@@ -124,6 +127,7 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
                     false => on_answer.finish(h, "back"),
                 }),
                 type_text: Some(Rc::new(move |h, s| on_type.type_text(h, s))),
+                submit: Some(Rc::new(move |h, s| on_submit.submit(h, s))),
                 ok_keeps_open: ed.newline,
             };
             let text = ed.text.borrow().clone();
@@ -154,6 +158,7 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
                     h.protected(&f, (h.ctx(), ok), "ctx.dialog:confirm callback");
                 }),
                 type_text: None,
+                submit: None,
                 ok_keeps_open: false,
             };
             let (title, text) = (opt_str(opts, "title")?, opt_str(opts, "text")?);
@@ -359,6 +364,29 @@ impl Edit {
         }
         // closed by on_change, or the app failed
         self.active(h)
+    }
+
+    /// Replaces the text with `s` (cut to the text rules), then presses the confirm key.
+    fn submit(&self, h: &Host, s: &str) {
+        let s = if self.multiline {
+            s
+        } else {
+            s.split('\n').next().unwrap_or_default()
+        };
+        let next: String = s.chars().take(self.max_chars).collect();
+        if *self.text.borrow() != next {
+            self.sync(h, next.clone());
+            if !self.on_change.is_nil() {
+                h.protected_value(&self.on_change, (h.ctx(), next), "ctx.input:edit on_change");
+            }
+            if !self.active(h) {
+                return;
+            }
+        }
+        // a newline edit stays open: only Back or close() end it (§4)
+        if !self.newline {
+            self.finish(h, "enter");
+        }
     }
 
     /// Types `s`, then presses the confirm key unless it inserts line breaks.

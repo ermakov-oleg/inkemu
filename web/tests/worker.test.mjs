@@ -223,3 +223,20 @@ test('a failed first load is a core error, a retry that works posts ready', asyn
   assert.equal(h.msgs.filter((m) => m.type === 'ready').length, 1);
   assert.ok(h.lastState());
 });
+
+test('the text field replaces an edit\'s prefilled text instead of appending to it', async () => {
+  const h = harness();
+  const app = files({
+    'manifest.json': '{"app_id": "ed", "entry": "index.lua"}',
+    'index.lua':
+      "msg = 'none'\n" +
+      "function on_load(c) c.input:edit({text = 'hi', on_end = function(c, s, how) msg = s .. ':' .. how; c:invalidate() end}) end\n" +
+      'function on_draw(c, g) g:clear(0); g:text(0, 0, msg) end\n',
+  });
+  await h.s.handle({ type: 'open', files: app, fixtures: new Map(), fonts: null, config: config() });
+  assert.equal(h.lastState().status.pending.text, 'hi');
+  await h.s.handle({ type: 'cmd', cmd: { cmd: 'submit_text', text: 'hi!' }, ifPending: ['text', 'edit'] });
+  assert.equal(h.errors().length, 0);
+  assert.equal(h.lastState().status.pending, null);
+  assert.ok(texts(h.lastState()).includes('hi!:enter'));
+});

@@ -119,7 +119,8 @@ An open dialog (`ctx.dialog:confirm`, `ctx.input:text`/`edit`, the host's "Leave
 title, text or field and `Yes`/`No` or `OK`/`Cancel`, so it shows in shots and `texts`. While it is open, input does
 not reach the app (the log says so); tapping a button (`tap-text Yes`) answers it, as do `answer` and `type`;
 `key back` ends an `edit` as Back.
-The window shows the same dialogs as native Tk dialogs instead.
+The window shows the same dialogs as native Tk dialogs instead. There, and in the page's text field, the submitted
+value replaces an edit's text (it starts prefilled) before the confirm key, while `type` appends to it.
 
 ### Window keys
 

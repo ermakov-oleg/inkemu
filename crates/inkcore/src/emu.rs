@@ -745,6 +745,12 @@ impl Core {
         self.run(|h| h.type_text(text))
     }
 
+    /// Submits a front end's text field: answers a pending `input:text` with `text`, or replaces the text of a
+    /// pending `input:edit` with it and presses the confirm key.
+    pub fn submit_text(&mut self, text: &str) -> Result<(), String> {
+        self.run(|h| h.submit_text(text))
+    }
+
     /// Answers the pending dialog: confirm yes/no, leave yes/no, text OK/cancel, edit confirm key/Back.
     pub fn answer(&mut self, ok: bool) -> Result<(), String> {
         self.run(|h| h.answer(ok))

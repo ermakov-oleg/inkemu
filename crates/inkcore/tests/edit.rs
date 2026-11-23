@@ -276,7 +276,7 @@ fn set_text_follows_the_text_rules_and_does_not_call_on_change() {
             "changes = 0\n\
              ed = ctx.input:edit({max_chars = 3, on_change = function() changes = changes + 1 end})\n\
              local r = {}\n\
-             for _, v in ipairs({5, 'a\\nb', 'abcd', '\\255', 'abc'}) do\n\
+             for _, v in ipairs({'a\\nb', 'abcd', '\\255', 'abc'}) do\n\
                local a, b = ed:set_text(v) r[#r + 1] = tostring(a) .. ',' .. tostring(b)\n\
              end\n\
              r[#r + 1] = ed:text() r[#r + 1] = changes\n\
@@ -286,10 +286,90 @@ fn set_text_follows_the_text_rules_and_does_not_call_on_change() {
             "nil,invalid_argument",
             "nil,invalid_argument",
             "nil,invalid_argument",
-            "nil,invalid_argument",
             "true,nil",
             "abc",
             0
         ])
     );
+}
+
+#[test]
+fn set_text_of_a_non_string_raises() {
+    let mut core = boot("");
+    assert_eq!(
+        eval(
+            &mut core,
+            "ed = ctx.input:edit({text = 'k'})\n\
+             local ok1, e1 = pcall(function() return ed:set_text() end)\n\
+             local ok2, e2 = pcall(function() return ed:set_text({}) end)\n\
+             return {ok1, e1:match('string expected') ~= nil, ok2, e2:match('string expected') ~= nil, ed:text()}"
+        ),
+        json!([false, true, false, true, "k"]),
+        "§0.3: a wrong type raises"
+    );
+}
+
+const SUBMIT: &str = "ends, changes = {}, {}\n\
+    function on_end(c, s, how) ends[#ends + 1] = s .. ':' .. how end\n\
+    function on_change(c, s) changes[#changes + 1] = s end\n";
+
+#[test]
+fn submit_replaces_the_text_and_confirms() {
+    let mut core = boot(&format!(
+        "{SUBMIT}function on_load(c) ed = c.input:edit({{text = 'hi', on_end = on_end, on_change = on_change}}) end\n"
+    ));
+    core.submit_text("hi there").unwrap();
+    assert_eq!(
+        eval(&mut core, "return {ends, changes}"),
+        json!([["hi there:enter"], ["hi there"]]),
+        "the prefilled text is not doubled"
+    );
+    let mut core = boot(&format!(
+        "{SUBMIT}function on_load(c) ed = c.input:edit({{text = 'hi', on_end = on_end, on_change = on_change}}) end\n"
+    ));
+    core.submit_text("hi").unwrap();
+    assert_eq!(
+        eval(&mut core, "return {ends, #changes}"),
+        json!([["hi:enter"], 0]),
+        "no on_change when nothing changed"
+    );
+}
+
+#[test]
+fn submit_follows_max_chars_and_multiline() {
+    let mut core = boot(&format!(
+        "{SUBMIT}function on_load(c) ed = c.input:edit({{max_chars = 3, on_end = on_end}}) end\n"
+    ));
+    core.submit_text("ab\ncd").unwrap();
+    assert_eq!(eval(&mut core, "return ends"), json!(["ab:enter"]));
+    let mut core = boot(&format!(
+        "{SUBMIT}function on_load(c) ed = c.input:edit({{max_chars = 3, on_end = on_end}}) end\n"
+    ));
+    core.submit_text("abcdef").unwrap();
+    assert_eq!(eval(&mut core, "return ends"), json!(["abc:enter"]));
+}
+
+#[test]
+fn submit_keeps_a_newline_edit_open_with_the_replaced_text() {
+    let mut core = boot(&format!(
+        "{SUBMIT}function on_load(c) ed = c.input:edit({{text = 'hi', multiline = true, enter = 'newline',\n\
+           on_end = on_end, on_change = on_change}}) end\n"
+    ));
+    core.submit_text("hi\nyou").unwrap();
+    core.submit_text("hi\nyou").unwrap();
+    assert_eq!(core.status().pending.map(|p| p.kind), Some("edit"));
+    assert_eq!(
+        eval(&mut core, "return {ed:text(), changes, #ends}"),
+        json!(["hi\nyou", ["hi\nyou"], 0])
+    );
+}
+
+#[test]
+fn submit_answers_a_text_input() {
+    let mut core = boot(
+        "got = 'none'\nfunction on_load(c) c.input:text({text = 'a'}, function(c, s) got = s end) end\n",
+    );
+    core.submit_text("abc").unwrap();
+    assert_eq!(eval(&mut core, "return got"), json!("abc"));
+    assert!(core.submit_text("x").is_err(), "nothing is waiting");
 }
