@@ -288,6 +288,8 @@ the start with an error. From each file inkemu takes:
   `{tick_us, draw_us, cmd_count, image_count, asset_hit, asset_miss, draw_frame}`: `cmd_count` and `image_count`
   are the commands and `g:image` calls accepted in the last frame, `draw_frame` the frames of this session), `gc`,
   `budget`, `reader` (answers from `<fixtures dir>/reader.json`), `lockscreen`, `lock`.
+- `ui` (§16), in progress: `ctx.ui:create(opts)` works; the methods of a UI object raise "not implemented in inkemu
+  yet".
 
 `clock:now()` has `year month day hour minute second weekday hour12 date_order date_sep epoch_sec local_sec
 offset_minutes revision valid`.
@@ -303,11 +305,11 @@ offset_minutes revision valid`.
   `16777217.0 == 16777216.0`).
 - The app sees no `io`, `os`, `debug`, `package`, `load`, `loadstring`, `dofile`, `loadfile`, `collectgarbage` or
   `print`, as on the device; `require` searches only the app folder. Lua 5.5's global `warn` is visible to the app.
-- Not emulated, so nil: `ctx.crypto`, `ctx.nn`, `ctx.ui`, `ctx.widget`, `dialog:choose`, `i18n:t`, `url:query`,
+- Not emulated, so nil: `ctx.crypto`, `ctx.nn`, `ctx.widget`, `dialog:choose`, `i18n:t`, `url:query`,
   `input.keys`, `input.listen`, `input.gamepad`, `device.display`, `device.keep_awake`, `device.radios`,
   `screen.occlusion`. No BLE, no WebSocket; only GET and POST get a network callback.
-- `ctx.capabilities` reports what inkemu emulates: `dialog frontlight image_decode image_transform pattern reader`
-  are true, `ble identity nn ui ttf` false. The device reports `ble dialog frontlight identity image_decode
+- `ctx.capabilities` reports what inkemu emulates: `dialog frontlight image_decode image_transform pattern reader ui`
+  are true, `ble identity nn ttf` false. The device reports `ble dialog frontlight identity image_decode
   image_transform nn pattern reader ui` as true and `ttf` as false.
 - `ctx.system:act(s)` needs a string ("string expected" otherwise), as on the device. `"refresh"` makes the next
   frame full, like `ctx:invalidate("full")`; inkemu answers every other string, `"sleep"` and `"power_off"`

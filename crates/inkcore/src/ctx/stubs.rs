@@ -5,7 +5,7 @@ use super::object::{method, new_object};
 use super::{arg, check_arg, fmt, int_value, nil, py_int, request_frame, soft_fail};
 use crate::emu::{with, Shared};
 
-/// What the emulator emulates; the device (26112001) also reports `ble`, `identity`, `nn` and `ui` as true.
+/// What the emulator emulates; the device (26112001) also reports `ble`, `identity` and `nn` as true.
 const CAPABILITIES: [(&str, bool); 11] = [
     ("ble", false),
     ("dialog", true),
@@ -16,7 +16,7 @@ const CAPABILITIES: [(&str, bool); 11] = [
     ("nn", false),
     ("pattern", true),
     ("reader", true),
-    ("ui", false),
+    ("ui", true),
     ("ttf", false),
 ];
 
