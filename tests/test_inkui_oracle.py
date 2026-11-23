@@ -7,8 +7,9 @@ inkemu, and every step is one test: returns, the canvas calls with their exact a
 `ui:layout` boxes must equal the oracle.
 
 A step that reaches a ctx.ui method inkemu does not implement yet is skipped with that method's name. A step that
-needs a host function the core lacks is skipped while the core lacks it. `PENDING` lists the steps known to fail
-for a stated reason (a strict xfail: remove the entry once the step passes).
+needs a host function the core lacks is compared without the canvas calls that depend on it, then skipped while the
+core lacks it. `PENDING` lists the steps known to fail for a stated reason (a strict xfail: remove the entry once the
+step passes).
 """
 
 import json
@@ -29,17 +30,17 @@ NOT_IMPLEMENTED = "not implemented in inkemu yet"
 
 # (scenario, step) -> why the step fails today
 PENDING: dict[tuple[str, int], str] = {
-    ("s01_object_frame.api26", 25): "focus moved by handle_event in step 23 (Task 3)",
-    ("s01_object_frame.api26", 26): "focus moved by handle_event in step 23 (Task 3)",
+    ("s01_object_frame.api26", 25): "focus moved by handle_event in step 23, not implemented yet",
+    ("s01_object_frame.api26", 26): "focus moved by handle_event in step 23, not implemented yet",
     **{
-        ("s03_label_button_region.api26", i): "focus set by ui:focus and drawn after a key event (Task 3)"
+        ("s03_label_button_region.api26", i): "focus set by ui:focus and drawn after a key event, not implemented yet"
         for i in range(8, 42, 3)
     },
 }
 
-# (scenario, step) -> the host function the step needs; skipped while the core lacks it
-NEEDS_HOST: dict[tuple[str, int], str] = {
-    ("s03_label_button_region.api26", 3): "layout",  # label font_min
+# (scenario, step) -> the font method the step needs, and the stream entries (from 0) that depend on it
+NEEDS_HOST: dict[tuple[str, int], tuple[str, set[int]]] = {
+    ("s03_label_button_region.api26", 3): ("layout", {7, 8}),  # the two labels with font_min
 }
 
 # step fields that are notes or inputs, not results
@@ -177,8 +178,12 @@ def test_step(scenario: str, i: int, tmp: Path):
     if NOT_IMPLEMENTED in json.dumps(got):
         missing = sorted({m for m in json.dumps(got).split('"') if NOT_IMPLEMENTED in m})
         pytest.skip(f"needs a later ctx.ui task: {missing[0]}")
-    need = NEEDS_HOST.get((scenario, i))
+    need, masked = NEEDS_HOST.get((scenario, i), (None, set()))
     if need and not host.get(need):
-        pytest.skip(f"blocked on host: font:{need} is missing")
+        want = {**want, "stream": [c for n, c in enumerate(want["stream"]) if n not in masked]}
+        got = {**got, "stream": [c for n, c in enumerate(got["stream"]) if n not in masked]}
+        diff = differences(want, got)
+        assert not diff, f"{want.get('note', want['op'])}, without the calls font:{need} decides:\n" + "\n".join(diff)
+        pytest.skip(f"blocked on host: font:{need} is missing (the other calls match)")
     diff = differences(want, got)
     assert not diff, f"{want.get('note', want['op'])}:\n" + "\n".join(diff)
