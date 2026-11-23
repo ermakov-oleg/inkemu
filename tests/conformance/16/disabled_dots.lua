@@ -10,7 +10,7 @@ function on_draw(ctx, g)
   g:clear(0)
   local seen = {}
   ui:begin_frame(g)
-  ui:button("off", { x = 20, y = 20, w = 200, h = 56, text = "", enabled = false, selected = true, badge = "9" })
+  ui:button("off", { x = 20, y = 20, w = 200, h = 56, text = "X", enabled = false, selected = true, badge = "9" })
   ui:button("on", { x = 20, y = 100, w = 200, h = 56, text = "" })
   ui:region("region_off", { x = 20, y = 180, w = 200, h = 56, enabled = false, draw = function(_, _, st)
     seen.enabled = st.enabled

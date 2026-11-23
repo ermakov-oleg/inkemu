@@ -24,17 +24,17 @@ function on_draw(ctx, g)
   -- placed so that the badge's middle row is y = 200 and its right edge x = 400, whatever the font
   local y = 200 - 4 - bh // 2
   ui:begin_frame(g)
-  ui:button("b", { x = 200, y = y, w = 205, h = 80, text = "", badge = "12345" })
+  ui:button("b", { x = 200, y = y, w = 205, h = 80, text = "B", badge = "12345" })
   ui:button("none", { x = 20, y = 400, w = 100, h = 40, text = "", badge = "" })
   ui:region("r", { x = 20, y = 500, w = 100, h = 60, badge = "7", draw = function() L.mark("draw") end })
   local log = L.start(g)
   ui:end_frame()
-  local text = L.call("text_box", 200, y, 205, 80, "", { align = "center", color = 15, font = ctx.fonts.medium,
+  local text = L.call("text_box", 200, y, 205, 80, "B", { align = "center", color = 15, font = ctx.fonts.medium,
     overflow = "ellipsis", valign = "middle", wrap = "none" })
   T.value("badge.after_text", table.concat(log, " ", 2, 5) == text .. " " .. badge(200, y, 205, "12345"))
+  -- a button with empty text draws only its box, and an empty badge nothing
   T.value("empty_badge.none", log[6] == L.call("rect", 20, 400, 100, 40, { fill = false, radius = 0 })
-    and log[7] == L.call("text_box", 20, 400, 100, 40, "", { align = "center", color = 15, font = ctx.fonts.medium,
-      overflow = "ellipsis", valign = "middle", wrap = "none" }) and log[8] == "draw")
-  T.value("region.after_draw", table.concat(log, " ", 8, #log) == "draw " .. badge(20, 500, 100, "7"))
+    and log[7] == "draw")
+  T.value("region.after_draw", table.concat(log, " ", 7, #log) == "draw " .. badge(20, 500, 100, "7"))
   T.value("calls", L.text(log))
 end

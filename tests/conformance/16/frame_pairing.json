@@ -1,6 +1,6 @@
 {
   "spec": "§16",
-  "about": "begin_frame while a frame is open is busy, end_frame with no open frame and begin_frame without a canvas are invalid_argument, success returns nothing (probe-confirmed), and an empty frame does not clear the screen",
+  "about": "begin_frame while a frame is open is busy (checked before the canvas), a control declared with no open frame is invalid_argument, end_frame with no open frame and begin_frame without a canvas are invalid_argument, success returns nothing (probe-confirmed), and an empty frame does not clear the screen",
   "expect": {
     "end_without_begin": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
     "begin_nil": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
@@ -8,6 +8,10 @@
     "end_after_refused_begin": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
     "begin": {"value": {"ok": true, "ret": []}, "spec": "§16"},
     "begin_again": {"value": {"ok": true, "ret": [null, "busy"]}, "spec": "§16"},
+    "begin_nil_while_open": {"value": {"ok": true, "ret": [null, "busy"]}, "spec": "§16"},
+    "declared_before_begin": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "declared_in_frame": {"value": {"ok": true, "ret": []}, "spec": "§16"},
+    "declared_outside_frame": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
     "end": {"value": {"ok": true, "ret": []}, "spec": "§16"},
     "end_twice": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"}
   },

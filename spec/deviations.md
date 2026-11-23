@@ -85,7 +85,8 @@ the README.
   (see `tests/conformance/GAPS.md`).
 - Unfixtured replay requests answer `no_fixture`, which the contract does not know.
 - Time stands still for remote commands so that screenshots are stable.
-- `ctx.ui`: a control declared with no open frame returns `nil, "invalid_argument"`. `begin_frame` takes as a canvas
-  any table with the canvas's `rect` and `text_box` methods, since Lua cannot tell host objects apart. An error raised
-  by a region's `draw` still closes the frame, so the next `begin_frame` is not `busy`, as measured with the reader's
-  library; check `16/region_draw_args`.
+- `ctx.ui`, as measured with the reader's UI library run as a black box: a control declared with no open frame
+  returns `nil, "invalid_argument"`; `begin_frame` while a frame is open is `busy` whatever its argument; an error
+  raised by a region's `draw` still closes the frame. Checks: `16/frame_pairing`, `16/region_draw_args`.
+- `ctx.ui`, not measured: `begin_frame` takes as a canvas any table with the canvas's `rect` and `text_box` methods,
+  since Lua cannot tell host objects apart.
