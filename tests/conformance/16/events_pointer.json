@@ -1,0 +1,27 @@
+{
+  "spec": "§16",
+  "about": "tap and double_tap activate the control hit and move focus to it; hold gives long_press and leaves focus (probe-confirmed); the hit is taken at the press point down_x, down_y, or at x, y without one; down, move, cancel and the other gestures give nil, nil",
+  "steps": ["tap 40 40"],
+  "expect": {
+    "tap": {"value": {"ok": true, "ret": ["b", "activate"]}, "spec": "§16"},
+    "tap.focused": {"value": "b", "spec": "§16"},
+    "double_tap": {"value": {"ok": true, "ret": ["a", "activate"]}, "spec": "§16"},
+    "double_tap.focused": {"value": "a", "spec": "§16"},
+    "hold": {"value": {"ok": true, "ret": ["b", "long_press"]}, "spec": "§16"},
+    "hold.focused": {"value": "a", "spec": "§16"},
+    "press_point": {"value": {"ok": true, "ret": ["a", "activate"]}, "deviation": "D6", "spec_value": {"ok": true, "ret": ["b", "activate"]}},
+    "press_point_empty": {"value": {"ok": true, "ret": [null, null]}, "deviation": "D6", "spec_value": {"ok": true, "ret": ["b", "activate"]}},
+    "hold_press_point": {"value": {"ok": true, "ret": ["b", "long_press"]}, "deviation": "D6", "spec_value": {"ok": true, "ret": [null, null]}},
+    "no_down_point": {"value": {"ok": true, "ret": ["b", "activate"]}, "spec": "§16"},
+    "no_down_point.focused": {"value": "b", "spec": "§16"},
+    "down": {"value": {"ok": true, "ret": [null, null]}, "spec": "§16"},
+    "move": {"value": {"ok": true, "ret": [null, null]}, "spec": "§16"},
+    "swipe": {"value": {"ok": true, "ret": [null, null]}, "spec": "§16"},
+    "long": {"value": {"ok": true, "ret": [null, null]}, "spec": "§16"},
+    "cancel": {"value": {"ok": true, "ret": [null, null]}, "spec": "§16"},
+    "no_point": {"value": {"ok": true, "ret": [null, null]}, "spec": "§16"},
+    "no_point.focused": {"value": "b", "spec": "§16"},
+    "runner_tap": {"value": "down:nil,nil up:a,activate", "spec": "§16"}
+  },
+  "errors": []
+}

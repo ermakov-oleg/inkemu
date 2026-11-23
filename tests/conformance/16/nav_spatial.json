@@ -1,0 +1,28 @@
+{
+  "spec": "§16",
+  "about": "from 2.13 arrows move by position: candidates have their centre beyond the current centre and their near edge not before the current one; a cross-axis overlap wins, then the smaller gap, then the smaller cross-axis centre distance, then declaration order; disabled controls are skipped, regions take part; no candidate gives nil, nil with focus kept (no wrap); an arrow from no known focus takes the first available control (probe-confirmed, 3 x 3 grid and the irregular cases)",
+  "expect": {
+    "grid.g1": {"value": "up=- down=g4 left=- right=g2", "spec": "§16"},
+    "grid.g2": {"value": "up=- down=g5 left=g1 right=g3", "spec": "§16"},
+    "grid.g3": {"value": "up=- down=g6 left=g2 right=-", "spec": "§16"},
+    "grid.g4": {"value": "up=g1 down=g7 left=- right=g5", "spec": "§16"},
+    "grid.g5": {"value": "up=g2 down=g8 left=g4 right=g6", "spec": "§16"},
+    "grid.g6": {"value": "up=g3 down=g9 left=g5 right=-", "spec": "§16"},
+    "grid.g7": {"value": "up=g4 down=- left=- right=g8", "spec": "§16"},
+    "grid.g8": {"value": "up=g5 down=- left=g7 right=g9", "spec": "§16"},
+    "grid.g9": {"value": "up=g6 down=- left=g8 right=-", "spec": "§16"},
+    "overlap_beats_gap": {"value": "P", "spec": "§16"},
+    "smaller_gap": {"value": "P2", "spec": "§16"},
+    "cross_distance": {"value": "R1", "spec": "§16"},
+    "declared_first": {"value": "R2", "spec": "§16"},
+    "top_edge_above": {"value": "far", "spec": "§16"},
+    "gap_zero": {"value": "O", "spec": "§16"},
+    "left_edge_before": {"value": "N", "spec": "§16"},
+    "left_nearest_overlapping": {"value": "L2", "spec": "§16"},
+    "disabled_skipped": {"value": "E2", "spec": "§16"},
+    "region": {"value": "RG", "spec": "§16"},
+    "nothing_that_way": {"value": "-", "spec": "§16"},
+    "unknown_focus": {"value": {"ok": true, "ret": ["y", "focus"]}, "spec": "§16"}
+  },
+  "errors": []
+}

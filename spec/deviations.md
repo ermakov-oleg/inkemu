@@ -41,6 +41,52 @@ no radio and is not the device, so panel timing and network completion were not 
 - Status: measured on 26112001.
 - Checks: `16/button_emphasis_before_2_14`.
 
+### D4 - a repeat key in ui:handle_event
+
+- Contract says: keys with phase `repeat` are events since 2.10 (§4); `handle_event` lists results only for `down`
+  and `up`, and an event with no matching action gives `nil, nil` (§16).
+- Reader does: a key event with phase `repeat` returns `nil, "invalid_argument"`, at every package minor (the
+  reader's UI library run as a black box with our scenarios, and the probe).
+- inkemu does: `nil, "invalid_argument"`; focus drawing is not switched on by it.
+- Status: measured on 26112001.
+- Checks: `16/events_keys`.
+
+### D5 - ok up needs its ok down
+
+- Contract says: the `up` of `ok` activates the focused control when focus did not move (§16).
+- Reader does: it activates only after an `ok` down with focus unchanged since; an `ok` up with no `ok` down before
+  it, or a second `ok` up after one down, returns `nil, nil`. A frame drawn in between does not break the pair.
+- inkemu does: the same.
+- Status: measured on 26112001.
+- Checks: `16/events_keys`.
+
+### D6 - pointer hits at the press point
+
+- Contract says: a `tap`, `double_tap` or `hold` acts on the control hit (§16); it does not name the point, and an
+  event's `x, y` is where that event happened (§4).
+- Reader does: hits at `down_x, down_y`, and at `x, y` only when the event has no press point.
+- inkemu does: the same.
+- Status: measured on 26112001.
+- Checks: `16/events_pointer`.
+
+### D7 - the ends of order navigation
+
+- Contract says: before 2.13 an arrow moves focus to the previous or next control (§16); it does not say what
+  happens at the first or last control.
+- Reader does: returns the same control's id with `focus` there, rather than `nil, nil`.
+- inkemu does: the same.
+- Status: measured on 26112001 (the reader's UI library and the probe).
+- Checks: `16/nav_order_before_2_13`.
+
+### D8 - a pointer event on a device without a touchscreen
+
+- Contract says: a device without a touchscreen always draws focus (§16).
+- Reader does: a pointer event passed to `handle_event` turns focus drawing off there too, until the next key
+  event. Such a device produces no pointer events of its own, so only an app that builds one sees this.
+- inkemu does: the same.
+- Status: measured on 26112001 (the reader's UI library run as a black box).
+- Checks: `16/focus_drawn_only_after_key` (`keyless.after_pointer`).
+
 ## Notes
 
 ### N1 - completion of PUT, PATCH and DELETE
@@ -70,6 +116,9 @@ Earlier notes got these wrong; do not reintroduce them.
 - Net methods are upper case only; `save` is accepted; a second request while one runs is `busy`; a bad method is
   refused before `busy` is considered.
 - Lua numbers are 32-bit integers and single-precision floats.
+- `ctx.ui` arrows follow the package manifest's `api`, not the firmware's: a 2.12 package moves in declaration order
+  (skipping disabled controls, ignoring `nav`), a 2.13 one by position. Checks: `16/nav_order_before_2_13`,
+  `16/nav_spatial`.
 
 ## Not emulated
 
@@ -88,5 +137,13 @@ the README.
 - `ctx.ui`, as measured with the reader's UI library run as a black box: a control declared with no open frame
   returns `nil, "invalid_argument"`; `begin_frame` while a frame is open is `busy` whatever its argument; an error
   raised by a region's `draw` still closes the frame. Checks: `16/frame_pairing`, `16/region_draw_args`.
+- `ctx.ui`, measured the same way: `handle_event` gives `nil, nil` for a key without `key`, `back`, unknown keys, arrow
+  ups, pointer `down`/`move`, other gestures and pointer events without a point, and `nil, "invalid_argument"` for a
+  key without `phase`; any key event turns focus drawing on and any pointer event turns it off, even when the result
+  is `nil, nil`; `hold` leaves focus where it was; `ui:focus(id, 2.0)` keeps part 2. Checks: `16/events_keys`,
+  `16/events_pointer`, `16/focus_drawn_only_after_key`, `16/focus_api`.
 - `ctx.ui`, not measured: `begin_frame` takes as a canvas any table with the canvas's `rect` and `text_box` methods,
-  since Lua cannot tell host objects apart.
+  since Lua cannot tell host objects apart. A control's box holds the points `x .. x + w - 1` for hits, and boxes that
+  only touch do not overlap for the arrows. A refused event (`invalid_argument`) leaves focus drawing as it was. `ok`
+  on a kept id that is disabled in the last frame gives `nil, nil`. An arrow from a kept id that `ui:focus` set to a
+  disabled control starts from that control's place.

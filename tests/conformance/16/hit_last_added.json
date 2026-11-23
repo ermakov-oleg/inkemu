@@ -1,0 +1,18 @@
+{
+  "spec": "§16",
+  "about": "a pointer event hits the last added button or region containing the point; labels are not hit; a disabled control is not hit and blocks the controls below it (probe-confirmed); a control declared after a disabled one is above it and is hit; a box covers x..x+w-1",
+  "expect": {
+    "under_only": {"value": {"ok": true, "ret": ["under", "activate"]}, "spec": "§16"},
+    "overlap": {"value": {"ok": true, "ret": ["over", "activate"]}, "spec": "§16"},
+    "over_only": {"value": {"ok": true, "ret": ["over", "activate"]}, "spec": "§16"},
+    "region": {"value": {"ok": true, "ret": ["reg", "activate"]}, "spec": "§16"},
+    "disabled_on_top": {"value": {"ok": true, "ret": [null, null]}, "spec": "§16"},
+    "beside_disabled": {"value": {"ok": true, "ret": ["covered", "activate"]}, "spec": "§16"},
+    "declared_after_disabled": {"value": {"ok": true, "ret": ["free", "activate"]}, "spec": "§16"},
+    "right_edge_is_outside": {"value": {"ok": true, "ret": [null, null]}, "spec": "§16"},
+    "left_edge_is_inside": {"value": {"ok": true, "ret": ["under", "activate"]}, "spec": "§16"},
+    "nothing": {"value": {"ok": true, "ret": [null, null]}, "spec": "§16"},
+    "focused": {"value": "under", "spec": "§16"}
+  },
+  "errors": []
+}
