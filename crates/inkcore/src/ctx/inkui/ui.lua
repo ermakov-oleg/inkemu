@@ -73,9 +73,11 @@ function create(opts)
     keys = not touch(),
     -- an `ok` down came on the kept focus; cleared by its `ok` up and by any focus move
     pressed = nil,
-    -- the open frame, and the targets of the last frame that was closed (events and arrows work on these)
+    -- the open frame, and the targets of the last frame that was closed (events and arrows work on these) with
+    -- the controls that own them by id
     frame = nil,
     targets = {},
+    owners = {},
     -- the skins of `create`, by name
     skins = opts.skins or {},
   }

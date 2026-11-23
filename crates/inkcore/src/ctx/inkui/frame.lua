@@ -3,7 +3,7 @@
 
 MAX_CONTROLS = 128
 
--- control kinds by name, filled by the control files: { check = function(c, o) -> ok[, unsupported message],
+-- control kinds by name, filled by the control files: { check = function(c, o, st) -> ok[, unsupported message],
 -- paint = function(g, c, look), focusable = bool, cost = controls counted against MAX_CONTROLS: a number, 1 when
 -- nil, or a function of the control record }; composite.lua adds the fields of composite kinds
 kinds = {}
@@ -32,8 +32,8 @@ methods.end_frame = function(self)
   end
   -- closed before painting: an error raised by a region's draw still ends the frame
   st.frame = nil
-  st.targets = targets_of(f.list)
-  settle_focus(st, st.targets)
+  st.targets, st.owners = targets_of(f.list)
+  settle_focus(st)
   for _, c in ipairs(f.list) do
     if c.kind.paint then
       c.kind.paint(f.g, c, look_of(st, c))
@@ -71,7 +71,7 @@ function declare(st, name, id, o, level)
     return nil, INVALID
   end
   local c = { kind = kind, id = id, x = o.x, y = o.y, w = o.w, h = o.h }
-  local ok, unsupported = kind.check(c, o)
+  local ok, unsupported = kind.check(c, o, st)
   if unsupported then
     error(unsupported, level)
   end
@@ -83,4 +83,14 @@ function declare(st, name, id, o, level)
   end
   f.ids[id] = true
   f.list[#f.list + 1] = c
+end
+
+-- `ui:<name>(id, o)` for the control kind `name`
+function control_method(name)
+  return function(self, id, o)
+    local _, err = declare(state_of(self, name), name, id, o, 3)
+    if err then
+      return nil, err
+    end
+  end
 end

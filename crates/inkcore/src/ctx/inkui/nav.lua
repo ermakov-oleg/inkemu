@@ -16,14 +16,14 @@ local function moved(st, t)
   return event_result(t.id, "focus", t.part)
 end
 
--- `nav[dir]` of the current target when it names an available plain control
-local function override(list, cur, dir)
+-- the available target `nav[dir]` of the current one names: a plain control, or a composite's default part
+local function override(st, cur, dir)
   local nav = cur.nav
   local id = nav and nav[dir]
   if id == nil then
     return nil
   end
-  local t = find_target(list, id, nil)
+  local t = resolve(st.targets, st.owners, id, nil)
   if t and t.enabled then
     return t
   end
@@ -61,8 +61,9 @@ local function better(o, g, c, bo, bg, bc)
   return c < bc
 end
 
-local function by_position(list, cur, dir)
-  local target = override(list, cur, dir)
+local function by_position(st, cur, dir)
+  local list = st.targets
+  local target = override(st, cur, dir)
   if target then
     return target
   end
@@ -97,10 +98,11 @@ local function by_order(list, cur, dir)
   return cur
 end
 
--- `id, "focus"[, part]` for an arrow key `dir`, or `nil, nil` when focus stays
+-- `id, "focus"[, part]` for an arrow key `dir`, or `nil, nil` when focus stays. It starts from the target the
+-- kept focus stands for, which `ui:focus` may have set since the last frame.
 function navigate(st, dir)
   local list = st.targets
-  local cur = find_target(list, st.focus, st.part)
+  local cur = resolve(list, st.owners, st.focus, st.part)
   if cur == nil then
     local first = first_available(list)
     if first == nil then
@@ -110,7 +112,7 @@ function navigate(st, dir)
   end
   local t
   if api_at_least(13) then
-    t = by_position(list, cur, dir)
+    t = by_position(st, cur, dir)
   else
     t = by_order(list, cur, dir)
   end

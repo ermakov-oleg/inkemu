@@ -75,10 +75,5 @@ kinds.region = {
 kinds.spacer = { cost = 0, check = function() return true end }
 
 for _, name in ipairs({ "label", "button", "region" }) do
-  methods[name] = function(self, id, o)
-    local _, err = declare(state_of(self, name), name, id, o, 3)
-    if err then
-      return nil, err
-    end
-  end
+  methods[name] = control_method(name)
 end

@@ -100,10 +100,11 @@ local function register(f, n)
   if c == nil then
     return true
   end
+  -- placed first: what a control costs may depend on its box
+  c.x, c.y, c.w, c.h = n.x, n.y, n.w, n.h
   if not reserve(f, cost_of(c)) then
     return false
   end
-  c.x, c.y, c.w, c.h = n.x, n.y, n.w, n.h
   f.ids[c.id] = true
   f.list[#f.list + 1] = c
   return true

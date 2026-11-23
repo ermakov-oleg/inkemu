@@ -40,10 +40,6 @@ local NOT_FLEX_CHILD = { "justify_self", "column_span", "row_span" }
 -- keys of a ui:layout result that an id cannot take
 local BOX_KEYS = { x = true, y = true, w = true, h = true, overflow = true }
 
-local function int_in(v, lo, hi)
-  return is_integral(v) and v >= lo and v <= hi
-end
-
 local function int_or(v, default)
   if v == nil then
     return default
@@ -71,18 +67,6 @@ end
 
 local function fail(cx, code)
   cx.err = cx.err or code
-end
-
-local function strings(t)
-  if type(t) ~= "table" or #t < 1 then
-    return false
-  end
-  for i = 1, #t do
-    if type(t[i]) ~= "string" then
-      return false
-    end
-  end
-  return true
 end
 
 local function not_implemented(cx, what)
@@ -204,7 +188,7 @@ local function check_sizing(cx, n, o)
     n.mopts = api_at_least(16) and { bold = o.bold ~= false } or nil
     check_skin(cx, n, o.skin, "ui:switch")
   elseif k == "tabs" or k == "radio" then
-    if not strings(o.items) or not (o.gap == nil or int_in(o.gap, 0, 255)) then
+    if not (check_items(o.items) and check_cell_gap(o.gap)) then
       return fail(cx, INVALID)
     end
     n.items, n.item_gap = o.items, int_or(o.gap, 0)
@@ -297,7 +281,7 @@ local function check_control(cx, n, o)
     return not_implemented(cx, "ui:" .. n.kind)
   end
   local c = { kind = ctl, id = n.id }
-  local ok, unsupported = ctl.check(c, o)
+  local ok, unsupported = ctl.check(c, o, cx.st)
   if unsupported then
     cx.unsupported = cx.unsupported or unsupported
   elseif not ok then

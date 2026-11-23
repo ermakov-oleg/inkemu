@@ -10,6 +10,28 @@ function is_side(v)
   return is_integral(v) and v >= 1
 end
 
+function int_in(v, lo, hi)
+  return is_integral(v) and v >= lo and v <= hi
+end
+
+-- the `items` of tabs and radio: an array of 1..64 strings
+function check_items(items)
+  if type(items) ~= "table" or #items < 1 or #items > 64 then
+    return false
+  end
+  for i = 1, #items do
+    if type(items[i]) ~= "string" then
+      return false
+    end
+  end
+  return true
+end
+
+-- the `gap` between the cells of tabs and radio: nil or an integer >= 0
+function check_cell_gap(gap)
+  return gap == nil or (is_integral(gap) and gap >= 0)
+end
+
 -- nil or the value's Lua type
 function optional(v, ty)
   return v == nil or type(v) == ty

@@ -27,6 +27,15 @@ local function hit(list, px, py)
   end
 end
 
+-- what activating target `t` returns: a composite's part names its own action and value
+local function activated(t)
+  local c = t.owner
+  if c then
+    return t.id, c.kind.activate(c, t.part)
+  end
+  return t.id, "activate"
+end
+
 local function key(st, ev)
   local down = ev.phase == "down"
   if ev.key == "ok" then
@@ -41,6 +50,9 @@ local function key(st, ev)
       return event_result(st.focus, "press", st.part)
     end
     if pressed then
+      if t then
+        return activated(t)
+      end
       return event_result(st.focus, "activate", st.part)
     end
     return nil, nil
@@ -65,7 +77,7 @@ local function pointer(st, ev)
     return event_result(t.id, "long_press", t.part)
   end
   set_focus(st, t.id, t.part)
-  return event_result(t.id, "activate", t.part)
+  return activated(t)
 end
 
 methods.handle_event = function(self, ev)
