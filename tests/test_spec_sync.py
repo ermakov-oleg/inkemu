@@ -31,7 +31,7 @@ def make_index(entries=None, tag="api-1.0.0"):
     if entries is None:
         entries = [
             entry("contract/v2/spec-en/00-intro.md", "one", "ex"),
-            entry("contract/v2/spec-en/附录A-pack.md", "two"),
+            entry("contract/v2/spec-en/\u9644\u5f55A-pack.md", "two"),
             entry("contract/v2/spec/07-text.md", "three"),
             entry("guide.en.md", "four"),
             entry("studio/preview.md", "five"),
@@ -69,11 +69,11 @@ def locked(env, index=None):
 
 def test_section_ids():
     ids = {
-        "contract/v2/spec-en/00-总则.md": "en/00",
-        "contract/v2/spec-en/34-已装应用.md": "en/34",
-        "contract/v2/spec/03-屏幕与设备.md": "zh/03",
-        "contract/v2/spec-en/附录D-安装前配置.md": "en/D",
-        "contract/v2/spec/附录A-打包.md": "zh/A",
+        "contract/v2/spec-en/00-intro.md": "en/00",
+        "contract/v2/spec-en/34-apps.md": "en/34",
+        "contract/v2/spec/03-screen.md": "zh/03",
+        "contract/v2/spec-en/\u9644\u5f55D-setup.md": "en/D",
+        "contract/v2/spec/\u9644\u5f55A-pack.md": "zh/A",
         "ui-system.en.md": "guide/ui-system.en.md",
         "studio/preview.md": "studio/preview",
     }
@@ -88,7 +88,7 @@ def test_hash_format():
 
     assert spec_sync.section_hash(entry("x", "c", "e")) == hashlib.sha256(b"c\n\0\ne").hexdigest()
     assert spec_sync.section_hash(entry("x", "c", None)) == hashlib.sha256(b"c\n\0\n").hexdigest()
-    assert spec_sync.section_hash(entry("x", "ж", "")) == hashlib.sha256("ж\n\0\n".encode()).hexdigest()
+    assert spec_sync.section_hash(entry("x", "\u0436", "")) == hashlib.sha256("\u0436\n\0\n".encode()).hexdigest()
 
 
 def test_update_writes_stable_lock(env):
@@ -181,3 +181,59 @@ def test_check_with_diff_is_a_usage_error(env, capsys):
         run("--check", "--diff", "--index", write(env[0] / "new.json", make_index()))
     assert exc.value.code == 2
     assert "--diff" in capsys.readouterr().err
+
+
+def test_malformed_index_exits_two(env, capsys):
+    locked(env)
+    bad = {"schemaVersion": 3, "contractTag": "t", "items": []}
+    assert run("--check", "--index", write(env[0] / "bad.json", bad)) == 2
+    null_content = make_index([entry("guide.en.md", None)])
+    assert run("--check", "--index", write(env[0] / "null.json", null_content)) == 2
+    err = capsys.readouterr().err
+    assert err.count("\n") == 2 and err.count("spec_sync:") == 2
+
+
+def test_schema_version_change_exits_two(env, capsys):
+    locked(env)
+    index = make_index()
+    index["schemaVersion"] = 4
+    assert run("--check", "--index", write(env[0] / "new.json", index)) == 2
+    assert "schema changed: 3 -> 4" in capsys.readouterr().err
+
+
+def test_incomplete_read_exits_two(env, monkeypatch, capsys):
+    import http.client
+
+    locked(env)
+
+    class Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self):
+            raise http.client.IncompleteRead(b"x")
+
+    monkeypatch.setattr(spec_sync.urllib.request, "urlopen", lambda *a, **k: Resp())
+    assert run("--check") == 2
+    assert capsys.readouterr().err.count("\n") == 1
+
+
+def test_update_refuses_non_sha_commit(env, capsys):
+    tmp, lock = env
+    index = write(tmp / "i.json", make_index())
+    assert run("update", "--index", index) == 2
+    assert run("update", "--index", index, "--commit", "main") == 2
+    assert run("update", "--ref", "some-branch", "--index", index, "--commit", "ABC") == 2
+    assert not lock.exists()
+    assert capsys.readouterr().err.count("40-hex") == 3
+
+
+def test_diff_with_json_is_a_usage_error(env, capsys):
+    locked(env)
+    with pytest.raises(SystemExit) as exc:
+        run("--json", "--diff", "--index", write(env[0] / "new.json", make_index()))
+    assert exc.value.code == 2
+    assert "--json" in capsys.readouterr().err

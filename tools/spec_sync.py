@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import hashlib
+import http.client
 import json
 import os
 import re
@@ -20,6 +21,7 @@ UPSTREAM = "linchuanXu/xtapp-studio-mcp-intl"
 INDEX_PATH = "knowledge/index.json"
 LOCK_PATH = Path(__file__).resolve().parent.parent / "spec" / "contract.lock"
 TIMEOUT = 30
+SHA_RE = re.compile(r"[0-9a-f]{40}")
 
 
 class SyncError(Exception):
@@ -96,7 +98,7 @@ def _get(url: str) -> bytes:
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
             return resp.read()
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+    except (urllib.error.URLError, TimeoutError, OSError, http.client.HTTPException) as exc:
         raise SyncError(f"network error fetching {url}: {exc}") from exc
 
 
@@ -121,6 +123,11 @@ def load_json(path: str) -> dict:
         return json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise SyncError(f"cannot read {path}: {exc}") from exc
+
+
+def check_schema(lock: dict, index: dict) -> None:
+    if index.get("schemaVersion") != lock["schema_version"]:
+        raise SyncError(f"upstream index schema changed: {lock['schema_version']} -> {index.get('schemaVersion')}")
 
 
 def load_lock() -> dict:
@@ -150,11 +157,16 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
     if args.check and args.diff:
         p.error("--check never prints contract text; do not combine it with --diff")
+    if args.json and args.diff:
+        p.error("--json cannot carry a text diff; use --diff alone")
 
     try:
         return run(args)
     except SyncError as exc:
         print(f"spec_sync: {exc}", file=sys.stderr)
+        return 2
+    except (KeyError, TypeError, AttributeError, ValueError, http.client.HTTPException) as exc:
+        print(f"spec_sync: unexpected upstream index shape or answer ({type(exc).__name__}: {exc})", file=sys.stderr)
         return 2
 
 
@@ -171,12 +183,15 @@ def run(args: argparse.Namespace) -> int:
         index = fetch_index(commit)
 
     if args.command == "update":
+        if not SHA_RE.fullmatch(commit):
+            raise SyncError(f"update needs a 40-hex commit sha, got {commit!r}; pass --commit or a sha as --ref")
         LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
         new_lock = build_lock(index, commit)
         LOCK_PATH.write_text(dump_lock(new_lock), encoding="utf-8")
         print(f"lock updated: {new_lock['contract_tag']} at {commit}, {len(new_lock['sections'])} sections")
         return 0
 
+    check_schema(lock, index)
     result = compare(lock, index)
     result["commit_old"] = lock["commit"]
     result["commit_new"] = commit

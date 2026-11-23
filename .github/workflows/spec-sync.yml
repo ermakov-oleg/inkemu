@@ -34,9 +34,18 @@ jobs:
             exit "$code"
           fi
           python3 - <<'PY'
-          import json, os
+          import json, re, sys
 
           r = json.load(open("result.json"))
+          tag_ok = re.compile(r"api-\d+(\.\d+)*")
+          id_ok = re.compile(r"[A-Za-z0-9._/-]+")
+          sha_ok = re.compile(r"[0-9a-f]{40}")
+          tags = (r["tag_old"], r["tag_new"])
+          ids = [i for k in ("changed", "added", "removed") for i in r[k]]
+          if not all(tag_ok.fullmatch(t) for t in tags) or not all(id_ok.fullmatch(i) for i in ids) \
+                  or not sha_ok.fullmatch(r["commit_old"]):
+              print("Unexpected tag, section id or commit in the upstream result; no issue opened.", file=sys.stderr)
+              sys.exit(3)
           if r["tag_old"] != r["tag_new"]:
               title = f"Official API contract changed: {r['tag_old']} → {r['tag_new']}"
           else:
@@ -52,7 +61,12 @@ jobs:
           open("issue-body.md", "w", encoding="utf-8").write("\n".join(lines) + "\n")
           PY
           title=$(cat issue-title.txt)
-          gh label create spec-sync --color 0e8a16 --description "Official API contract changed" || true
+          if ! out=$(gh label create spec-sync --color 0e8a16 --description "Official API contract changed" 2>&1); then
+            case "$out" in
+              *"already exists"*) ;;
+              *) echo "$out" >&2; exit 1 ;;
+            esac
+          fi
           existing=$(gh issue list --label spec-sync --state open --json title | python3 -c 'import json,sys; t=sys.argv[1]; print(sum(1 for i in json.load(sys.stdin) if i["title"]==t))' "$title")
           if [ "$existing" -gt 0 ]; then
             echo "An open issue with this title exists; nothing to do."
