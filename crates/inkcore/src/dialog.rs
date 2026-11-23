@@ -16,6 +16,10 @@ pub(crate) type TypeFn = Rc<dyn Fn(&Host, &str)>;
 pub(crate) struct Handler {
     pub answer: AnswerFn,
     pub type_text: Option<TypeFn>,
+    /// What a front end's text field submits: the whole text, then the confirm key.
+    pub submit: Option<TypeFn>,
+    /// Answering OK leaves the dialog open (an `enter = "newline"` edit inserts a line break).
+    pub ok_keeps_open: bool,
 }
 
 /// Python `repr` of the 0.1 `pending` dict.
@@ -70,9 +74,24 @@ impl Host<'_> {
         });
     }
 
+    /// The kind of the open dialog, if any.
+    pub(crate) fn pending_kind(&self) -> Option<&'static str> {
+        with(self.st, |s| s.pending.as_ref().map(|p| p.kind))
+    }
+
     pub fn answer(&self, ok: bool) -> Result<(), String> {
+        self.answer_now(ok)?;
+        self.wait(INPUT_MS)
+    }
+
+    /// [`Host::answer`] without the time an input takes.
+    pub(crate) fn answer_now(&self, ok: bool) -> Result<(), String> {
         let h = with(self.st, |s| {
             s.pending.as_ref()?;
+            let keep = ok && s.pending_h.as_ref().is_some_and(|h| h.ok_keeps_open);
+            if keep {
+                return s.pending_h.clone();
+            }
             let h = s.pending_h.take();
             s.pending = None;
             h
@@ -82,12 +101,21 @@ impl Host<'_> {
         };
         (h.answer)(self, ok);
         self.settle();
-        self.wait(INPUT_MS)
+        Ok(())
     }
 
     pub fn type_text(&self, text: &str) -> Result<(), String> {
+        self.text_input(text, |h| h.type_text)
+    }
+
+    /// Like [`Host::type_text`], but an edit's text is replaced by `text` instead of appended to.
+    pub fn submit_text(&self, text: &str) -> Result<(), String> {
+        self.text_input(text, |h| h.submit)
+    }
+
+    fn text_input(&self, text: &str, pick: fn(Handler) -> Option<TypeFn>) -> Result<(), String> {
         let (p, h) = with(self.st, |s| (s.pending.clone(), s.pending_h.clone()));
-        let typing = h.and_then(|h| h.type_text).filter(|_| p.is_some());
+        let typing = h.and_then(pick).filter(|_| p.is_some());
         let Some(typing) = typing else {
             return Err(format!(
                 "no text input is waiting; pending: {}",

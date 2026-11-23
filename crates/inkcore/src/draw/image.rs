@@ -1,5 +1,6 @@
 //! Images for `g:image`: 8-bit gray as 0.1 kept them (Pillow mode "L"), scaled, dithered and pasted onto the 1-bit
 //! frame as Pillow did (`resize` NEAREST/LANCZOS, `convert("1")` Floyd–Steinberg, `paste`).
+use super::raster::in_rounded;
 use super::Frame;
 
 /// The largest `w`/`h` an image is drawn at: dithering needs whole rows of the scaled image.
@@ -62,6 +63,17 @@ fn over_white(c: u8, a: u8) -> u8 {
     ((((tmp >> 8) + tmp) >> 8) >> 7) as u8
 }
 
+/// How `g:image` puts the dithered pixels down (§6).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Look {
+    /// Ink dots are drawn white: `color` below 8 on a black-and-white image.
+    pub white_ink: bool,
+    /// Black and white swap after dithering.
+    pub invert: bool,
+    /// Corners clipped as `g:rect{radius}` rounds them; 0 keeps the whole rectangle.
+    pub radius: f64,
+}
+
 impl Gray {
     pub fn white(w: u32, h: u32) -> Self {
         Gray {
@@ -80,6 +92,21 @@ impl Gray {
         }
     }
 
+    /// Only black and white pixels, no gray: `color` tints such an image (§6).
+    pub fn is_black_and_white(&self) -> bool {
+        self.px.iter().all(|&v| v == 0 || v == 255)
+    }
+
+    /// The region `x`, `y`, `w`, `h`, which must lie inside the image.
+    pub fn crop(&self, x: u32, y: u32, w: u32, h: u32) -> Gray {
+        let (x, w) = (x as usize, w as usize);
+        let px = (y..y + h)
+            .flat_map(|r| &self.px[r as usize * self.w as usize + x..][..w])
+            .copied()
+            .collect();
+        Gray { w: w as u32, h, px }
+    }
+
     pub fn from_frame(f: &Frame) -> Self {
         Gray {
             w: f.w,
@@ -89,8 +116,9 @@ impl Gray {
     }
 }
 
-/// 0.1 `g:image`: `img` scaled to `w`×`h` (1..=MAX_DRAW_SIDE), dithered, pasted with its top left at `x`, `y`.
-pub fn paste(f: &mut Frame, img: &Gray, x: i64, y: i64, w: u32, h: u32) {
+/// `g:image`: `img` scaled to `w`×`h` (1..=MAX_DRAW_SIDE), dithered, pasted with its top left at `x`, `y` as
+/// `look` says.
+pub fn paste(f: &mut Frame, img: &Gray, (x, y): (i64, i64), (w, h): (u32, u32), look: Look) {
     let rows = (i64::from(f.h) - y).clamp(0, i64::from(h)) as usize;
     let visible_x = x < i64::from(f.w) && x + i64::from(w) > 0;
     if rows == 0 || y + i64::from(h) <= 0 || !visible_x {
@@ -104,6 +132,10 @@ pub fn paste(f: &mut Frame, img: &Gray, x: i64, y: i64, w: u32, h: u32) {
         lanczos(img, w as usize, h as usize, rows)
     };
     let bits = dither(&scaled, w as usize, rows);
+    let (fw, fh) = (f64::from(w), f64::from(h));
+    let shown = |c: usize, r: usize| {
+        look.radius <= 0.0 || in_rounded(c as f64 + 0.5, r as f64 + 0.5, fw, fh, look.radius)
+    };
     for (r, row) in bits.chunks(w as usize).enumerate() {
         let py = y + r as i64;
         if py < 0 {
@@ -111,8 +143,9 @@ pub fn paste(f: &mut Frame, img: &Gray, x: i64, y: i64, w: u32, h: u32) {
         }
         for (c, &v) in row.iter().enumerate() {
             let px = x + c as i64;
-            if (0..i64::from(f.w)).contains(&px) {
-                f.px[(py as usize) * f.w as usize + px as usize] = u8::from(v == 0);
+            if (0..i64::from(f.w)).contains(&px) && shown(c, r) {
+                let ink = v == 0 && !look.white_ink;
+                f.px[(py as usize) * f.w as usize + px as usize] = u8::from(ink != look.invert);
             }
         }
     }
@@ -307,10 +340,40 @@ mod tests {
     }
 
     #[test]
+    fn invert_is_the_complement_of_the_dithered_pixels() {
+        let img = gray(16, 8, |x, y| ((x * 13 + y * 7 + 60) % 256) as u8);
+        let (mut plain, mut inverted) = (Frame::new(20, 10), Frame::new(20, 10));
+        paste(&mut plain, &img, (2, 1), (16, 8), Look::default());
+        let look = Look {
+            invert: true,
+            ..Look::default()
+        };
+        paste(&mut inverted, &img, (2, 1), (16, 8), look);
+        let dithered = dither(&img.px, 16, 8);
+        for y in 0..10 {
+            for x in 0..20 {
+                let inside = (2..18).contains(&x) && (1..9).contains(&y);
+                let want = inside && dithered[(y as usize - 1) * 16 + x as usize - 2] == 0;
+                assert_eq!(plain.get(x, y), u8::from(want), "({x}, {y})");
+                assert_eq!(inverted.get(x, y), u8::from(inside && !want), "({x}, {y})");
+            }
+        }
+    }
+
+    #[test]
+    fn crop_takes_the_region_row_by_row() {
+        let img = gray(5, 4, |x, y| (y * 5 + x) as u8);
+        let c = img.crop(1, 2, 3, 2);
+        assert_eq!((c.w, c.h, c.px), (3, 2, vec![11, 12, 13, 16, 17, 18]));
+        assert!(!img.is_black_and_white());
+        assert!(gray(2, 1, |x, _| if x == 0 { 0 } else { 255 }).is_black_and_white());
+    }
+
+    #[test]
     fn huge_sizes_only_compute_the_rows_on_screen() {
         let img = gray(2, 2, |x, _| if x == 0 { 0 } else { 255 });
         let mut f = Frame::new(10, 10);
-        paste(&mut f, &img, -4, -4, 8192, 8192);
+        paste(&mut f, &img, (-4, -4), (8192, 8192), Look::default());
         assert!(f.px.iter().all(|&v| v == 1));
     }
 }

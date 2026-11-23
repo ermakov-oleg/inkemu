@@ -175,6 +175,59 @@ fn a_decoded_png_draws_dithered_and_warns() {
     );
 }
 
+/// The frame and the results of an app that draws `img` at 10, 10 after `release()` ran twice in `on_load`.
+fn drawn_after_release(make: &str) -> (Core, serde_json::Value) {
+    let mut core = Core::new(
+        app_with(
+            &format!(
+                "function on_load(c) img = {make} rel = {{img:release(), img:release()}} end\n\
+                 function on_draw(c, g) r = {{g:image(img, 10, 10)}} end"
+            ),
+            &[("data/img.png", PNG)],
+            "",
+        ),
+        Config::default(),
+        Persisted::default(),
+    );
+    no_errors(&core);
+    let v = core
+        .lua_eval("return {rel[1], rel[2], r[1] == nil, r[2] or 'none', img.width, img.height}")
+        .unwrap();
+    (core, v)
+}
+
+#[test]
+fn a_released_package_image_is_still_drawn() {
+    let (core, v) = drawn_after_release("c.package:image('img.png')");
+    assert_eq!(
+        v,
+        json!([true, true, true, "none", 2, 2]),
+        "§8: release returns true and the object can still be drawn"
+    );
+    let f = core.raw_frame();
+    assert_eq!(
+        [f.get(10, 10), f.get(11, 10), f.get(10, 11), f.get(11, 11)],
+        [1, 0, 0, 1]
+    );
+}
+
+#[test]
+fn a_released_runtime_image_is_an_invalid_handle() {
+    for make in [
+        "c.image:decode(c.package:read('img.png'))",
+        "c.qr:encode('hi')",
+    ] {
+        let (core, v) = drawn_after_release(make);
+        let side = if make.contains("qr") { 21 } else { 2 };
+        assert_eq!(
+            v,
+            json!([true, true, true, "invalid_handle", side, side]),
+            "§8: {make} after release"
+        );
+        assert_eq!(core.raw_frame().px.iter().filter(|&&p| p == 1).count(), 0);
+    }
+}
+
 #[test]
 fn a_layer_draws_into_its_own_canvas_and_onto_the_screen() {
     let mut core = boot(

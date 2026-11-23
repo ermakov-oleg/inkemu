@@ -178,7 +178,7 @@ function showTextField(p) {
 
 $('text-form').addEventListener('submit', (e) => {
   e.preventDefault();
-  sendIfPending({ cmd: 'type_text', text: $('text-input').value }, TEXT_KINDS);
+  sendIfPending({ cmd: 'submit_text', text: $('text-input').value }, TEXT_KINDS);
 });
 $('text-input').addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {

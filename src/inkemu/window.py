@@ -206,7 +206,7 @@ class WindowApp:
             elif value is None:
                 self._guard(emu.answer, False)
             else:
-                self._guard(emu.type_text, value)
+                self._guard(emu.submit_text, value)
         finally:
             self._dialog_open = False
             self._last_tick = time.monotonic()

@@ -336,6 +336,7 @@ mod abi {
             "double_tap" => core.double_tap(i32_(req, cmd, "x")?, i32_(req, cmd, "y")?)?,
             "key" => core.key(text(req, cmd, "name")?)?,
             "type_text" => core.type_text(text(req, cmd, "text")?)?,
+            "submit_text" => core.submit_text(text(req, cmd, "text")?)?,
             "answer" => core.answer(flag(req, cmd, "ok")?)?,
             "wait" => core.wait(int(req, cmd, "ms")?)?,
             "advance" => core.advance(int(req, cmd, "ms")?)?,
@@ -451,6 +452,8 @@ mod abi {
             "running": st.running,
             "pending": st.pending.map(|p| json!({"kind": p.kind, "title": p.title, "text": p.text})),
             "locked": st.locked,
+            "refresh": st.refresh,
+            "refreshes": st.refreshes,
         });
         Map::from_iter([
             ("status".into(), status),

@@ -256,6 +256,7 @@ impl Session {
         fn tap_text(&mut self, text: &str) -> Result<(), String>;
         fn key(&mut self, name: &str) -> Result<(), String>;
         fn type_text(&mut self, text: &str) -> Result<(), String>;
+        fn submit_text(&mut self, text: &str) -> Result<(), String>;
         fn answer(&mut self, ok: bool) -> Result<(), String>;
         fn wait(&mut self, ms: i64) -> Result<(), String>;
         fn advance(&mut self, ms: i64) -> Result<(), String>;

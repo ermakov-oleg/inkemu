@@ -62,15 +62,18 @@ def test_input_edit_object(make_app, emu_factory):
         make_app(
             "function on_load(c)\n"
             "  ed = c.input:edit({text='x', on_change=function() end, on_end=function() end})\n"
-            "  ed:set_text('hello')\n  seen = ed.text\nend\n"
+            "  ed:set_text('hello')\n  seen = ed:text()\nend\n"
             "function on_draw(c, g) g:text(0, 0, seen) end\n"
         )
     )
     assert emu.pending["text"] == "hello" and emu.has_text("hello")
-    emu.lua_exec("on_load(ctx)")  # a second edit replaces the first
-    assert emu.pending["kind"] == "edit"
-    emu.lua_exec("ed:close()")
-    assert emu.pending is None
+    assert emu.lua_eval("local a, b = ctx.input:edit({}) return {a == nil, b}") == [True, "busy"], (
+        "API 2.33.1 contract §4 says otherwise: a second edit is busy, it does not replace the first (H4, 16/field_edit)"
+    )
+    assert emu.lua_eval("return ed:close()") == "hello", (
+        "API 2.33.1 contract §4 says otherwise: close returns the final text (H4, 16/field_edit)"
+    )
+    assert emu.pending is None and emu.lua_eval("return ed:close()") is None
 
 
 def test_confirm_yes_no(make_app, emu_factory):
@@ -218,16 +221,17 @@ def test_decode_garbage(make_app, emu_factory):
     assert emu.has_text("nil decode_failed")
 
 
-@pytest.mark.allow_errors
-def test_released_image_draw_is_an_error(make_app, emu_factory):
+def test_released_image_draw_is_invalid_handle(make_app, emu_factory):
     app = make_app(
-        "function on_load(c) img = c.image:decode(c.package:read('b.jpg')); img:release() end\n"
-        "function on_draw(c, g) g:image(img, 0, 0) end\n"
+        "function on_load(c) img = c.image:decode(c.package:read('b.jpg')); released = img:release() end\n"
+        "function on_draw(c, g) r = {g:image(img, 0, 0)} end\n"
     )
     (app / "data").mkdir()
     (app / "data" / "b.jpg").write_bytes(jpeg_bytes())
     emu = emu_factory(app)
-    assert emu.errors and "released" in emu.errors[0]
+    assert emu.lua_eval("return {released, r[1] == nil, r[2]}") == [True, True, "invalid_handle"], (
+        "API 2.33.1 contract §6 says otherwise: a released image is nil, invalid_handle (06/image_released)"
+    )
 
 
 def test_qr_encode_draws(make_app, emu_factory):
@@ -291,14 +295,16 @@ def test_layer_accumulates_and_released(make_app, emu_factory):
     assert black(shot, 105, 105) and black(shot, 125, 105)
 
 
-@pytest.mark.allow_errors
-def test_released_layer_draw_is_an_error(make_app, emu_factory):
+def test_released_layer_draw_is_invalid_handle(make_app, emu_factory):
     emu = emu_factory(
         make_app(
-            "function on_load(c) layer = c.layers:create(10, 10); layer:release(); layer:draw(function(g) end) end\n"
+            "function on_load(c) layer = c.layers:create(10, 10); layer:release()\n"
+            "  r = {layer:draw(function(g) called = true end)} end\n"
         )
     )
-    assert emu.errors and "released" in emu.errors[0]
+    assert emu.lua_eval("return {r[1] == nil, r[2], called == nil}") == [True, "invalid_handle", True], (
+        "API 2.33.1 contract §11 says otherwise: draw after release is nil, invalid_handle (06/image_released)"
+    )
 
 
 @pytest.mark.allow_errors

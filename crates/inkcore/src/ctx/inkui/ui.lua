@@ -1,0 +1,53 @@
+-- ctx.ui (§16), the core: UI objects, `create` and the method table the other files fill in.
+-- All files of the library share one private environment; `host` comes from the Rust glue.
+
+-- a UI object is an empty table; its state lives here, out of the app's reach
+objects = setmetatable({}, { __mode = "k" })
+methods = {}
+object_meta = { __index = methods, __metatable = false }
+
+-- package's manifest declares API 2.<minor> or later
+function api_at_least(minor)
+  return host.api_minor >= minor
+end
+
+-- the state of the UI object `self`, or a Lua error at the app's call of method `name`
+function state_of(self, name)
+  local s = objects[self]
+  if s == nil then
+    error("bad argument #1 to '" .. name .. "' (call ui:" .. name .. " with a colon)", 3)
+  end
+  return s
+end
+
+-- every method of §16 exists from the start; the files that implement one replace its stub
+for _, name in ipairs({
+  "begin_frame", "end_frame", "handle_event", "focus", "focused", "layout", "skin", "editing", "stop_edit",
+  "label", "button", "switch", "image", "field", "region",
+  "tabs", "radio", "stepper", "pager", "list", "progress",
+  "row", "column", "grid", "stack",
+}) do
+  methods[name] = function(self)
+    state_of(self, name)
+    error("ui:" .. name .. " is not implemented in inkemu yet", 2)
+  end
+end
+
+local FOCUS_STYLES = { fill = true, outline = true }
+
+function create(opts)
+  if opts == nil then
+    opts = {}
+  elseif type(opts) ~= "table" then
+    return nil, "invalid_argument"
+  end
+  local focus_style = opts.focus_style
+  if focus_style == nil then
+    focus_style = "fill"
+  elseif not FOCUS_STYLES[focus_style] then
+    return nil, "invalid_argument"
+  end
+  local obj = setmetatable({}, object_meta)
+  objects[obj] = { focus_style = focus_style }
+  return obj
+end

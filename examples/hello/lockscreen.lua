@@ -12,7 +12,7 @@ function on_draw(c, g)
   local ok, e = pcall(function()
     g:clear(0)
     local t = c.clock:now()
-    g:round_rect(90, 240, W - 180, 120, 16)
+    g:rect(90, 240, W - 180, 120, { radius = 16 })
     g:text(W // 2, 300, string.format('%02d:%02d', t.hour, t.minute), { font = c.fonts.large, align = 'center', valign = 'middle' })
     g:text(W // 2, 400, string.format('%s, %d %s', DAYS[t.weekday], t.day, MONTHS[t.month]),
       { font = c.fonts.large, align = 'center' })

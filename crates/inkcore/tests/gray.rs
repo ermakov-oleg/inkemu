@@ -169,10 +169,8 @@ fn an_unknown_kind_silently_draws_nothing() {
     for opts in [
         "{kind = 'hatch', density = 50, color = 15}",
         "{kind = 'checker'}",
-        "{density = 50}",
-        "nil",
     ] {
-        let core = draw(&format!("g:pattern(48, 48, 64, 64, {opts})"));
+        let mut core = draw(&format!("r = {{g:pattern(48, 48, 64, 64, {opts})}}"));
         assert_eq!(black_in(&core.raw_frame(), 0, 0, 480, 800), 0, "{opts}");
         assert!(
             core.warnings().is_empty(),
@@ -180,7 +178,23 @@ fn an_unknown_kind_silently_draws_nothing() {
             &*core.warnings()
         );
         assert_eq!(core.log().len(), quiet, "{opts}: {:?}", &*core.log());
-        assert_eq!(core.frame_commands(), 1, "{opts}: still one command");
+        assert_eq!(
+            (core.frame_commands(), core.lua_eval("return r[2]").unwrap()),
+            (0, serde_json::json!("invalid_argument")),
+            "{opts}: API 2.33.1 contract §6 says otherwise: refused, not drawn (06/pattern_invalid_args)"
+        );
+    }
+}
+
+#[test]
+fn a_pattern_without_kind_is_a_dot_pattern() {
+    for opts in ["{density = 50}", "nil"] {
+        let f = draw(&format!("g:pattern(48, 48, 64, 64, {opts})")).raw_frame();
+        assert_eq!(
+            black_in(&f, 48, 48, 64, 64),
+            64 * 64 / 2,
+            "{opts}: API 2.33.1 contract §6 says otherwise: kind defaults to dot"
+        );
     }
 }
 

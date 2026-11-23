@@ -6,6 +6,9 @@ mod device;
 pub(crate) mod files;
 mod fonts;
 mod image;
+// ctx.ui stays off until the library lands, so non-test builds never call into it
+#[cfg_attr(not(test), allow(dead_code))]
+mod inkui;
 mod layers;
 mod lock;
 pub(crate) mod net;
@@ -24,7 +27,7 @@ use std::rc::Rc;
 use mlua::{Function, IntoLuaMulti, Lua, MultiValue, Table, Value};
 
 use crate::app::AppFiles;
-use crate::emu::{with, Host, Shared};
+use crate::emu::{with, Host, Shared, State};
 use crate::log::{py_float, widen};
 use object::{method, new_object};
 
@@ -39,8 +42,13 @@ pub(crate) fn new_ctx(
 ) -> mlua::Result<Table> {
     let invalidate = {
         let st = st.clone();
-        method(move |_, _| {
-            with(&st, |s| s.invalid = true);
+        method(move |lua, args| {
+            let full = match args.into_iter().next() {
+                None | Some(Value::Nil) => false,
+                Some(Value::String(s)) if s == "full" => true,
+                Some(_) => return soft_fail(lua, "invalid_argument"),
+            };
+            with(&st, |s| request_frame(s, full));
             Ok(MultiValue::new())
         })
     };
@@ -135,10 +143,19 @@ pub(crate) fn new_ctx(
         reader::install(lua, &ctx, st)?;
     }
     ui::install(lua, &ctx, st)?;
+    // only the inkui unit tests see ctx.ui; drop the cfg to enable it
+    #[cfg(test)]
+    inkui::install(lua, &ctx, app)?;
     image::install(lua, &ctx, st)?;
     layers::install(lua, &ctx, st)?;
     lock::install(lua, &ctx, st, lockscreen_api)?;
     Ok(ctx)
+}
+
+/// `ctx:invalidate`: one frame after the current callback; a full request also makes it a full refresh.
+pub(crate) fn request_frame(s: &mut State, full: bool) {
+    s.invalid = true;
+    s.full_next |= full;
 }
 
 // `__call` drops the log table and tail-calls the colon-checked `ctx:log`, so its errors stay at the app's line

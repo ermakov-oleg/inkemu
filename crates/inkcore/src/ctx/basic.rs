@@ -1,20 +1,34 @@
 //! `ctx:save_state`, `ctx:defer_full_refresh`, `ctx.api` and `ctx.state` (0.1 `ctx_basic.install`,
 //! `load_state`, `save_state`).
-use mlua::{Lua, Table, Value};
+use mlua::{Lua, MultiValue, Table, Value};
 use serde_json::Value as J;
 
 use super::convert::{big_int_warning, dump, json_to_lua, lua_to_json};
 use super::object::{add_methods, method};
-use super::{arg, check_arg, nil, py_int, type_name};
+use super::{arg, check_arg, nil, soft_fail, type_name};
 use crate::emu::{with, Host, Shared};
 
+/// The longest `defer_full_refresh`, in ms.
+const MAX_DEFER_MS: i64 = 60_000;
+
 pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
-    let defer_full_refresh = method(move |_, args| {
-        let a = args.into_vec();
-        check_arg("defer_full_refresh", 1, arg(&a, 0), "number")?;
-        py_int(arg(&a, 0))?;
-        Ok(nil())
-    });
+    let defer_full_refresh = {
+        let st = st.clone();
+        method(move |lua, args| {
+            let a = args.into_vec();
+            check_arg("defer_full_refresh", 1, arg(&a, 0), "number")?;
+            let ms = match *arg(&a, 0) {
+                Value::Integer(i) => Some(i64::from(i)),
+                Value::Number(n) if n.fract() == 0.0 => Some(n as i64),
+                _ => None,
+            };
+            let Some(ms) = ms.filter(|ms| (1..=MAX_DEFER_MS).contains(ms)) else {
+                return soft_fail(lua, "invalid_argument");
+            };
+            with(&st, |s| s.defer_until = s.sched.clock.ms.saturating_add(ms));
+            Ok(MultiValue::new())
+        })
+    };
     let save_state = {
         let st = st.clone();
         method(move |lua, _| {

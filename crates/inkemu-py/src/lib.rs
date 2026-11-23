@@ -22,6 +22,8 @@ type Status = (
     bool,
     Option<(&'static str, String, String)>,
     bool,
+    Option<&'static str>,
+    Vec<&'static str>,
 );
 type Text = (String, i32, i32, i32, i32, &'static str);
 
@@ -143,6 +145,11 @@ impl Session {
             .map_err(PyRuntimeError::new_err)
     }
 
+    fn submit_text(&self, py: Python<'_>, text: String) -> PyResult<()> {
+        self.with(py, |s| s.submit_text(&text))
+            .map_err(PyRuntimeError::new_err)
+    }
+
     fn answer(&self, py: Python<'_>, ok: bool) -> PyResult<()> {
         self.with(py, |s| s.answer(ok))
             .map_err(PyRuntimeError::new_err)
@@ -217,6 +224,8 @@ impl Session {
                 st.running,
                 st.pending.map(|p| (p.kind, p.title, p.text)),
                 st.locked,
+                st.refresh,
+                st.refreshes,
             )
         })
     }

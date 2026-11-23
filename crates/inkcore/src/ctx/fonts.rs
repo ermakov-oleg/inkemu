@@ -1,21 +1,91 @@
-//! `ctx.fonts` (0.1 `_install_fonts`).
+//! `ctx.fonts` (0.1 `_install_fonts`, API 2.33 §7).
 use mlua::{IntoLuaMulti, Lua, Table, Value};
 
 use super::object::{method, new_object};
-use super::{arg, check_arg, fmt};
+use super::{arg, check_arg, fmt, int_value, soft_fail, type_name};
 use crate::draw::text::FONT_NAMES;
+use crate::draw::{has_rtl, layout_opts, utf8_text, CALL_TEXT_BYTES};
 use crate::emu::{with, Shared};
+
+/// The bytes one `font:layout` call takes.
+const LAYOUT_BYTES: usize = 65536;
+/// The longest `sample` of `ctx.fonts:size`.
+const SAMPLE_BYTES: usize = 256;
+
+fn opts(a: &[Value], i: usize) -> Option<Table> {
+    match a.get(i) {
+        Some(Value::Table(t)) => Some(t.clone()),
+        _ => None,
+    }
+}
+
+/// The text of a `measure`/`layout` argument: a string, or a number as Lua coerces it; any other type raises.
+/// The inner error is the refusal code: too long, not UTF-8, or right-to-left.
+fn text(f: &str, v: &Value, max: usize) -> mlua::Result<Result<String, &'static str>> {
+    let bytes = match v {
+        Value::String(s) => s.as_bytes().to_vec(),
+        Value::Integer(_) | Value::Number(_) => fmt(v).into_bytes(),
+        v => {
+            check_arg(f, 1, v, "string")?;
+            unreachable!("check_arg refuses a non-string")
+        }
+    };
+    let s = match utf8_text(bytes, max) {
+        Ok(s) => s,
+        Err(code) => return Ok(Err(code)),
+    };
+    Ok(if has_rtl(&s) {
+        Err("invalid_argument")
+    } else {
+        Ok(s)
+    })
+}
 
 pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
     let fonts = with(st, |s| s.fonts.clone());
     let mut handles = vec![];
     for name in FONT_NAMES {
-        let f = fonts.clone();
+        let (f, st1) = (fonts.clone(), st.clone());
         let measure = method(move |lua, args| {
-            let s = fmt(args.iter().next().unwrap_or(&Value::Nil));
-            f.measure(name, &s).into_lua_multi(lua)
+            let a = args.into_vec();
+            let s = match text("measure", arg(&a, 0), CALL_TEXT_BYTES)? {
+                Ok(s) => s,
+                Err(code) => return soft_fail(lua, code),
+            };
+            let o = layout_opts(&opts(&a, 1), with(&st1, |s| s.app_api));
+            f.measure_with(name, &s, o.style).into_lua_multi(lua)
         });
-        let h = new_object(lua, &format!("fonts.{name}"), &[("measure", measure)])?;
+        let (f, st1) = (fonts.clone(), st.clone());
+        let layout = method(move |lua, args| {
+            let a = args.into_vec();
+            let s = text("layout", arg(&a, 0), LAYOUT_BYTES)?;
+            check_arg("layout", 2, arg(&a, 1), "number")?;
+            check_arg("layout", 3, arg(&a, 2), "number")?;
+            let s = match s {
+                Ok(s) => s,
+                Err(code) => return soft_fail(lua, code),
+            };
+            let num = |v: &Value| match *v {
+                Value::Integer(i) => f64::from(i),
+                Value::Number(n) => f64::from(n),
+                _ => 0.0,
+            };
+            let o = layout_opts(&opts(&a, 3), with(&st1, |s| s.app_api));
+            let lay = f.layout(name, &s, num(arg(&a, 1)), num(arg(&a, 2)), &o);
+            let lines = i64::try_from(lay.lines.len()).unwrap_or(i64::MAX);
+            let consumed = i64::try_from(lay.consumed).unwrap_or(i64::MAX);
+            (
+                int_value(lines),
+                int_value(i64::from(lay.height)),
+                int_value(consumed),
+            )
+                .into_lua_multi(lua)
+        });
+        let h = new_object(
+            lua,
+            &format!("fonts.{name}"),
+            &[("measure", measure), ("layout", layout)],
+        )?;
         h.raw_set("name", name)?;
         h.raw_set("line_height", fonts.line_height(name))?;
         h.raw_set("ascent", fonts.ascent(name))?;
@@ -25,12 +95,30 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
         let handles = handles.clone();
         method(move |lua, args| {
             let a = args.into_vec();
-            check_arg("size", 1, arg(&a, 0), "number")?;
-            let px = match arg(&a, 0) {
-                Value::Integer(i) => f64::from(*i),
-                Value::Number(n) => f64::from(*n),
-                _ => 0.0,
+            let px = match *arg(&a, 0) {
+                Value::Integer(i) => Some(f64::from(i)),
+                Value::Number(n) => Some(f64::from(n)),
+                _ => None,
             };
+            let Some(px) = px.filter(|p| p.fract() == 0.0 && (8.0..=96.0).contains(p)) else {
+                return soft_fail(lua, "invalid_argument");
+            };
+            match arg(&a, 1) {
+                Value::Nil => {}
+                Value::String(s) => {
+                    let ok = utf8_text(s.as_bytes().to_vec(), SAMPLE_BYTES)
+                        .is_ok_and(|s| !s.contains('\0') && !has_rtl(&s));
+                    if !ok {
+                        return soft_fail(lua, "invalid_argument");
+                    }
+                }
+                v => {
+                    return Err(mlua::Error::runtime(format!(
+                        "bad argument #2 to 'size' (string expected, got {})",
+                        type_name(v)
+                    )))
+                }
+            }
             // the first of equally near sizes wins, as Python's min()
             let mut best = &handles[0];
             for h in &handles[1..] {
