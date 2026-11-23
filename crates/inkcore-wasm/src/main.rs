@@ -20,6 +20,8 @@ mod abi {
         static RESULT: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
         /// Kept apart from `RESULT`, so reading a frame survives other calls.
         static FRAME: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+        /// The last `ik_frame_gray`, kept apart from `FRAME` so both can be read after each other.
+        static GRAY: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
         static LAST_ERROR: RefCell<String> = const { RefCell::new(String::new()) };
     }
 
@@ -255,6 +257,19 @@ mod abi {
         FRAME.with_borrow_mut(|f| {
             *f = bits;
             f.as_ptr()
+        })
+    }
+
+    /// A gray frame (§3) in PIL mode "L" (`w * h` bytes: 255, 170, 85, 0 for 0 to 3 ink steps); null for a
+    /// normal frame or an unknown handle. No plate is up on a gray frame, so it is the screen and the app frame.
+    #[no_mangle]
+    pub extern "C" fn ik_frame_gray(handle: i32) -> *const u8 {
+        let Some(px) = CORES.with_borrow(|m| m.get(&handle).and_then(|c| c.frame_gray())) else {
+            return std::ptr::null();
+        };
+        GRAY.with_borrow_mut(|g| {
+            *g = px.gray_bytes();
+            g.as_ptr()
         })
     }
 

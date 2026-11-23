@@ -11,23 +11,7 @@ Already green and pinned: `01/globals_absent` (the globals that must not exist).
 
 ## §3 Gray frames
 
-### Gray frames: proposed interface
-A frame is gray when one of its `g:image` calls sets `gray = true` (outside `layer:draw`; `ctx.screen.gray_still` is 4, probe-confirmed). `Emu.status()["refresh"]` and `["refreshes"]` report such a frame as `"gray"` (the refresh kinds are described under "Frames" in `README.md`). `Emu.shot()` returns a Pillow image of mode `"L"` for a gray frame, with the gray levels 0, 85, 170 and 255 for 3, 2, 1 and 0 ink steps, and keeps returning mode `"1"` for every other frame. The runner tells the two apart by `image.mode`: a `pixels` entry `[x, y, ink, level]` always checks ink (`1` only for black, the 3-step level) and also checks the level 0-3 when the shot is gray, so the level is ignored on a 1-bit frame. The core stays 1-bit for normal frames; only a gray frame needs the 4-step buffer.
-- Touch points: `crates/inkcore/src/draw/canvas.rs` and `crates/inkcore/src/draw/image.rs` (frame buffer and `g:image` options), `crates/inkcore/src/emu.rs` (frame presentation, `frame`), `crates/inkemu-py/src/lib.rs` and `src/inkemu/emu.py` (`_image`, `shot`).
-
-### 03/gray_frame_refresh, 03/gray_next_frame_full
-- Contract: `gray = true` on a `g:image` makes the frame a gray one, shown with the full-refresh gray waveform; the next ordinary frame is full again and the one after goes back to partial; `gray = true` inside `layer:draw` is ignored.
-- Core now: `gray` is ignored and no refresh kind is recorded.
-- Touch points: `crates/inkcore/src/draw/image.rs`, `crates/inkcore/src/ctx/layers.rs`, `crates/inkcore/src/emu.rs`.
-- Source: contract only.
-
-### 03/gray_pixels
-- Contract: every color of a gray frame is scaled to `gray_still` steps as `(color * gray_still) // 16`, and a 1-bit image keeps only black and white. The check expects colors 3, 4, 8, 12 and 15 to come out as 0, 1, 2, 3 and 3 steps.
-- Core now: the shot is always 1-bit, so a rectangle of color 8 or more is full ink and the levels cannot be told apart.
-- Touch points: as for the interface above.
-- Source: contract only.
-
-Already green and pinned: `03/color_threshold`, `03/device_profile` (the profile values, with the keyboard height as deviation D1), `03/gray_layer_ignored` (green while no frame is gray; it guards the gray frames above).
+All §3 checks are green and pinned: `03/color_threshold`, `03/device_profile` (the profile values, with the keyboard height as deviation D1), `03/gray_frame_refresh`, `03/gray_next_frame_full`, `03/gray_pixels` (the gray levels as described under "Gray frames" in `README.md`), `03/gray_layer_ignored`.
 
 ## §5 Presenting a frame
 
@@ -95,12 +79,6 @@ Lock-screen frames count as app frames in `status()["refresh"]` and `status()["r
 - Touch points: `crates/inkcore/src/lockscreen.rs`, `crates/inkcore/src/ctx/mod.rs` (`invalidate`), `crates/inkcore/src/emu.rs`.
 - Source: contract only.
 
-### 15/lock_gray_then_normal
-- Contract: a lock session may show a gray frame in any session; it is a full refresh, and the next ordinary frame is full as well, also across a timer wake. Expected kinds after lock and one wake: full (app start), gray, full.
-- Core now: nothing is gray and no kind is recorded.
-- Touch points: as for the gray frames in §3, plus `crates/inkcore/src/lockscreen.rs`.
-- Source: contract only.
-
 ### 15/lock_after_noop
 - Contract: in a lock session without `lockscreen.net`, `ctx:after` has no effect (its callback never runs). With `lockscreen.net` timers work during the preparation phase.
 - Core now: the callback runs.
@@ -119,7 +97,7 @@ Lock-screen frames count as app frames in `status()["refresh"]` and `status()["r
 - Touch points: `crates/inkcore/src/ctx/lock.rs` (`set_interval`).
 - Source: contract only. The error code for a bad value is inferred, confirm it before the fix.
 
-Already green and pinned: `15/lock_reason_timer`, `15/lock_elapsed_first`, `15/lock_net_first`, `15/lock_net_undeclared`, `15/lock_net_interval_default`, `15/lock_net_interval_elapsed`, `15/lock_prep_timer`, `15/lock_done_early`, `15/lock_set_interval_effect`. The prelude records reach `emu.log` from a lock session (these checks read them). Not covered: the system lock screen on a missing entry, error or timeout in the script (default picture, no more wakes), low battery, `ctx.lockscreen` wallpaper calls and the confirmation dialog.
+Already green and pinned: `15/lock_reason_timer`, `15/lock_elapsed_first`, `15/lock_net_first`, `15/lock_net_undeclared`, `15/lock_net_interval_default`, `15/lock_net_interval_elapsed`, `15/lock_prep_timer`, `15/lock_done_early`, `15/lock_set_interval_effect`, `15/lock_gray_then_normal` (green with the §3 gray frames). The prelude records reach `emu.log` from a lock session (these checks read them). Not covered: the system lock screen on a missing entry, error or timeout in the script (default picture, no more wakes), low battery, `ctx.lockscreen` wallpaper calls and the confirmation dialog.
 
 ## §25 System actions
 

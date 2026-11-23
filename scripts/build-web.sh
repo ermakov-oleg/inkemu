@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 
 scripts/vendor-lua.sh
 
-exports=_main,_malloc,_free,_ik_create,_ik_cmd,_ik_result_len,_ik_frame,_ik_frame_w,_ik_frame_h,_ik_destroy,_ik_last_error
+exports=_main,_malloc,_free,_ik_create,_ik_cmd,_ik_result_len,_ik_frame,_ik_frame_gray,_ik_frame_w,_ik_frame_h,_ik_destroy,_ik_last_error
 
 # link args through `cargo rustc` reach only the final link, so the other crates' builds stay shared with
 # the plain wasm32 builds

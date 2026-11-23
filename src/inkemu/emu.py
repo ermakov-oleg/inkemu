@@ -31,9 +31,9 @@ class Clock:
         return datetime(y, mo, d, h, mi, s, ms * 1000)
 
 
-def _image(frame: tuple[int, int, bytes]) -> Image.Image:
-    w, h, data = frame
-    return Image.frombytes("1", (w, h), data)
+def _image(frame: tuple[int, int, str, bytes]) -> Image.Image:
+    w, h, mode, data = frame
+    return Image.frombytes(mode, (w, h), data)
 
 
 class Emu:
@@ -164,11 +164,14 @@ class Emu:
     # ---- screen -----------------------------------------------------------------------------
 
     def shot(self, *, dialog: bool = True) -> Image.Image:
-        """The screen with the error, toast and (unless `dialog=False`, for a window with its own) dialog plates."""
+        """The screen with the error, toast and (unless `dialog=False`, for a window with its own) dialog plates.
+
+        Mode "1", or mode "L" for a gray frame: 255, 170, 85, 0 for 0 to 3 ink steps.
+        """
         return _image(self._s.frame(dialog))
 
     def raw_frame(self) -> Image.Image:
-        """The app's own frame, without plates."""
+        """The app's own frame, without plates, in mode "1": a gray frame as its steps' threshold (2 and 3 ink)."""
         return _image(self._s.raw_frame())
 
     def save_shot(self, path: str | Path) -> Path:

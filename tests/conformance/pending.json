@@ -1,11 +1,7 @@
 {
-  "03/gray_frame_refresh": "status() has no refresh field and gray = true is not treated as a gray frame",
-  "03/gray_next_frame_full": "status() has no refreshes field and gray frames are not tracked",
-  "03/gray_pixels": "status() has no refresh field and the shot of a gray frame is 1-bit: no 4-level rectangles",
   "15/lock_after_noop": "ctx:after callbacks run in a lock session without lockscreen.net",
   "15/lock_budget_inactive": "budget:extend returns true in a lock session instead of nil, inactive",
   "15/lock_first_frames": "status() has no refreshes field and the first networked session draws one frame, not two",
-  "15/lock_gray_then_normal": "status() has no refreshes field and gray frames are not tracked",
   "15/lock_invalidate_full_prep": "status() has no refreshes field",
   "15/lock_invalidate_plain_prep": "status() has no refreshes field",
   "15/lock_net_interval_blocks": "net_interval_sec is ignored: lock.net is true in every session",

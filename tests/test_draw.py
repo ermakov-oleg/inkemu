@@ -204,3 +204,23 @@ def test_right_aligned_text_stays_left_of_x(draw, font, s):
     for top in (10, 60):
         cols = _ink_cols(img.crop((0, top, img.width, top + 40)))
         assert cols[-1] < 456 and cols[0] >= 456 - measured - 1, MEASURE_MOVED
+
+
+def test_gray_frame_shot_is_mode_l(make_app, emu_factory):
+    emu = emu_factory(
+        make_app(
+            "local gray = false\n"
+            "function on_load(c) l = c.layers:create(4, 4) l:draw(function(g) g:rect(0, 0, 4, 4, {fill=true}) end) end\n"
+            "function on_draw(c, g) g:rect(10, 0, 4, 4, {fill=true, color=8}) g:image(l, 0, 0, {gray=gray}) end\n"
+            "function on_input(c, ev) if ev.phase == 'up' then gray = not gray c:invalidate() end return true end\n"
+        )
+    )
+    assert emu.shot().mode == "1"
+    emu.tap(100, 100)
+    shot = emu.shot()
+    assert emu.status()["refresh"] == "gray"
+    assert shot.mode == "L" and [shot.getpixel((x, 0)) for x in (0, 10, 20)] == [0, 85, 255]
+    raw = emu.raw_frame()
+    assert raw.mode == "1" and [raw.getpixel((x, 0)) for x in (0, 10, 20)] == [0, 0, 255]
+    emu.tap(100, 100)
+    assert emu.shot().mode == "1" and emu.status()["refresh"] == "full"

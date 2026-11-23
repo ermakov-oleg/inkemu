@@ -20,7 +20,7 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
     screen.raw_set("height", h)?;
     screen.raw_set("orientation", orientation(w, h))?;
     screen.raw_set("gray_levels", 2)?;
-    screen.raw_set("gray_still", 4)?;
+    screen.raw_set("gray_still", crate::draw::GRAY_STILL)?;
     let set_orientation = {
         let (st, screen) = (st.clone(), screen.clone());
         method(move |lua, args| {

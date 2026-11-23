@@ -15,7 +15,7 @@ use crate::dialog::Handler;
 use crate::draw::image::Gray;
 use crate::draw::plates::{self, Overlays, Plate};
 use crate::draw::text::Fonts;
-use crate::draw::{Canvas, Frame, Target, TextItem};
+use crate::draw::{Canvas, Depth, Frame, Target, TextItem};
 use crate::fixtures::{FixtureSet, Redactor};
 use crate::lockscreen::{self, Lock};
 use crate::log::{py_repr, Log};
@@ -33,6 +33,8 @@ const KEPT_REFRESHES: usize = 64;
 pub(crate) enum Refresh {
     Partial,
     Full,
+    /// A full refresh with the grayscale waveform (§3).
+    Gray,
 }
 
 impl Refresh {
@@ -40,6 +42,7 @@ impl Refresh {
         match self {
             Refresh::Partial => "partial",
             Refresh::Full => "full",
+            Refresh::Gray => "gray",
         }
     }
 }
@@ -150,6 +153,8 @@ pub(crate) struct State {
     /// Clock ms up to which `defer_full_refresh` holds back the automatic full refresh.
     pub(crate) defer_until: i64,
     pub(crate) refreshes: VecDeque<Refresh>,
+    /// The panel shows a gray frame: the next normal frame is a full refresh. Kept across sessions (§15).
+    pub(crate) gray_shown: bool,
     pub(crate) perf: Perf,
 }
 
@@ -182,11 +187,16 @@ impl State {
         let deferred = self.sched.clock.ms < self.defer_until;
         // a deferral cannot hold the automatic full past twice the interval (2.28.1)
         let auto = next >= AUTO_FULL_EVERY && (!deferred || next >= 2 * AUTO_FULL_EVERY);
-        let kind = if forced_full || auto {
+        // a gray frame under a host screen is still a full refresh, in black and white (§3)
+        let gray = self.canvas.gray() && !self.covered();
+        let kind = if gray {
+            Refresh::Gray
+        } else if forced_full || auto || self.gray_shown || self.canvas.gray() {
             Refresh::Full
         } else {
             Refresh::Partial
         };
+        self.gray_shown = gray;
         self.partials = if kind == Refresh::Partial { next } else { 0 };
         if self.refreshes.len() == KEPT_REFRESHES {
             self.refreshes.pop_front();
@@ -198,6 +208,21 @@ impl State {
             image_count,
             draw_frame: self.perf.draw_frame + 1,
         };
+    }
+
+    /// A host screen (error, dialog, toast) covers the app: its frame is a normal one, gray or not (§3).
+    fn covered(&self) -> bool {
+        let toast = self
+            .toast
+            .as_ref()
+            .is_some_and(|t| self.sched.clock.ms < t.1);
+        self.overlay.is_some() || self.pending.is_some() || toast
+    }
+
+    /// The app frame as the panel shows it, in ink steps, when it is a gray frame.
+    fn gray_frame(&self) -> Option<Frame> {
+        (self.gray_shown && self.canvas.gray() && !self.covered())
+            .then(|| self.canvas.render_in(Depth::Gray))
     }
 
     pub(crate) fn clear_pending(&mut self) {
@@ -699,6 +724,7 @@ impl Core {
             partials: 0,
             defer_until: 0,
             refreshes: VecDeque::new(),
+            gray_shown: false,
             perf: Perf::default(),
         }));
         if let Some(p) = font_problem {
@@ -894,12 +920,22 @@ impl Core {
         self.st.borrow().texts()
     }
 
-    /// The screen with the error, toast and (if `dialog`) dialog plates.
+    /// The screen with the error, toast and (if `dialog`) dialog plates; a gray frame as the threshold of its
+    /// steps ([`Core::frame_gray`]).
     pub fn frame(&self, dialog: bool) -> Frame {
         let s = self.st.borrow();
+        if let Some(g) = s.gray_frame() {
+            return g.threshold();
+        }
         let mut f = s.canvas.render();
         plates::draw(&s.canvas, &mut f, &s.plates(dialog));
         f
+    }
+
+    /// The screen of a gray frame in ink steps 0..=3 (§3); None for a normal frame. No plate is up on a gray
+    /// frame: a host screen over it makes it a normal one.
+    pub fn frame_gray(&self) -> Option<Frame> {
+        self.st.borrow().gray_frame()
     }
 
     /// Changes whenever the next `frame` would differ: an app frame was drawn or the plates changed.
@@ -919,9 +955,13 @@ impl Core {
         s.frame_seq
     }
 
-    /// The app's own frame, without plates.
+    /// The app's own frame, without plates; a gray frame as the threshold of its steps.
     pub fn raw_frame(&self) -> Frame {
-        self.st.borrow().canvas.render()
+        let s = self.st.borrow();
+        match s.gray_frame() {
+            Some(g) => g.threshold(),
+            None => s.canvas.render(),
+        }
     }
 
     pub fn log(&self) -> Ref<'_, [String]> {

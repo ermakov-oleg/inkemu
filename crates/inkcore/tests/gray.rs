@@ -1,6 +1,7 @@
 //! Grey on the 1-bit canvas as measured on firmware 26112001 (`research-26112001/gray.md`): `color` is a
-//! threshold and `g:pattern` dithers.
+//! threshold and `g:pattern` dithers. Gray frames (`g:image{gray = true}`) follow the API 2.33.1 contract §3.
 use std::collections::BTreeMap;
+use std::io::Cursor;
 
 use inkcore::{AppFiles, Config, Core, Frame, Persisted};
 
@@ -234,4 +235,175 @@ fn rect_radius_rounds_the_corners() {
         ],
         [0, 1, 0]
     );
+}
+
+/// An app whose `on_draw` runs `body`, with `gray` false on the first frame; `layer` is a black 4×4 layer, `img`
+/// the package image `data/img.png` (4 pixels: 0, 85, 170, 255). [`next`] draws the next frame.
+fn gray_app(body: &str) -> Core {
+    let manifest = r#"{"app_id": "testapp", "entry": "index.lua", "api": "2.11"}"#;
+    let index = format!(
+        "gray = false\n\
+         function on_load(c)\n\
+           layer = c.layers:create(4, 4)\n\
+           layer:draw(function(g) g:rect(0, 0, 4, 4, {{fill = true}}) end)\n\
+           img = c.package:image('img.png')\n\
+         end\n\
+         function on_input(c, ev) if ev.phase == 'up' then c:invalidate() end return true end\n\
+         function on_draw(c, g) {body} end\n"
+    );
+    let mut png = vec![];
+    image::GrayImage::from_raw(4, 1, vec![0, 85, 170, 255])
+        .unwrap()
+        .write_to(&mut Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
+    let files = AppFiles(BTreeMap::from([
+        ("manifest.json".to_string(), manifest.as_bytes().to_vec()),
+        ("index.lua".to_string(), index.into_bytes()),
+        ("data/img.png".to_string(), png),
+    ]));
+    let core = Core::new(files, Config::default(), Persisted::default());
+    assert!(core.errors().is_empty(), "{:?}", &*core.errors());
+    core
+}
+
+/// Draws the next frame with `gray` set to `gray`.
+fn next(core: &mut Core, gray: bool) {
+    core.lua_exec(&format!("gray = {gray}")).unwrap();
+    core.tap(300, 300).unwrap();
+}
+
+fn steps(f: &Frame, pts: &[(u32, u32)]) -> Vec<u8> {
+    pts.iter().map(|&(x, y)| f.get(x, y)).collect()
+}
+
+#[test]
+fn every_colour_of_a_gray_frame_is_scaled_to_four_steps() {
+    let mut core = gray_app(
+        "g:clear(0)\n\
+         for i, c in ipairs({3, 4, 8, 12, 15}) do g:rect(i * 10, 0, 10, 10, {fill = true, color = c}) end\n\
+         g:line(0, 20, 100, 20, {color = 8})\n\
+         g:pattern(0, 30, 8, 8, {density = 100, color = 4})\n\
+         g:image(layer, 0, 50, {gray = gray})",
+    );
+    let normal = core.raw_frame();
+    assert_eq!(
+        core.frame_gray(),
+        None,
+        "a frame without gray = true is 1-bit"
+    );
+    next(&mut core, true);
+    let g = core
+        .frame_gray()
+        .expect("gray = true makes the frame gray (§3)");
+    let rects = [(15, 5), (25, 5), (35, 5), (45, 5), (55, 5)];
+    assert_eq!(steps(&g, &rects), [0, 1, 2, 3, 3], "(color * 4) // 16 (§3)");
+    assert_eq!(steps(&g, &[(50, 20), (3, 33), (1, 51)]), [2, 1, 3]);
+    assert_eq!(steps(&g, &[(200, 200)]), [0]);
+    assert_eq!(
+        core.raw_frame(),
+        g.threshold(),
+        "the 1-bit frame of a gray frame is its steps' threshold"
+    );
+    assert_eq!(
+        normal,
+        g.threshold(),
+        "the threshold is what a normal frame draws"
+    );
+    assert_eq!(
+        core.frame(true).px,
+        g.threshold().px,
+        "no plate is up on a gray frame"
+    );
+}
+
+#[test]
+fn gray_frame_text_takes_its_colour_in_steps() {
+    let mut core = gray_app(
+        "g:text(10, 10, 'MMMM', {font = 'large', color = 9})\n\
+         g:image(layer, 0, 300, {gray = gray})",
+    );
+    next(&mut core, true);
+    let g = core.frame_gray().unwrap();
+    let text: Vec<u8> = g.px[..g.w as usize * 100]
+        .iter()
+        .copied()
+        .filter(|&v| v != 0)
+        .collect();
+    assert!(
+        !text.is_empty() && text.iter().all(|&v| v == 2),
+        "colour 9 is 2 steps"
+    );
+}
+
+#[test]
+fn gray_frame_images_keep_their_levels_and_tint() {
+    let mut core = gray_app(
+        "g:image(img, 0, 0, {gray = gray})\n\
+         g:image(img, 0, 10, {invert = true})\n\
+         g:image(layer, 10, 0, {color = 8})\n\
+         g:image(layer, 20, 0, {color = 8, invert = true})",
+    );
+    next(&mut core, true);
+    let g = core.frame_gray().unwrap();
+    let row = |y: u32| steps(&g, &[(0, y), (1, y), (2, y), (3, y)]);
+    assert_eq!(
+        row(0),
+        [3, 2, 1, 0],
+        "a grayscale image uses its own colour (§6)"
+    );
+    assert_eq!(row(10), [0, 1, 2, 3], "invert takes 15 - colour (§6)");
+    assert_eq!(
+        steps(&g, &[(11, 1), (21, 1)]),
+        [2, 1],
+        "an ink dot of a black-and-white image is `color`; inverted 15 - 8"
+    );
+}
+
+#[test]
+fn a_gray_frame_is_a_gray_refresh_and_the_next_normal_frame_full() {
+    let mut core = gray_app("g:image(layer, 0, 0, {gray = gray})");
+    for gray in [true, true, false, false] {
+        next(&mut core, gray);
+    }
+    assert_eq!(
+        core.status().refreshes,
+        ["full", "gray", "gray", "full", "partial"],
+        "§3: a gray frame is a full refresh; the next normal frame is full"
+    );
+    assert_eq!(core.frame_gray(), None);
+}
+
+#[test]
+fn a_host_screen_over_the_app_makes_the_frame_normal() {
+    let mut core = gray_app(
+        "if gray then c.dialog:toast('saved') end\n\
+         g:image(layer, 0, 0, {gray = gray})",
+    );
+    next(&mut core, true);
+    assert_eq!(
+        core.status().refresh,
+        Some("full"),
+        "§3: a dialog or similar screen over the app turns the frame into a normal full refresh"
+    );
+    assert_eq!(core.frame_gray(), None);
+    core.wait(10_000).unwrap();
+    assert_eq!(
+        core.frame_gray(),
+        None,
+        "the panel still shows the normal frame"
+    );
+}
+
+#[test]
+fn a_host_screen_raised_later_shows_the_gray_frame_in_1_bit_while_it_is_up() {
+    let mut core = gray_app("g:image(layer, 0, 0, {gray = gray})");
+    next(&mut core, true);
+    core.lua_exec("ctx.dialog:toast('saved')").unwrap();
+    assert_eq!(core.frame_gray(), None);
+    core.wait(10_000).unwrap();
+    assert!(
+        core.frame_gray().is_some(),
+        "the toast is gone, no new frame"
+    );
+    assert_eq!(core.status().refreshes, ["full", "gray"]);
 }

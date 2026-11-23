@@ -77,13 +77,16 @@ export async function loadCore(moduleUrl) {
     }
 
     /** PIL mode "1" (rows of ceil(w / 8) bytes, MSB first, set bit = white): the app's own frame, or with
-     * every plate (error, dialog, toast) when `dialog` is true. */
+     * every plate (error, dialog, toast) when `dialog` is true. `gray` is a gray frame in PIL mode "L" (w * h
+     * bytes: 255, 170, 85, 0 for 0 to 3 ink steps), else null; `bits` is then its 1-bit threshold. */
     frame(dialog) {
       const ptr = M._ik_frame(this.#h, dialog ? 1 : 0);
       if (!ptr) throw new Error(`unknown core handle ${this.#h}`);
       const w = M._ik_frame_w(this.#h);
       const h = M._ik_frame_h(this.#h);
-      return { w, h, bits: M.HEAPU8.slice(ptr, ptr + Math.ceil(w / 8) * h) };
+      const bits = M.HEAPU8.slice(ptr, ptr + Math.ceil(w / 8) * h);
+      const gp = M._ik_frame_gray(this.#h);
+      return { w, h, bits, gray: gp ? M.HEAPU8.slice(gp, gp + w * h) : null };
     }
 
     destroy() {

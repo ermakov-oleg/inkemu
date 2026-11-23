@@ -241,6 +241,9 @@ included, then seeds `files/` from `<fixtures dir>/files/`.
   `body` over 65536 bytes returns `nil, "limit_exceeded"`.
 - `ctx.net:keep_wifi(ms)` returns nothing (0.1: one nil) and returns `nil, "invalid_argument"` for a number that is
   not an integer from -1 to 2147483647.
+- `g:image{gray = true}` makes the frame a gray frame (0.1 ignored it), and `emu.shot()` returns a mode `"L"` image
+  for it instead of mode `"1"`. Code that reads pixels as 0 or 255 keeps working on the black and white parts; use
+  `emu.raw_frame()` or `.convert("1")` if you need a 1-bit image.
 
 ## Supported API
 
@@ -308,9 +311,9 @@ Text, as in the contract (§7):
   valid UTF-8, no NUL, no right-to-left text), else `nil, "invalid_argument"`; a `sample` that is neither a string
   nor nil (a number included) raises an error. The answer is still the nearest of the three system fonts.
 
-Frames: `emu.status()["refresh"]` is the waveform of the last app frame presented, `"partial"` or `"full"`, and
-`emu.status()["refreshes"]` lists the waveforms of the last 64 app frames, oldest first (one step such as a tap can
-present more than one frame). The rules, as in the contract:
+Frames: `emu.status()["refresh"]` is the waveform of the last app frame presented, `"partial"`, `"full"` or
+`"gray"`, and `emu.status()["refreshes"]` lists the waveforms of the last 64 app frames, oldest first (one step such
+as a tap can present more than one frame). The rules, as in the contract:
 
 - `ctx:invalidate()` asks for a partial frame and `ctx:invalidate("full")` or `ctx.system:act("refresh")` for a full
   one; one full request among several makes the frame full. A request made in `on_draw` is for the next frame.
@@ -321,9 +324,19 @@ present more than one frame). The rules, as in the contract:
 - The first frame of every session (start, restart, reload, unlock, each lock screen session) is full; the contract
   leaves it open, this is inkemu's choice. Lock screen frames count like app frames.
 - The error overlay, dialogs and toasts are not frames of the app, and a frame whose `on_draw` fails is not counted.
-- `"gray"` is reserved for a frame with a `g:image{gray = true}`; inkemu does not draw gray frames yet.
+- A gray frame (below) is `"gray"`: a full refresh with the grayscale waveform, whatever `invalidate` asked for. The
+  next normal frame is full and the one after it partial again.
 
-Grey, as measured on 26112001: the canvas is 1-bit, and grey is a pattern of black and white pixels.
+Gray frames (§3): a frame in which a `g:image` call sets `gray = true` is drawn in `ctx.screen.gray_still` = 4 ink
+steps. Every colour becomes `(color * 4) // 16` steps (3, 4, 8, 12, 15 give 0, 1, 2, 3, 3) for rectangles, lines,
+text, patterns and images alike; a black-and-white image or layer keeps its two levels (ink dots in `color`), and a
+grey image takes the step of each pixel's own grey. `gray` inside `layer:draw` has no effect (layers are black and
+white). `emu.shot()` returns a Pillow image of mode `"L"` for a gray frame, with 255, 170, 85 and 0 for 0 to 3 steps,
+and mode `"1"` for every other frame; `emu.raw_frame()` stays mode `"1"`, the steps' threshold (2 and 3 are ink). The
+page shows the frame in gray. While the error
+overlay, a dialog or a toast covers the app, a gray frame is drawn as a normal one and presented as `"full"`.
+
+Grey, as measured on 26112001: the canvas of a normal frame is 1-bit, and grey is a pattern of black and white pixels.
 
 - `color` is a threshold on the device's scale of 0 (paper) to 15 (ink): 0–7 draw white and 8–15 black in `rect`,
   `circle`, `arc`, `line`, `polygon`, `polyline`, `text` and `text_box`. Without `color` they draw black.
@@ -332,7 +345,7 @@ Grey, as measured on 26112001: the canvas is 1-bit, and grey is a pattern of bla
   anchored to the screen, with `density` percent of ink. `'line'` inks every other row and `'cross'` is a grid with a
   3 px pitch (about 57 %). Any other kind is `nil, "invalid_argument"` and draws nothing, as on the device.
 - `g:rect(x, y, w, h, {radius = r})` rounds the corners; this is how the firmware's own UI draws rounded boxes.
-- A grey PNG or JPEG from `ctx.image` is dithered by `g:image` after scaling.
+- A grey PNG or JPEG from `ctx.image` is dithered by `g:image` after scaling (in a gray frame it keeps 4 steps).
 
 ## Fonts
 
@@ -420,7 +433,12 @@ offset_minutes revision valid`.
   (`on_leave`) and the device locks as with `emu.lock()`, unless the callback failed or called `ctx:quit()`.
   `"power_off"` is not emulated: there is no confirmation dialog (so no `on_pause`/`on_resume` and never `busy`),
   the call returns nothing, logs it and the app goes on as if the user cancelled.
+- Gray frames: a grey image is not dithered to the 4 steps but cut to them pixel by pixel; `g:clear(c)` keeps inkemu's
+  rule (any `c` but 0 is black, so 15 in a gray frame); a toast also turns a gray frame into a normal one, and
+  `ctx.image:decode{gray = true}` and the dot patterns of 4-level images in normal frames are not emulated.
 - Not verified on the device:
+  - gray frames as a whole: a probe of 26112001 in an emulator saw only 1-bit app frames, but it never drew a
+    `g:image{gray = true}`; inkemu follows the contract;
   - the 2.26 call form `ctx:log(...)`, which still logs;
   - `ctx.perf:info()`'s `tick_us`, `draw_us`, `asset_hit` and `asset_miss`, which measure the device's renderer:
     always 0 in inkemu;
@@ -450,7 +468,7 @@ offset_minutes revision valid`.
 - `g:image` resolves the image when the command is recorded, not at the end of `on_draw`.
 - Images and layers have no transparency: a new layer is white, not transparent, so a layer covers what lies under
   it and `invert` turns its undrawn area black. `g:image`'s `background` is not emulated (with opaque images there is
-  nothing for it to show through), nor are `gray` and the transforms (`flip_x`, `flip_y`, `rotate`, `pivot_x`,
+  nothing for it to show through), nor are the transforms (`flip_x`, `flip_y`, `rotate`, `pivot_x`,
   `pivot_y`): `ctx.capabilities.image_transform` is true as on the device, but these options are ignored and the
   log warns once per session. `w` and `h` scale
   each side on its own, up to 8192 (the contract scales only when both are set, up to 4096), and shrinking the width

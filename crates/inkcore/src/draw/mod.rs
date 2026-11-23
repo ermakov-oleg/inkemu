@@ -38,7 +38,29 @@ pub struct TextItem {
     pub font: &'static str,
 }
 
-/// One byte per pixel, row by row: 0 white, 1 black.
+/// `ctx.screen.gray_still`: the ink steps a gray frame shows (§3).
+pub const GRAY_STILL: u8 = 4;
+
+/// What a rendered frame's pixels hold.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Depth {
+    /// 1 black, 0 white: colours 8..15 are ink.
+    Bits,
+    /// Ink steps 0..GRAY_STILL of a gray frame, 0 white.
+    Gray,
+}
+
+impl Depth {
+    /// The pixel value of a colour 0..15 (§3: `(color * levels) // 16`).
+    pub fn of(self, color: u8) -> u8 {
+        match self {
+            Depth::Bits => u8::from(color >= 8),
+            Depth::Gray => (color.min(15) * GRAY_STILL / 16).min(GRAY_STILL - 1),
+        }
+    }
+}
+
+/// One byte per pixel, row by row: 0 white, 1 black; a gray frame's steps hold 0 white to 3 black.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Frame {
     pub w: u32,
@@ -73,6 +95,28 @@ impl Frame {
             }
         }
         out
+    }
+
+    /// Gray steps as PIL mode "L" bytes: 255, 170, 85, 0 for 0..3 steps.
+    pub fn gray_bytes(&self) -> Vec<u8> {
+        let step = 255 / (GRAY_STILL - 1);
+        self.px
+            .iter()
+            .map(|&v| 255 - v.min(GRAY_STILL - 1) * step)
+            .collect()
+    }
+
+    /// The 1-bit frame of gray steps: 2 steps and more are ink, as colours 8..15 are.
+    pub fn threshold(&self) -> Frame {
+        Frame {
+            w: self.w,
+            h: self.h,
+            px: self
+                .px
+                .iter()
+                .map(|&v| u8::from(v >= GRAY_STILL / 2))
+                .collect(),
+        }
     }
 
     /// Sets one pixel; outside the frame does nothing.
@@ -282,12 +326,12 @@ fn truthy(v: &Value) -> bool {
     }
 }
 
-/// 1 black, 0 white. The device's scale is 0 paper to 15 ink, drawn as a threshold: below 8 is white. A colour
+/// The colour 0 paper … 15 ink; a normal frame draws it as a threshold, below 8 is white ([`Depth`]). A colour
 /// that is not a number keeps its 0.1 meaning: `false` (Python `== 0`) is white, anything else black.
-fn ink(o: &Option<Table>) -> u8 {
+fn color(o: &Option<Table>) -> u8 {
     match get(o, "color") {
         Value::Boolean(false) => 0,
-        v => as_num(&v).map_or(1, |n| u8::from(n >= 8.0)),
+        v => as_num(&v).map_or(15, |n| n.clamp(0.0, 15.0) as u8),
     }
 }
 
@@ -311,7 +355,7 @@ fn line_width(op: &str, o: &Option<Table>) -> Result<i32, String> {
 
 fn style(op: &str, o: &Option<Table>) -> Result<Style, String> {
     Ok(Style {
-        ink: ink(o),
+        ink: color(o),
         fill: truthy(&get(o, "fill")),
         width: line_width(op, o)?,
     })
@@ -349,7 +393,7 @@ fn text_opts(o: &Option<Table>, api: (u32, u32)) -> TextOpts {
         font: font_of(o),
         align: pick("align", "center", "right"),
         valign: pick("valign", "middle", "bottom"),
-        ink: ink(o),
+        color: color(o),
         layout: layout_opts(o, api),
     }
 }
@@ -480,8 +524,9 @@ fn command(op: &str, a: &[Value], text: String, api: (u32, u32)) -> Result<Cmd, 
                 Some(Value::Number(n)) => *n != 0.0,
                 Some(_) => true,
             };
+            // 0.1 cleared black for any colour but 0, in gray frames too
             Cmd::Clear {
-                ink: u8::from(black),
+                color: if black { 15 } else { 0 },
             }
         }
         "rect" => {
@@ -503,7 +548,7 @@ fn command(op: &str, a: &[Value], text: String, api: (u32, u32)) -> Result<Cmd, 
                 x1,
                 y1,
                 width: line_width(op, &o(4))?,
-                ink: ink(&o(4)),
+                color: color(&o(4)),
             }
         }
         "circle" => {
@@ -538,7 +583,7 @@ fn command(op: &str, a: &[Value], text: String, api: (u32, u32)) -> Result<Cmd, 
                 Cmd::Polyline {
                     pts,
                     width: st.width,
-                    ink: st.ink,
+                    color: st.ink,
                 }
             }
         }
@@ -588,7 +633,7 @@ fn command(op: &str, a: &[Value], text: String, api: (u32, u32)) -> Result<Cmd, 
                 w,
                 h,
                 kind,
-                ink: ink(&o),
+                color: color(&o),
             }
         }
         _ => unreachable!("g:{op} is not in SPECS"),
@@ -639,9 +684,10 @@ fn image_command(st: &Shared, target: &Target, a: &[Value]) -> Result<Cmd, Refus
     }
     let w = side("w", &get(&o, "w"), img.w)?;
     let h = side("h", &get(&o, "h"), img.h)?;
+    let on = |key: &str| !matches!(get(&o, key), Value::Nil | Value::Boolean(false));
     let look = Look {
-        white_ink: ink(&o) == 0 && img.is_black_and_white(),
-        invert: !matches!(get(&o, "invert"), Value::Nil | Value::Boolean(false)),
+        tint: img.is_black_and_white().then(|| color(&o)),
+        invert: on("invert"),
         radius: radius("image", &get(&o, "radius"), 0.0)?,
     };
     // far-off positions draw nothing; the clamp keeps the paste arithmetic from overflowing
@@ -653,6 +699,8 @@ fn image_command(st: &Shared, target: &Target, a: &[Value]) -> Result<Cmd, Refus
         w,
         h,
         look,
+        // layers are black and white: `gray` inside `layer:draw` has no effect (§3)
+        gray: matches!(target, Target::Screen) && on("gray"),
     })
 }
 

@@ -4,7 +4,7 @@ use super::Frame;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Style {
-    /// 1 black, 0 white.
+    /// The pixel value: 1 black, 0 white (a gray frame: ink steps). A `Cmd` keeps the colour 0..15 here.
     pub ink: u8,
     pub fill: bool,
     pub width: i32,
