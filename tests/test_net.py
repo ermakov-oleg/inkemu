@@ -68,7 +68,9 @@ def test_replay_without_fixture(make_app, emu_factory):
         )
     )
     emu.wait(300)
-    assert emu.has_text("msg no_fixturefalsenilnil"), "no response: ok false, no status, no 0.1 error (§14)"
+    assert emu.has_text("msg no_fixturefalsenilnil"), (
+        "no response: ok false, no status, no 0.1 error (§14, 14/net_response_fields)"
+    )
     line = next(ln for ln in emu.log if "no fixture" in ln)
     assert "GET http://x.test/b" in line and "--net record" in line
 
@@ -292,7 +294,9 @@ def test_request_argument_errors(make_app, emu_factory):
         )
     )
     # a missing url is a bad option, not a bad argument (14/net_save_invalid ruling); 0.1 raised
-    assert emu.lua_eval("return msg") == "nilinvalid_argumentnilinvalid_argument"
+    assert emu.lua_eval("return msg") == "nilinvalid_argumentnilinvalid_argument", (
+        "a missing url is a bad option, invalid_argument (§14, 14/net_save_invalid ruling)"
+    )
     assert "bad argument #1 to 'request'" in emu.errors[0]
 
 
@@ -371,7 +375,7 @@ def test_redact_quote_plus_and_lowercase_percent(make_app, emu_factory, tmp_path
         make_app(two_requests(f"'http://h.test/a/{shown}/b'", f"'x={shown};'"), manifest=NET), secrets_file=secrets
     )
     emu.wait(600)
-    assert emu.lua_eval("return msg") == "200url200body"
+    assert emu.lua_eval("return msg") == "200url200body", "the POST is chained (§14, 14/net_busy)"
     assert any("GET http://h.test/a/{{pw}}/b -> 200 (fixture)" in ln for ln in emu.log)
 
 
@@ -387,7 +391,7 @@ def test_userinfo_password_is_always_redacted(make_app, emu_factory, tmp_path):
     )
     emu = emu_factory(make_app(lua, manifest=NET))
     emu.wait(600)
-    assert emu.lua_eval("return msg") == "200,nil,"
+    assert emu.lua_eval("return msg") == "200,nil,", "chained, no status without a response (§14, 14/net_busy)"
     assert any("GET https://bob:{{userinfo}}@h.test/x?q=1 -> 200 (fixture)" in ln for ln in emu.log)
     assert any("no fixture for GET https://bob@h.test/x;" in w for w in emu.warnings)
     assert not any("hunter2" in ln for ln in emu.log + emu.warnings)
@@ -405,7 +409,7 @@ def test_record_redacts_encoded_forms_everywhere(make_app, emu_factory, tmp_path
     emu = emu_factory(make_app(lua, manifest=NET), net="record", secrets_file=secrets)
     emu.wait(600)
     d = tmp_path / "fixtures" / "net"
-    assert len(list(d.glob("*.json"))) == 2
+    assert len(list(d.glob("*.json"))) == 2, "the second request is chained (§14, 14/net_busy)"
     for text in [p.read_bytes().decode("latin-1") for p in d.iterdir()] + emu.log + emu.warnings:
         low = text.lower()
         assert "pa+ss" not in low and "pa%20ss" not in low and "wd%2b" not in low, text
@@ -423,7 +427,7 @@ def test_userinfo_redaction_leaves_bodies_alone(make_app, emu_factory, tmp_path,
     fixtures_for(tmp_path, "http://h.test/?q=" + text, text.encode())
     emu = emu_factory(make_app(two_requests(f"'http://h.test/?q=' .. [==[{text}]==]", f"[==[{text}]==]"), manifest=NET))
     emu.wait(600)
-    assert emu.lua_eval("return msg") == "200url200body"
+    assert emu.lua_eval("return msg") == "200url200body", "the POST is chained (§14, 14/net_busy)"
 
 
 def test_userinfo_password_not_in_log_or_warnings(make_app, emu_factory, server):

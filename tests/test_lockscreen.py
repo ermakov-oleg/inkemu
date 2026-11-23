@@ -206,7 +206,7 @@ def test_wake_reads_secrets_again(make_app, emu_factory, tmp_path):
     assert emu.has_text("reason lock")
     secrets.write_text(json.dumps({"pin": "abcdef"}))
     emu.wait("60s")
-    assert emu.lock_wakes == 1 and emu.has_text("reason got 200")
+    assert emu.lock_wakes == 1 and emu.has_text("reason got 200"), "tostring(status) (§14, 14/net_response_fields)"
 
 
 def test_live_wakes_get_their_answers_within_one_wait(make_app, emu_factory, server):
