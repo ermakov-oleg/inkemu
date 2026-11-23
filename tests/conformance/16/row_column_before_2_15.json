@@ -1,6 +1,6 @@
 {
   "spec": "§16",
-  "about": "a package for 2.12 keeps the rules before 2.15: every child has an integer w and h, children follow each other from the container's corner with gap, the 2.15 fields and look are ignored, spacer and fit are refused, and the grid, stack and layout methods give invalid_argument; a child outside the container is drawn whole (probe-confirmed)",
+  "about": "a package for 2.12 keeps the rules before 2.15: every child has an integer w and h, children follow each other from the container's corner with gap, the 2.15 fields and look are ignored, spacer and fit are refused, and the grid, stack and layout methods give invalid_argument; a child outside the container is drawn whole (probe-confirmed except the fit record, which follows the contract text)",
   "manifest": {"api": "2.12"},
   "expect": {
     "column": {"value": {"ok": true, "ret": []}, "spec": "§16"},

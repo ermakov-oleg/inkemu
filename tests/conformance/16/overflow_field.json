@@ -1,6 +1,6 @@
 {
   "spec": "§16",
-  "about": "a container whose child leaves its inner box on either axis gets overflow, the index (in children, skipped ones counted) of the earliest such child; otherwise the field is absent, and a nested container reports only its own (probe-confirmed where the oracle covered it)",
+  "about": "a container whose child leaves its inner box on either axis gets overflow, the index (in children, skipped ones counted) of the earliest such child; otherwise the field is absent, and a nested container reports only its own (past_the_end, before_the_start and nested_only probe-confirmed; the rest follow the contract text)",
   "expect": {
     "none": {"value": "0,0,100,100 [0,0,100,60 | 0,60,100,40]", "spec": "§16"},
     "past_the_end": {"value": "0,0,100,100!2 [0,0,100,60 | 0,60,100,60]", "spec": "§16"},

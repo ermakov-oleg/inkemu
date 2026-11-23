@@ -1,6 +1,6 @@
 {
   "spec": "§16",
-  "about": "justify_content splits the free main-axis space over the n + 1 slots by its weights with cumulative rounding; negative free space makes the space modes act as start, and a single child with space-between acts as start (probe-confirmed)",
+  "about": "justify_content splits the free main-axis space over the n + 1 slots by its weights with cumulative rounding; negative free space makes the space modes act as start, and a single child with space-between acts as start (probe-confirmed except free_minus_10.end and one_child.space-around, which follow the contract text)",
   "expect": {
     "free_41.start": {"value": "0,20,40", "spec": "§16"},
     "free_41.end": {"value": "41,61,81", "spec": "§16"},

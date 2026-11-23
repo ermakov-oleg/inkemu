@@ -1,6 +1,6 @@
 {
   "spec": "§16",
-  "about": "cross axis of row and column: align_items and align_self place a child in its line, a child with no height and no content is stretched (clamped by max_h), wrap breaks lines and align_content places them, aspect_ratio derives the other side, baseline aligns the first text lines (probe-confirmed where font-free)",
+  "about": "cross axis of row and column: align_items and align_self place a child in its line, a child with no height and no content is stretched (clamped by max_h), wrap breaks lines and align_content places them, aspect_ratio derives the other side, baseline aligns the first text lines (align_items, align_self, stretch_to_max_h, wrap_stretch and the baseline rule probe-confirmed; wrap_center and the aspect_ratio records follow the contract text)",
   "expect": {
     "align_items.start": {"value": "0,0,200,101 [0,0,50,40 | 50,0,50,101]", "spec": "§16"},
     "align_items.center": {"value": "0,0,200,101 [0,30,50,40 | 50,0,50,101]", "spec": "§16"},

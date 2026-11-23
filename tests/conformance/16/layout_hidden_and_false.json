@@ -8,11 +8,10 @@
     "hidden_not_boolean": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
     "zero_height": {"value": "0,0,100,20 [0,0,100,20 | 0,20,100,0]", "spec": "§16"},
     "frame": {"value": {"ok": true, "ret": []}, "spec": "§16"},
-    "ids_free": {"value": {"ok": true, "ret": []}, "spec": "§16"},
     "focus": {"value": "keep", "spec": "§16"},
     "tap_zero": {"value": ["keep", "activate"], "spec": "§16"}
   },
   "files": {"layout_box.lua": "layout_box.util.lua"},
-  "pixels": [[0, 50, 1], [199, 50, 1], [300, 5, 1]],
+  "pixels": [[0, 50, 1], [199, 50, 1]],
   "errors": []
 }

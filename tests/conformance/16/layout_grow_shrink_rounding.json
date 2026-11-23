@@ -1,6 +1,6 @@
 {
   "spec": "§16",
-  "about": "grow and shrink split the free space with cumulative rounding (the later child gets the remainder), shrink weighs by shrink × base, min and max freeze a child and the loop runs again; percentages take the inner box (probe-confirmed)",
+  "about": "grow and shrink split the free space with cumulative rounding (the later child gets the remainder), shrink weighs by shrink × base, min and max freeze a child and the loop runs again; percentages take the inner box (probe-confirmed except shrink_to_min_then_again, which follows the contract text)",
   "expect": {
     "grow_1_1_1": {"value": "33,33,34", "spec": "§16"},
     "grow_1_2_3": {"value": "16,34,50", "spec": "§16"},

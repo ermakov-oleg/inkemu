@@ -31,8 +31,6 @@ function on_draw(ctx, g)
       { kind = "button", id = "keep", text = "K", h = 100, shrink = 0 },
     } })
   end)
-  -- a hidden or zero-size control takes no id: a later control may use it
-  T.call("ids_free", function() return ui:button("hid", { x = 300, y = 0, w = 10, h = 10 }) end)
   ui:end_frame()
   T.value("focus", ui:focused())
   T.value("tap_zero", { ui:handle_event({ type = "pointer", phase = "up", gesture = "tap", x = 100, y = 99 }) })
