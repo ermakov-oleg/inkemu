@@ -59,6 +59,7 @@ def emu_factory(tmp_path, request) -> Callable[..., Emu]:
 @pytest.fixture
 def server():
     hits = []
+    calls = []  # (method, body) of the requests other than GET
 
     class H(BaseHTTPRequestHandler):
         def do_GET(self):
@@ -78,12 +79,25 @@ def server():
             self.end_headers()
             self.wfile.write(body)
 
+        def other(self):
+            body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            calls.append((self.command, body))
+            self.send_response(200)
+            self.send_header("X-Method", self.command)
+            self.send_header("Content-Length", "4")
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(b"done")
+
+        do_PUT = do_HEAD = do_PROPFIND = other
+
         def log_message(self, *a):
             pass
 
     srv = HTTPServer(("127.0.0.1", 0), H)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     srv.hits, srv.base, srv.echo = hits, f"http://127.0.0.1:{srv.server_port}", False
+    srv.calls = calls
     yield srv
     srv.shutdown()
     srv.server_close()

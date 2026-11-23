@@ -460,7 +460,7 @@ impl Host<'_> {
 
 /// One emulated InkApp.
 pub struct Core {
-    st: Shared,
+    pub(crate) st: Shared,
 }
 
 impl Drop for Core {

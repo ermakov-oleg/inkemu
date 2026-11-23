@@ -38,7 +38,7 @@ impl Dir {
         }
     }
 
-    fn name_ok(self, b: &[u8]) -> bool {
+    pub(crate) fn name_ok(self, b: &[u8]) -> bool {
         match self {
             Dir::Storage => storage_name_ok(b),
             Dir::App => std::str::from_utf8(b).is_ok_and(app_file_name_ok),
@@ -103,7 +103,8 @@ pub(crate) fn store(
     store_capped(s, dir, name, data, mode, STORAGE_WRITE_MAX)
 }
 
-/// [`store`] with another per-call limit (`net` `save` into the app folder allows more).
+/// [`store`] with another per-call limit (`net` `save` into the app folder allows more); a storage file never
+/// takes more than [`STORAGE_WRITE_MAX`].
 pub(crate) fn store_capped(
     s: &mut State,
     dir: Dir,
@@ -116,6 +117,10 @@ pub(crate) fn store_capped(
         return Err("invalid_argument");
     }
     let name = std::str::from_utf8(name).expect("checked by name_ok");
+    let max_call = match dir {
+        Dir::Storage => max_call.min(STORAGE_WRITE_MAX),
+        Dir::App => max_call,
+    };
     if data.len() > max_call {
         return Err("limit_exceeded");
     }
@@ -361,5 +366,32 @@ mod tests {
         for ok in ["COM0", "com10", "x.con", "console"] {
             assert!(app_file_name_ok(ok), "{ok}");
         }
+    }
+
+    #[test]
+    fn storage_never_takes_more_than_its_write_limit() {
+        use crate::app::AppFiles;
+        use crate::config::{Config, APP_FILE_SAVE_MAX};
+        use crate::{Core, Persisted};
+        let app = AppFiles(BTreeMap::from([
+            (
+                "manifest.json".to_string(),
+                br#"{"app_id": "t", "entry": "index.lua", "api": "2.2"}"#.to_vec(),
+            ),
+            ("index.lua".to_string(), b"".to_vec()),
+        ]));
+        let core = Core::new(app, Config::default(), Persisted::default());
+        let big = vec![b'x'; STORAGE_WRITE_MAX + 1];
+        with(&core.st, |s| {
+            let cap = APP_FILE_SAVE_MAX;
+            assert_eq!(
+                store_capped(s, Dir::Storage, b"a", &big, Mode::Write, cap),
+                Err("limit_exceeded")
+            );
+            assert_eq!(
+                store_capped(s, Dir::App, b"a", &big, Mode::Write, cap),
+                Ok(())
+            );
+        });
     }
 }

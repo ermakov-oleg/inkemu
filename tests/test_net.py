@@ -7,7 +7,10 @@ DRAW = "msg = 'none'\nfunction on_draw(c, g) g:clear(0); g:text(0, 0, 'msg ' .. 
 NET = {"permissions": ["net"]}
 
 
-def app_with(make_app, request_lua: str, cb_body: str = "msg = resp.status .. ':' .. tostring(resp.body)", **kw):
+# tostring: an answer without a response has no status (§14)
+def app_with(
+    make_app, request_lua: str, cb_body: str = "msg = tostring(resp.status) .. ':' .. tostring(resp.body)", **kw
+):
     lua = (
         DRAW
         + "function on_load(c)\n  job = c.net:request("
@@ -47,19 +50,25 @@ def test_response_fields_and_delay(make_app, emu_factory, tmp_path):
         app_with(
             make_app,
             "{url = 'http://x.test/a', method = 'GET'}",
-            "msg = resp.code .. resp.headers['x-foo'] .. resp.bytes",
+            "msg = resp.status .. resp.headers['x-foo'] .. resp.bytes .. tostring(resp.code)",
         )
     )
     emu.wait(999)
     assert emu.has_text("msg none")
     emu.wait(1)
-    assert emu.has_text("msg 201bar3")
+    assert emu.has_text("msg 201bar3nil"), "the 0.1 field code is gone (§14, 14/net_response_fields)"
 
 
 def test_replay_without_fixture(make_app, emu_factory):
-    emu = emu_factory(app_with(make_app, "{url = 'http://x.test/b'}", "msg = resp.err .. resp.error .. resp.status"))
+    emu = emu_factory(
+        app_with(
+            make_app,
+            "{url = 'http://x.test/b'}",
+            "msg = resp.err .. tostring(resp.ok) .. tostring(resp.status) .. tostring(resp.error)",
+        )
+    )
     emu.wait(300)
-    assert emu.has_text("msg no_fixtureno_fixture0")
+    assert emu.has_text("msg no_fixturefalsenilnil"), "no response: ok false, no status, no 0.1 error (§14)"
     line = next(ln for ln in emu.log if "no fixture" in ln)
     assert "GET http://x.test/b" in line and "--net record" in line
 
@@ -171,11 +180,12 @@ def test_unknown_secret_warns(make_app, emu_factory, server):
     assert any("looks like a secret" in w and "abcdefghij0123456789xyz" not in w for w in emu.warnings)
 
 
-def test_patch_never_answers(make_app, emu_factory):
-    emu = emu_factory(app_with(make_app, "{url = 'http://x.test/p', method = 'PATCH'}"))
-    emu.wait("60s")
-    assert emu.has_text("msg none")
-    assert any("PATCH" in w for w in emu.warnings)
+def test_patch_gets_its_answer(make_app, emu_factory, tmp_path):
+    write_fixture(tmp_path, "p", {"method": "PATCH", "url": "http://x.test/p"}, {"status": 200})
+    emu = emu_factory(app_with(make_app, "{url = 'http://x.test/p', method = 'PATCH', body = 'x'}"))
+    emu.wait(300)
+    assert emu.has_text("msg 200:ok"), "PATCH reaches its callback (§14, 14/net_methods_accepted)"
+    assert emu.warnings == []
 
 
 def test_glob_match_fixture(make_app, emu_factory, tmp_path):
@@ -205,7 +215,7 @@ def test_post_matches_by_body_hash(make_app, emu_factory, tmp_path):
         app_with(make_app, "{url = 'http://x.test/p', method = 'POST', body = 'q=2'}"), state_dir=tmp_path / "s2"
     )
     emu2.wait(300)
-    assert emu2.has_text("msg 0:nil")
+    assert emu2.has_text("msg nil:nil"), "no response has no status (§14, 14/net_response_fields)"
 
 
 def test_cancel_before_delivery(make_app, emu_factory, tmp_path):
@@ -243,17 +253,32 @@ def test_live_mode_hits_server(make_app, emu_factory, tmp_path, server):
     assert not (tmp_path / "fixtures").exists()
 
 
+def test_live_sends_the_other_methods(make_app, emu_factory, server):
+    lua = (
+        DRAW + "function on_load(c)\n  msg = ''\n"
+        f"  c.net:request({{url = '{server.base}/p', method = 'PUT', body = 'x'}}, function(c, r)\n"
+        "    msg = msg .. r.status .. r.headers['x-method'] .. r.body .. r.bytes .. ','\n"
+        f"    c.net:request({{url = '{server.base}/h', method = 'HEAD'}}, function(c, r)\n"
+        "      msg = msg .. r.status .. r.headers['x-method'] .. r.body .. r.bytes\n"
+        "    end)\n  end)\nend\n"
+    )
+    emu = emu_factory(make_app(lua, manifest=NET), net="live")
+    emu.wait(600)
+    assert emu.lua_eval("return msg") == "200PUTdone4,200HEAD0"
+    assert server.calls == [("PUT", b"x"), ("HEAD", b"")]
+
+
 def test_network_error_gives_err(make_app, emu_factory):
     emu = emu_factory(
         app_with(
             make_app,
             "{url = 'http://127.0.0.1:1/x', timeout_ms = 2000}",
-            "msg = resp.status .. tostring(resp.err) .. tostring(resp.body)",
+            "msg = tostring(resp.status) .. tostring(resp.err) .. tostring(resp.body)",
         ),
         net="live",
     )
     emu.wait(300)
-    assert emu.has_text("msg 0no_networknil")
+    assert emu.has_text("msg nilno_networknil"), "no response has no status (§14, 14/net_response_fields)"
 
 
 @pytest.mark.allow_errors
@@ -261,12 +286,14 @@ def test_request_argument_errors(make_app, emu_factory):
     emu = emu_factory(
         make_app(
             DRAW + "function on_load(c)\n local a, e = c.net:request({url = 'nonsense'}, function() end)\n"
-            "msg = tostring(a) .. tostring(e)\n c.net:request({}, function() end) end",
+            "msg = tostring(a) .. tostring(e)\n a, e = c.net:request({}, function() end)\n"
+            "msg = msg .. tostring(a) .. tostring(e)\n c.net:request('x', function() end) end",
             manifest=NET,
         )
     )
-    assert "bad extra argument" in emu.errors[0]
-    assert emu.lua_eval("return msg") == "nilinvalid_argument"
+    # a missing url is a bad option, not a bad argument (14/net_save_invalid ruling); 0.1 raised
+    assert emu.lua_eval("return msg") == "nilinvalid_argumentnilinvalid_argument"
+    assert "bad argument #1 to 'request'" in emu.errors[0]
 
 
 def test_hyphenated_name_and_numeric_value_are_redacted(make_app, emu_factory, tmp_path, server):
@@ -313,12 +340,16 @@ def test_unusable_secret_warns_in_replay(make_app, emu_factory, tmp_path):
 
 
 def two_requests(url_lua: str, body_lua: str) -> str:
-    """A GET of `url_lua` and a POST of `body_lua` (Lua expressions); `msg` collects status and body of each."""
-    cb = "function(c, r) msg = msg .. r.status .. tostring(r.body); c:invalidate() end"
+    """A GET of `url_lua`, then a POST of `body_lua` (Lua expressions); `msg` collects status and body of each.
+
+    The POST starts in the GET's callback: one request at a time (§14, 14/net_busy)."""
+    cb = "function(c, r) msg = msg .. tostring(r.status) .. tostring(r.body); c:invalidate() end"
     return (
         DRAW + "function on_load(c)\n  msg = ''\n"
-        f"  c.net:request({{url = {url_lua}}}, {cb})\n"
-        f"  c.net:request({{url = 'http://h.test/p', method = 'POST', body = {body_lua}}}, {cb})\nend\n"
+        f"  c.net:request({{url = {url_lua}}}, function(c, r)\n"
+        "    msg = msg .. tostring(r.status) .. tostring(r.body)\n"
+        f"    c.net:request({{url = 'http://h.test/p', method = 'POST', body = {body_lua}}}, {cb})\n"
+        "  end)\nend\n"
     )
 
 
@@ -339,21 +370,24 @@ def test_redact_quote_plus_and_lowercase_percent(make_app, emu_factory, tmp_path
     emu = emu_factory(
         make_app(two_requests(f"'http://h.test/a/{shown}/b'", f"'x={shown};'"), manifest=NET), secrets_file=secrets
     )
-    emu.wait(300)
+    emu.wait(600)
     assert emu.lua_eval("return msg") == "200url200body"
     assert any("GET http://h.test/a/{{pw}}/b -> 200 (fixture)" in ln for ln in emu.log)
 
 
 def test_userinfo_password_is_always_redacted(make_app, emu_factory, tmp_path):
     write_fixture(tmp_path, "u", {"method": "GET", "url": "https://bob:{{userinfo}}@h.test/x?q=1"}, {"status": 200})
+    # one request at a time (§14, 14/net_busy): the second starts in the first one's callback
     lua = (
         DRAW + "function on_load(c)\n  msg = ''\n"
-        "  for _, u in ipairs({'https://bob:hunter2@h.test/x?q=1', 'https://bob@h.test/x'}) do\n"
-        "    c.net:request({url = u}, function(c, r) msg = msg .. r.status .. ',' end)\n  end\nend\n"
+        "  local function get(c, u, after)\n"
+        "    c.net:request({url = u}, function(c, r) msg = msg .. tostring(r.status) .. ',' if after then after(c) end end)\n"
+        "  end\n"
+        "  get(c, 'https://bob:hunter2@h.test/x?q=1', function(c) get(c, 'https://bob@h.test/x') end)\nend\n"
     )
     emu = emu_factory(make_app(lua, manifest=NET))
-    emu.wait(300)
-    assert emu.lua_eval("return msg") == "200,0,"
+    emu.wait(600)
+    assert emu.lua_eval("return msg") == "200,nil,"
     assert any("GET https://bob:{{userinfo}}@h.test/x?q=1 -> 200 (fixture)" in ln for ln in emu.log)
     assert any("no fixture for GET https://bob@h.test/x;" in w for w in emu.warnings)
     assert not any("hunter2" in ln for ln in emu.log + emu.warnings)
@@ -362,13 +396,14 @@ def test_userinfo_password_is_always_redacted(make_app, emu_factory, tmp_path):
 def test_record_redacts_encoded_forms_everywhere(make_app, emu_factory, tmp_path, server):
     secrets = tmp_path / "secrets.json"
     secrets.write_text(json.dumps({"pw": "pa ss/wd+x"}))
+    # one request at a time (§14, 14/net_busy): the second starts in the first one's callback
     lua = (
         DRAW + "function on_load(c)\n"
-        f"  c.net:request({{url = '{server.base}/echo/pa+ss%2Fwd%2Bx'}}, function() end)\n"
-        f"  c.net:request({{url = '{server.base}/echo2/pa%20ss%2fwd%2bx'}}, function() end)\nend\n"
+        f"  c.net:request({{url = '{server.base}/echo/pa+ss%2Fwd%2Bx'}}, function(c)\n"
+        f"    c.net:request({{url = '{server.base}/echo2/pa%20ss%2fwd%2bx'}}, function() end)\n  end)\nend\n"
     )
     emu = emu_factory(make_app(lua, manifest=NET), net="record", secrets_file=secrets)
-    emu.wait(300)
+    emu.wait(600)
     d = tmp_path / "fixtures" / "net"
     assert len(list(d.glob("*.json"))) == 2
     for text in [p.read_bytes().decode("latin-1") for p in d.iterdir()] + emu.log + emu.warnings:
@@ -387,7 +422,7 @@ def test_record_redacts_encoded_forms_everywhere(make_app, emu_factory, tmp_path
 def test_userinfo_redaction_leaves_bodies_alone(make_app, emu_factory, tmp_path, text):
     fixtures_for(tmp_path, "http://h.test/?q=" + text, text.encode())
     emu = emu_factory(make_app(two_requests(f"'http://h.test/?q=' .. [==[{text}]==]", f"[==[{text}]==]"), manifest=NET))
-    emu.wait(300)
+    emu.wait(600)
     assert emu.lua_eval("return msg") == "200url200body"
 
 
@@ -452,7 +487,7 @@ def test_secrets_are_read_again_on_reload_and_restart(make_app, emu_factory, tmp
     write_fixture(tmp_path, "pin", {"method": "GET", "url": "http://x.test/{{pin}}"}, {"status": 200})
     emu = emu_factory(app_with(make_app, "{url = 'http://x.test/abcdef'}", "msg = resp.status"), secrets_file=secrets)
     emu.wait(300)
-    assert emu.has_text("msg 0")
+    assert emu.has_text("msg nil"), "no fixture: no response, so no status (§14, 14/net_response_fields)"
     secrets.write_text(json.dumps({"pin": "abcdef"}))
     emu.reload()
     emu.wait(300)

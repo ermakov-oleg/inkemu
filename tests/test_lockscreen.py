@@ -198,7 +198,8 @@ def test_wake_reads_secrets_again(make_app, emu_factory, tmp_path):
     )
     secrets = tmp_path / "secrets.json"
     secrets.write_text("{}")
-    req = "c.net:request({url = 'http://x.test/abcdef'}, function(c, r) seen.reason = 'got ' .. r.status end)"
+    # tostring: no fixture is no response, which has no status (§14, 14/net_response_fields)
+    req = "c.net:request({url = 'http://x.test/abcdef'}, function(c, r) seen.reason = 'got ' .. tostring(r.status) end)"
     emu = emu_factory(make(make_app, req), secrets_file=secrets)
     emu.lock()
     emu.wait("1s")

@@ -228,6 +228,19 @@ included, then seeds `files/` from `<fixtures dir>/files/`.
   not bare names; `read(name, offset, len)` returns at most `len` bytes (default and largest 65536) instead of the
   whole file; the folder has no byte quota, and a 513th file is `limit_exceeded`.
 - `--fresh` seeding skips fixture files whose names `ctx.storage` would refuse (uppercase, braces).
+- `ctx.net:request` answers follow §14: the 0.1 fields `code` and `error` are gone (read `status` and `err`), a
+  complete answer has `ok = true` with any status, and an answer without a response (`no_fixture`, `no_network`,
+  `timeout`) has `ok = false` and no `status` or `body` (0.1: `status = 0`). A body over 131072 bytes is cut there
+  with `err = "limit_exceeded"`; `bytes` stays the full size.
+- `request` takes one request at a time: another one before the answer returns `nil, "busy"`, so start the next one
+  in the callback (or with `ctx:after`). The method must be one of the 13 of §14, uppercase (0.1 upper-cased `post`
+  and never answered others). Bad options return `nil, "invalid_argument"` instead of starting a request: a missing
+  or non-string `url` (0.1 raised), a `body` on `GET` or `HEAD`, `timeout_ms` outside 1000..60000 or fractional,
+  more than 16 headers, a header name over 64 bytes, headers over 65536 bytes in all, CR, LF or NUL in a header
+  (0.1 dropped a header value that was not a string or number; now the call fails). A `url` over 1024 bytes or a
+  `body` over 65536 bytes returns `nil, "limit_exceeded"`.
+- `ctx.net:keep_wifi(ms)` returns nothing (0.1: one nil) and returns `nil, "invalid_argument"` for a number that is
+  not an integer from -1 to 2147483647.
 
 ## Supported API
 
@@ -357,7 +370,10 @@ the start with an error. From each file inkemu takes:
   `path` = `/AppFiles/<app_id>`; names as §29, case-insensitive with the creation spelling kept; 262144 bytes per
   call, 512 files, no total limit).
 - `package` (`read`, `open_text`, `image`, `exists`, `size`, `cache_stats` = `{}`).
-- `net` (`request`; GET and POST), `dialog` (`confirm`, `toast`), `input` (`text`, `edit`, `keyboard_h` = 436,
+- `net`: `request` with the 13 methods of §14 (a `HEAD` answer has `body = ""` and `bytes = 0`), one at a time,
+  and `save = {to = "files" | "storage", name}` (a 2xx body replaces the file before the callback, up to 8388608
+  bytes in the app folder and 262144 in storage, within their quotas); `keep_wifi` checks its argument and only
+  logs. `dialog` (`confirm`, `toast`), `input` (`text`, `edit`, `keyboard_h` = 436,
   `pointer` = true). `input:edit` checks its options as §4 (`rect`, `text`, `placeholder`, `max_chars`, `kind`,
   `multiline`, `enter`, else `nil, "invalid_argument"`) and returns `ed` with `set_text`, `text` and `close`;
   `on_end` gets `how` = `"enter"` or `"back"` (the Back key or `answer no`). While it is open, another `edit`,
@@ -388,7 +404,7 @@ offset_minutes revision valid`.
   `print`, as on the device; `require` searches only the app folder. Lua 5.5's global `warn` is visible to the app.
 - Not emulated, so nil: `ctx.crypto`, `ctx.nn`, `ctx.ui`, `ctx.widget`, `dialog:choose`, `i18n:t`,
   `input.keys`, `input.listen`, `input.gamepad`, `device.display`, `device.keep_awake`, `device.radios`,
-  `screen.occlusion`. No BLE, no WebSocket; only GET and POST get a network callback.
+  `screen.occlusion`. No BLE, no WebSocket.
 - `ctx.capabilities` reports what inkemu emulates, except that `image_transform` is true as on the device: `dialog frontlight image_decode image_transform pattern reader`
   are true, `ble identity nn ui ttf` false. The device reports `ble dialog frontlight identity image_decode
   image_transform nn pattern reader ui` as true and `ttf` as false.
@@ -410,6 +426,11 @@ offset_minutes revision valid`.
   - the result format of `ctx.hash:hmac_sha256` (raw bytes in inkemu);
   - the level `ctx.frontlight:reset()` goes back to (inkemu: the level at start, 0);
   - `url:query` with more than 64 items (inkemu: `nil, "limit_exceeded"`; the contract names no code);
+  - completion of `PUT`, `PATCH`, `DELETE` and the other methods after `GET` and `POST` (note N1 in
+    `spec/deviations.md`; inkemu answers them as the contract says);
+  - the code for a `url` over 1024 bytes or a `body` over 65536 bytes (inkemu: `limit_exceeded` by §18; §14 names
+    none), and for a `save` table without `to` or `name` (inkemu: `invalid_argument`);
+  - a number as a header value (inkemu sends it as text; §14 says strings);
   - whether `density` changes the `line` and `cross` patterns (inkemu: no); whether `line` and `cross` are anchored
     to the screen like `dot` or to the box (inkemu: the screen; the probe's boxes started where both agree);
   - `g:pattern` with a `density` that is not a number (inkemu: the frame fails with "g: bad values in on_draw");

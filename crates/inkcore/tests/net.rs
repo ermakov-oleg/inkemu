@@ -19,7 +19,8 @@ fn app(request_lua: &str, cb_body: &str) -> AppFiles {
     ]))
 }
 
-const STATUS_BODY: &str = "msg = resp.status .. ':' .. tostring(resp.body)";
+// tostring: an answer without a response has no status (§14)
+const STATUS_BODY: &str = "msg = tostring(resp.status) .. ':' .. tostring(resp.body)";
 
 fn fixture(req: serde_json::Value, resp: serde_json::Value) -> Vec<u8> {
     serde_json::to_vec(&json!({"request": req, "match": "exact", "response": resp})).unwrap()
@@ -83,13 +84,18 @@ fn post_matches_by_body_hash() {
             json!({"status": 200, "body": "yes"}),
         ),
     )]);
-    let req = |body: &str| format!("{{url = 'http://x.test/p', method = 'post', body = '{body}'}}");
+    // uppercase only (§14, 14/net_method_case); 0.1 upper-cased 'post'
+    let req = |body: &str| format!("{{url = 'http://x.test/p', method = 'POST', body = '{body}'}}");
     let mut core = boot(app(&req("q=1"), STATUS_BODY), cfg.clone());
     core.wait(300).unwrap();
     assert_eq!(msg(&mut core), "200:yes");
     let mut core = boot(app(&req("q=2"), STATUS_BODY), cfg);
     core.wait(300).unwrap();
-    assert_eq!(msg(&mut core), "0:nil");
+    assert_eq!(
+        msg(&mut core),
+        "nil:nil",
+        "no response has no status (§14, 14/net_response_fields)"
+    );
 }
 
 #[test]
@@ -97,12 +103,16 @@ fn no_fixture_names_method_url_and_record() {
     let mut core = boot(
         app(
             "{url = 'http://x.test/b'}",
-            "msg = resp.err .. resp.error .. resp.status",
+            "msg = resp.err .. tostring(resp.ok) .. tostring(resp.status) .. tostring(resp.error)",
         ),
         with_fixtures(&[]),
     );
     core.wait(300).unwrap();
-    assert_eq!(msg(&mut core), "no_fixtureno_fixture0");
+    assert_eq!(
+        msg(&mut core),
+        "no_fixturefalsenilnil",
+        "no response: ok false, no status, no 0.1 error (§14, 14/net_response_fields)"
+    );
     let want = "net: no fixture for GET http://x.test/b; run with --net record to save one, or write it by hand in fx/net";
     assert_eq!(core.warnings().to_vec(), vec![want.to_string()]);
 }
@@ -249,7 +259,11 @@ fn new_secrets_apply_from_the_next_start() {
     )]);
     let mut core = boot(app("{url = 'http://x.test/abcdef'}", STATUS_BODY), cfg);
     core.wait(300).unwrap();
-    assert_eq!(msg(&mut core), "0:nil");
+    assert_eq!(
+        msg(&mut core),
+        "nil:nil",
+        "no response has no status (§14, 14/net_response_fields)"
+    );
     core.set_secrets(
         vec![("pin".into(), "abcdef".into())],
         vec!["secrets.json: key 'bad name' is not a valid name".into()],
@@ -314,4 +328,80 @@ fn fixtures_then_live_sends_the_rest_to_the_outbox() {
     );
     core.wait(50).unwrap();
     assert_eq!(msg(&mut core), json!(204));
+}
+
+#[test]
+fn one_request_at_a_time_and_the_slot_frees_before_the_callback() {
+    let cfg = with_fixtures(&[(
+        "a.json",
+        fixture(
+            json!({"method": "GET", "url": "http://x.test/a"}),
+            json!({"status": 200, "body": "ok"}),
+        ),
+    )]);
+    let again = "msg = tostring(c.net:request({url = 'http://x.test/a'}, function() end) ~= nil)";
+    let mut core = boot(app("{url = 'http://x.test/a'}", again), cfg.clone());
+    let second = "return select(2, ctx.net:request({url = 'http://x.test/a'}, function() end))";
+    assert_eq!(core.lua_eval(second).unwrap(), "busy");
+    core.wait(300).unwrap();
+    assert_eq!(
+        msg(&mut core),
+        "true",
+        "a request in the callback is not busy"
+    );
+
+    let mut core = boot(app("{url = 'http://x.test/a'}", STATUS_BODY), cfg);
+    core.lua_exec("job:cancel()").unwrap();
+    let started = "return ctx.net:request({url = 'http://x.test/a'}, function() end) ~= nil";
+    assert_eq!(core.lua_eval(started).unwrap(), true);
+}
+
+#[test]
+fn live_answers_follow_head_and_save_like_fixtures() {
+    let live = || Config {
+        net_mode: NetMode::Live,
+        ..Config::default()
+    };
+    let mut core = boot(
+        app(
+            "{url = 'http://x.test/h', method = 'HEAD'}",
+            "msg = {resp.status, resp.body, resp.bytes, resp.headers['x-a']}",
+        ),
+        live(),
+    );
+    let out = core.take_outgoing();
+    assert_eq!(out[0].method, "HEAD");
+    core.deliver(
+        out[0].id,
+        NetResult::Response {
+            status: 200,
+            headers: vec![("x-a".into(), "b".into())],
+            body: b"leak".to_vec(),
+            delay_ms: 0,
+        },
+    );
+    assert_eq!(msg(&mut core), json!([200, "", 0, "b"]));
+
+    let mut core = boot(
+        app(
+            "{url = 'http://x.test/f', method = 'PROPFIND', body = 'q', save = {to = 'files', name = 'f.txt'}}",
+            "msg = {resp.saved, resp.body, resp.bytes, c.files:read('f.txt')}",
+        ),
+        live(),
+    );
+    let out = core.take_outgoing();
+    assert_eq!(
+        (out[0].method.as_str(), out[0].body.as_slice()),
+        ("PROPFIND", &b"q"[..])
+    );
+    core.deliver(
+        out[0].id,
+        NetResult::Response {
+            status: 207,
+            headers: vec![],
+            body: b"data".to_vec(),
+            delay_ms: 0,
+        },
+    );
+    assert_eq!(msg(&mut core), json!([true, "", 4, "data"]));
 }

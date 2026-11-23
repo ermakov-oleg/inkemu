@@ -51,87 +51,9 @@ Already green and pinned: `12/log_and_clock`, `12/clock_fields` (date and time f
 
 ## §14 Networking
 
-All network checks use replay fixtures on `.test` hosts, so they pass the same way on any core that answers fixtures. The current core only answers `GET` and `POST` and ignores `save`, so most of these are red. Unverified on 26112001 (no radio in the probe): completion of `PUT`, `PATCH`, `DELETE` and the rest; the checks follow the contract (note N1 in `spec/deviations.md`).
+All network checks use replay fixtures on `.test` hosts, so they pass the same way on any core that answers fixtures. Unverified on 26112001 (no radio in the probe): completion of `PUT`, `PATCH`, `DELETE` and the rest; the checks follow the contract (note N1 in `spec/deviations.md`).
 
-### 14/net_methods_accepted, 14/net_head_no_body
-- Contract: the 13 methods `GET POST PUT PATCH DELETE HEAD OPTIONS PROPFIND PROPPATCH MKCOL COPY MOVE REPORT` are accepted; a fixture for each reaches the completion function. A `HEAD` answer has `body = ""`, `bytes = 0` and its headers. `14/net_methods_basic` pins `GET` and `POST` (green); `net_methods_accepted` the other eleven.
-- Core now: any other method than `GET` and `POST` logs a warning and never calls back.
-- Touch points: `crates/inkcore/src/ctx/net.rs` (`first_step`), `crates/inkcore/src/fixtures.rs` (matching already works for any method).
-- Source: probe-confirmed that `GET`, `PUT`, `PATCH` and `DELETE` return a job synchronously; the other methods and every completion are contract only.
-
-### 14/net_method_case
-- Contract: the method string must match exactly and in upper case; lower or mixed case and unknown names give `nil, "invalid_argument"`.
-- Core now: the method is upper-cased, so `get`, `post`, `patch` and `put` start a request, and an unknown method starts one that never answers. An empty method is already refused (`14/net_method_empty`, green).
-- Touch points: `crates/inkcore/src/ctx/net.rs` (`request`).
-- Source: probe-confirmed for `patch` and `FOO`; the other spellings and the empty string are contract only.
-
-### 14/net_body_get_head, 14/net_body_rules
-- Contract: a body on `GET` or `HEAD` is `invalid_argument` (`net_body_get_head`); a body is at most 65536 bytes (`net_body_rules`); other methods may carry a body (`14/net_body_allowed`, green).
-- Core now: nothing is checked.
-- Touch points: `crates/inkcore/src/ctx/net.rs` (`request`).
-- Source: contract only. The error code for a body over 65536 bytes is not stated in §14; the check expects `limit_exceeded` by the general rule of §18 (contract, §18 general rule).
-
-### 14/net_header_invalid
-- Contract: headers are at most 16 entries, names at most 64 bytes, all names and values together at most 65536 bytes (2.26), and no value holds CR, LF or NUL; otherwise `nil, "invalid_argument"`.
-- Core now: nothing is checked (a non-string value is dropped).
-- Touch points: `crates/inkcore/src/ctx/net.rs` (`header_pairs`, `request`).
-- Source: contract only. `14/net_header_limits_ok` pins the accepted edges and is green.
-
-### 14/net_url_length
-- Contract: the URL is at most 1024 bytes. The scheme rule (`http://` or `https://`) is already followed and pinned by `14/net_url_scheme` (green).
-- Core now: the length is not checked.
-- Touch points: `crates/inkcore/src/ctx/net.rs` (`url_ok`).
-- Source: contract only. §14 names no error code for a long URL; the check expects `limit_exceeded` (contract, §18 general rule).
-
-### 14/net_timeout_range
-- Contract: `timeout_ms` is an integer from 1000 to 60000; anything else is `invalid_argument` (the accepted ends are pinned by `14/net_timeout_accepted`, green).
-- Core now: any number is accepted.
-- Touch points: `crates/inkcore/src/ctx/net.rs` (`request`, `round_ms`).
-- Source: contract only.
-
-### 14/net_busy
-- Contract: only one request is unfinished at a time; another `request` returns `nil, "busy"`, but a bad method is `invalid_argument` even then; the slot frees when the answer arrives.
-- Core now: no busy state, requests run side by side.
-- Touch points: `crates/inkcore/src/ctx/net.rs` (`NetState.inflight` already counts them), `crates/inkcore/src/emu.rs`.
-- Source: probe-confirmed (`busy`, and `FOO` while busy is `invalid_argument`). Not pinned: the slot a cancelled request holds until the host aborts it.
-
-### 14/net_response_fields, 14/net_response_error_status
-- Contract: a complete answer, with any status, has `ok = true`, `status`, `headers` (lowercase names), `body`, `bytes`, and no `err`, `saved` only with `save`.
-- Core now: the table has no `ok` (it has the 0.1 fields `code` and `error` too).
-- Touch points: `crates/inkcore/src/ctx/net.rs` (`response_table`).
-- Source: contract only.
-
-### 14/net_body_cap
-- Contract: at most 131072 body bytes are kept; a longer body is truncated with `err = "limit_exceeded"` and `ok` stays true; `bytes` is the full size. A body of exactly 131072 bytes is whole (`14/net_body_cap_exact`, green).
-- Core now: the body is delivered whole and `err` stays nil.
-- Touch points: `crates/inkcore/src/ctx/net.rs` (`response_table`).
-- Source: contract only.
-
-### 14/net_save_files_2xx, 14/net_save_storage_2xx, 14/net_save_non_2xx
-- Contract: `save = { to = "files" | "storage", name }` on a 2xx answer replaces the whole file before the callback: `saved = true`, `body = ""`, `bytes` the size, `err` nil. A non-2xx answer leaves the file alone: `saved = false`, the body in `res.body`.
-- Core now: `save` is ignored; the body stays in `res.body` and `saved` is nil.
-- Touch points: `crates/inkcore/src/ctx/net.rs` (`request`, `response_table`), `crates/inkcore/src/ctx/files.rs` (a shared store function for both directories).
-- Source: contract only (the probe could only see `saved = false` after `no_network`).
-
-### 14/net_save_invalid
-- Contract: `save` must be a table whose `to` is `files` or `storage` and whose name is valid for that target; otherwise `nil, "invalid_argument"`.
-- Core now: not validated.
-- Touch points: `crates/inkcore/src/ctx/net.rs` (`request`), `crates/inkcore/src/ctx/files.rs` (name rules).
-- Source: contract only. A missing `to` or `name` is inferred to be `invalid_argument` as well (the contract could also read it as a type error).
-
-### 14/net_save_storage_limit, 14/net_save_files_limit, 14/net_save_files_quota
-- Contract: a save to storage takes up to 262144 bytes, to the app folder up to 8388608; a longer body, or a new file past the 512-file quota, gives `ok = true`, `saved = false`, `body = ""`, `err = "limit_exceeded"` and `bytes` the full size, with no file created.
-- Core now: `save` is ignored.
-- Touch points: `crates/inkcore/src/ctx/net.rs`, `crates/inkcore/src/ctx/files.rs`.
-- Source: contract only. These checks use the runner's `body_repeat` fixture field for the large bodies. Not pinned: the storage total-bytes quota via save, `io_error` on a full card.
-
-### 14/net_keep_wifi
-- Contract: `keep_wifi(ms)` takes an integer from -1 to 2147483647, returns nothing, and returns `nil, "invalid_argument"` for another number (-2, 1.5, 2147483648). A non-number or a missing argument raises (`14/net_keep_wifi_types`, green).
-- Core now: it returns one `nil` and accepts every number.
-- Touch points: `crates/inkcore/src/ctx/net.rs` (`keep_wifi`).
-- Source: contract only.
-
-Already green and pinned: `14/net_methods_basic`, `14/net_method_empty`, `14/net_body_allowed`, `14/net_url_scheme`, `14/net_timeout_accepted`, `14/net_keep_wifi_types`, `14/net_body_cap_exact`, `14/net_header_limits_ok`, `14/net_redirect_not_followed`. Not covered: `ctx.net:websocket` (not emulated), `no_network`, `timeout`, `io_error` and `out_of_memory` answers (a fixture cannot express them), unfixtured requests (replay answers `no_fixture`, which the contract does not know), the `content-type` default, and header joining of duplicates.
+All §14 checks are green and pinned: `14/net_methods_accepted`, `14/net_head_no_body`, `14/net_method_case`, `14/net_body_get_head`, `14/net_body_rules` (`limit_exceeded` by §18's general rule), `14/net_header_invalid`, `14/net_url_length` (`limit_exceeded` by §18's general rule), `14/net_timeout_range`, `14/net_busy`, `14/net_response_fields`, `14/net_response_error_status`, `14/net_body_cap`, `14/net_save_files_2xx`, `14/net_save_storage_2xx`, `14/net_save_non_2xx`, `14/net_save_invalid`, `14/net_save_storage_limit`, `14/net_save_files_limit`, `14/net_save_files_quota`, `14/net_keep_wifi`, and the valid cases `14/net_methods_basic`, `14/net_method_empty`, `14/net_body_allowed`, `14/net_url_scheme`, `14/net_timeout_accepted`, `14/net_keep_wifi_types`, `14/net_body_cap_exact`, `14/net_header_limits_ok`, `14/net_redirect_not_followed`. Not covered: `ctx.net:websocket` (not emulated), `no_network`, `timeout`, `io_error` and `out_of_memory` answers (a fixture cannot express them), unfixtured requests (replay answers `no_fixture`, which the contract does not know), the `content-type` default, header joining of duplicates, the slot a cancelled request holds until the host aborts it, the storage total-bytes quota via save, and `io_error` on a full card.
 
 ## §15 Lock screen
 

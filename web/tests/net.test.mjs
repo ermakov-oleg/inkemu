@@ -52,6 +52,21 @@ test('GET sends no body, even when the request carries one', async () => {
   assert.equal(r.body_b64, '');
 });
 
+test('the other §14 methods go out as asked; HEAD sends no body', async () => {
+  const seen = [];
+  const fetchFn = async (url, init) => {
+    seen.push(init);
+    return response(207, new Uint8Array(), {});
+  };
+  const r = await perform(req({ method: 'PROPFIND' }), fetchFn);
+  await perform(req({ method: 'HEAD' }), fetchFn);
+  assert.equal(r.status, 207);
+  assert.equal(seen[0].method, 'PROPFIND');
+  assert.deepEqual([...seen[0].body], [0, 255, 1]);
+  assert.equal(seen[1].method, 'HEAD');
+  assert.equal(seen[1].body, undefined);
+});
+
 test('a TypeError (CORS or network) is no_network with the exact log line', async () => {
   const fetchFn = async () => {
     throw new TypeError('Failed to fetch');
