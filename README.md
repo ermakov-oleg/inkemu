@@ -187,7 +187,53 @@ lock and on every `interval_sec` wake, with `ctx.lock` (`reason`, `done`, `set_i
 
 Drawing (`g`): `clear`, `rect`, `round_rect`, `line`, `circle`, `arc`, `polygon`, `polyline`, `text`, `text_box`,
 `image`, `pattern`, `pattern_rect`, `fill_pattern`, `size`, `measure`, `measure_text`, plus layers via `ctx.layers`.
-The frame cap of 1024 commands is enforced.
+A frame accepts 1024 commands, and each line a `text_box` draws is one of them. A call past the cap returns
+`nil, "limit_exceeded"` and draws nothing (a `text_box` that does not fit whole is refused whole); the frame logs
+one warning with the number of commands asked for.
+
+Text, as in the contract (§7):
+
+- `g:text`, `g:text_box` and `font:measure` take up to 8192 bytes per call, `font:layout` up to 65536, and all text
+  of one frame up to 65536 bytes; past that the call returns `nil, "limit_exceeded"`. Text that is not valid UTF-8
+  is `nil, "invalid_argument"`, and so is text with a right-to-left character; `g:text` and `g:text_box` also log a
+  warning.
+- A tab is one space; `\n` and other control characters have no width and are not drawn (`text_box` breaks the line
+  at `\n`).
+- `font:measure(text, {bold, tabular})`: bold adds 1 pixel to a line that has any width; with `tabular` every digit
+  takes the width of the widest digit. `italic`, `underline` and `strike` do not change it.
+- `g:text_box(x, y, w, h, text, opts)` takes `wrap` (`"word"`, `"char"`, `"none"`), `overflow` (`"clip"`,
+  `"ellipsis"`, `"visible"`), `line_gap`, `bold`, `tabular`, `italic`, `underline` and `strike`. `word` breaks at
+  spaces and beside CJK and Thai characters and splits a word wider than the box at a code point; whitespace at
+  either end of a line takes no width; combining marks and Thai vowels stay with their character; a bold line wraps
+  at `w - 1`; from API 2.16 the line-start and line-end punctuation rules move a break back. `clip` keeps the lines
+  that fit whole (none is fine: nothing is drawn, the call succeeds) and cuts a line that cannot wrap at the box
+  edge; `ellipsis` ends the last line that fits with `…` (`...` in a font without one); `visible` keeps every line.
+- `font:layout(text, w, h, opts)` returns `lines, height, consumed`, three integers, by the same rules: `height` is
+  `n * line_height + (n - 1) * line_gap` and `consumed` the bytes taken, on a code-point boundary, with the newline
+  or the space at the page's end. `lines` is the number of commands the same `text_box` costs.
+- `underline` and `strike` draw a line of `max(1, (line_height + 12) // 24)` pixels under or through each line, as
+  long as its `measure` width; each is one more command. `italic` slants the glyphs about 18 %. `valign =
+  "baseline"` puts `y` on the baseline.
+- `bold` and `tabular` work for packages that declare API 2.16 or above, `italic`, `underline` and `strike` for 2.28
+  or above; older packages get the plain text.
+- `ctx.fonts:size(px, sample)`: `px` is a whole number from 8 to 96 and `sample` nil or text (at most 256 bytes,
+  valid UTF-8, no NUL, no right-to-left text), else `nil, "invalid_argument"`; a `sample` that is neither a string
+  nor nil (a number included) raises an error. The answer is still the nearest of the three system fonts.
+
+Frames: `emu.status()["refresh"]` is the waveform of the last app frame presented, `"partial"` or `"full"`, and
+`emu.status()["refreshes"]` lists the waveforms of the last 64 app frames, oldest first (one step such as a tap can
+present more than one frame). The rules, as in the contract:
+
+- `ctx:invalidate()` asks for a partial frame and `ctx:invalidate("full")` or `ctx.system:act("refresh")` for a full
+  one; one full request among several makes the frame full. A request made in `on_draw` is for the next frame.
+- After 29 partial frames the 30th is full (the firmware's default setting; inkemu does not let you change it). Any
+  full frame starts the count again.
+- `ctx:defer_full_refresh(ms)` holds that automatic full back for `ms` of virtual time; the first frame after the
+  deadline gets the full it is owed, and at 60 partial frames the frame is full even while deferred.
+- The first frame of every session (start, restart, reload, unlock, each lock screen session) is full; the contract
+  leaves it open, this is inkemu's choice. Lock screen frames count like app frames.
+- The error overlay, dialogs and toasts are not frames of the app, and a frame whose `on_draw` fails is not counted.
+- `"gray"` is reserved for a frame with a `g:image{gray = true}`; inkemu does not draw gray frames yet.
 
 Grey, as measured on 26112001: the canvas is 1-bit, and grey is a pattern of black and white pixels.
 
@@ -204,8 +250,9 @@ Grey, as measured on 26112001: the canvas is 1-bit, and grey is a pattern of bla
 
 `ctx.fonts.small`, `medium` and `large` on the reader are the firmware's built-in bitmap font: line height 20/24/30,
 ascent 17/21/26, proportional digits, no kerning. That font is proprietary and is not shipped with inkemu. By
-default inkemu draws text in DejaVu Sans, bundled, at the same line heights; its widths and ascents differ from the
-reader's.
+default inkemu draws text in DejaVu Sans, bundled, at the same line heights and ascents (the baseline is drawn at
+`y + ascent`); its widths differ from the reader's. Each character advances a whole number of pixels, so `measure`
+is the drawn width.
 
 If you have the reader's font as BDF files, point inkemu at them: set `INKEMU_FONTS=DIR`, or pass
 `Emu(..., fonts_dir=DIR)`. `DIR` must hold `small.bdf`, `medium.bdf` and `large.bdf`; a missing or broken file stops
@@ -222,7 +269,9 @@ the start with an error. From each file inkemu takes:
 
 `ctx`:
 
-- `invalidate`, `after`/timers, `set_tick`, `defer_full_refresh`, `quit`, `save_state`, `state`, `api`.
+- `invalidate` (nothing or `"full"`; another argument is `nil, "invalid_argument"`), `after`/timers, `set_tick`,
+  `defer_full_refresh` (whole ms from 1 to 60000, else `nil, "invalid_argument"`), `quit`, `save_state`, `state`,
+  `api`.
 - `log`: a table with `error`, `info` and `warn`, each logging with its level (`[app] WARN ...`).
 - `capabilities`, `clock` (`now`, `millis`), `device` (`battery`, `firmware`, `model`, `name`, `id_for_app`,
   `lock_timer`), `fonts`.
@@ -236,33 +285,39 @@ the start with an error. From each file inkemu takes:
   20 raw bytes too; `crc32` returns a signed 32-bit integer (values from 2^31 wrap to negative); all verified in QEMU on firmware 26112001.
 - `screen` (`width`, `height`, `orientation`, `set_orientation`, `gray_levels` = 2, `gray_still` = 4),
   `frontlight` (`get`, `set`, `reset`), `system` (`can_open`, `open`, `act`), `i18n` (`locale`), `perf` (`info` =
-  `{}`), `gc`, `budget`, `reader` (answers from `<fixtures dir>/reader.json`), `lockscreen`, `lock`.
-- `ui` (§16), in progress: `create`, `begin_frame`/`end_frame`, `focused`, `label`, `button` and `region` work
-  (`font_min` on a `label` needs the host's `font:layout`, so it keeps its font for now); image and skin buttons,
-  and the other methods, raise "not implemented in inkemu yet".
+  `{tick_us, draw_us, cmd_count, image_count, asset_hit, asset_miss, draw_frame}`: `cmd_count` and `image_count`
+  are the commands and `g:image` calls accepted in the last frame, `draw_frame` the frames of this session), `gc`,
+  `budget`, `reader` (answers from `<fixtures dir>/reader.json`), `lockscreen`, `lock`.
+- `ui` (§16), in progress: `create`, `begin_frame`/`end_frame`, `focused`, `label`, `button` and `region` work;
+  image and skin buttons, and the other methods, raise "not implemented in inkemu yet".
 
 `clock:now()` has `year month day hour minute second weekday hour12 date_order date_sep epoch_sec local_sec
 offset_minutes revision valid`.
 
 ## Differences from the device
 
-- Without BDF files (see Fonts) text is DejaVu Sans, so text widths and ascents differ from the device;
-  `ctx.fonts:size(px)` picks the nearest of the three; an app cannot bring its own font.
+- Without BDF files (see Fonts) text is DejaVu Sans, so text widths differ from the device (line heights and
+  ascents are the device's); `ctx.fonts:size(px)` picks the nearest of the three; an app cannot bring its own font.
+- Text rules of §7 not emulated: `align = "justify"` draws as `left`; a character DejaVu Sans lacks draws nothing
+  (the device draws a box; BDF files use their `DEFAULT_CHAR`); `small` does not switch to `medium` for CJK; the
+  line-break rules know CJK, Thai and Tibetan by code point ranges, not by Unicode's line-breaking classes.
 - Lua is 5.5 with 32-bit integers and 32-bit floats, like the device (`math.maxinteger` is 2147483647,
   `16777217.0 == 16777216.0`).
 - The app sees no `io`, `os`, `debug`, `package`, `load`, `loadstring`, `dofile`, `loadfile`, `collectgarbage` or
   `print`, as on the device; `require` searches only the app folder. Lua 5.5's global `warn` is visible to the app.
 - Not emulated, so nil: `ctx.crypto`, `ctx.nn`, `ctx.widget`, `dialog:choose`, `i18n:t`, `url:query`,
   `input.keys`, `input.listen`, `input.gamepad`, `device.display`, `device.keep_awake`, `device.radios`,
-  `screen.occlusion`, and the fields of `perf:info()` (`asset_hit asset_miss cmd_count draw_frame draw_us image_count
-  tick_us` on the device). No BLE, no WebSocket; only GET and POST get a network callback.
+  `screen.occlusion`. No BLE, no WebSocket; only GET and POST get a network callback.
 - `ctx.capabilities` reports what inkemu emulates: `dialog frontlight image_decode image_transform pattern reader ui`
   are true, `ble identity nn ttf` false. The device reports `ble dialog frontlight identity image_decode
   image_transform nn pattern reader ui` as true and `ttf` as false.
-- `ctx.system:act(s)` needs a string ("string expected" otherwise), as on the device. Which strings the device
-  accepts is unknown, so inkemu answers every one with `nil, "invalid_argument"` and logs it.
+- `ctx.system:act(s)` needs a string ("string expected" otherwise), as on the device. `"refresh"` makes the next
+  frame full, like `ctx:invalidate("full")`; inkemu answers every other string, `"sleep"` and `"power_off"`
+  included, with `nil, "invalid_argument"` and logs it.
 - Not verified on the device:
   - the 2.26 call form `ctx:log(...)`, which still logs;
+  - `ctx.perf:info()`'s `tick_us`, `draw_us`, `asset_hit` and `asset_miss`, which measure the device's renderer:
+    always 0 in inkemu;
   - the format of the level prefix of `ctx.log:info/warn/error`;
   - the numbering of `clock:now().weekday` (inkemu: Sunday = 1, as 2.26's `wday`);
   - the meaning of `clock:now().revision` (inkemu: it changes when the clock is moved by a wait, `]` or `}`, not
@@ -278,7 +333,12 @@ offset_minutes revision valid`.
   - the colour threshold in `arc`, `polyline` and `text_box` (the probe tried `rect`, `circle`, `line` and text);
   - `color` outside 0–15: inkemu applies the same threshold (below 8 is white);
   - `g:clear(color)`, which keeps the 0.1 rule (0 white, any other number black);
-  - the `fill` option of shapes, which uses Python-style truthiness in inkemu (0, `""` and `{}` are false).
+  - the `fill` option of shapes, which uses Python-style truthiness in inkemu (0, `""` and `{}` are false);
+  - text options the contract leaves open: `line_gap` outside 0–255 (inkemu clamps it), an unknown `wrap` or
+    `overflow` (inkemu: the default), a newline at the very end of the text (inkemu: no empty line after it),
+    `consumed` when `ellipsis` took characters off the last line (inkemu: the bytes up to the kept ones), a
+    `text_box` with no line that fits in a frame that is already full (inkemu: accepted, it costs nothing), a
+    `ctx.fonts:size` sample over 256 bytes (inkemu: `invalid_argument`).
 - `g:round_rect`, `g:measure`, `g:measure_text`, `g:fill_pattern` and `g:pattern_rect` are not in the device's `g`
   metatable listing and were not verified by a call; inkemu keeps them (`round_rect` as before; the device's way
   is `g:rect` with `radius`).

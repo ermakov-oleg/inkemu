@@ -36,6 +36,11 @@ impl BdfFont {
             .or_else(|| self.default.and_then(|d| self.glyphs.get(&d)))
     }
 
+    /// Whether the font has its own glyph for `c`, not the `DEFAULT_CHAR` one.
+    pub fn has(&self, c: char) -> bool {
+        self.glyphs.contains_key(&c)
+    }
+
     pub fn parse(bytes: &[u8]) -> Result<BdfFont, String> {
         let text = String::from_utf8_lossy(bytes);
         let mut lines = text.lines().enumerate().map(|(i, l)| (i + 1, l.trim()));

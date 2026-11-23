@@ -91,8 +91,95 @@ fn command_cap_drops_and_warns() {
     let w = core.warnings();
     assert_eq!(
         &*w,
-        ["1100 draw commands in one frame; the device drops everything after 1024"]
+        ["1100 draw commands in one frame; the device refuses every call past 1024"],
+        "API 2.33.1 contract §5 says otherwise: calls past the cap are refused (05/cmd_cap_1025)"
     );
+}
+
+/// Indices of the full frames among the presented ones.
+fn fulls(core: &Core) -> Vec<usize> {
+    let st = core.status();
+    assert_eq!(st.refresh, st.refreshes.last().copied());
+    (0..st.refreshes.len())
+        .filter(|&i| st.refreshes[i] == "full")
+        .collect()
+}
+
+#[test]
+fn a_deferral_holds_the_automatic_full_until_it_ends() {
+    let mut core = boot(
+        "function on_load(c) c:defer_full_refresh(500) c:set_tick(10) end
+         function on_tick(c) c:invalidate() end
+         function on_draw(c, g) end
+",
+    );
+    core.advance(490).unwrap();
+    // frame 30 would be the automatic full; the first one at 500 ms gets it
+    assert_eq!(fulls(&core), [0]);
+    assert_eq!(core.status().refreshes.len(), 50);
+    core.advance(10).unwrap();
+    assert_eq!(core.status().refresh, Some("full"));
+}
+
+#[test]
+fn a_renewed_deferral_still_gets_a_full_at_twice_the_interval() {
+    let mut core = boot(
+        "function on_load(c) c:set_tick(10) end
+         function on_tick(c) c:defer_full_refresh(60000) c:invalidate() end
+         function on_draw(c, g) end
+",
+    );
+    core.advance(590).unwrap();
+    assert_eq!(fulls(&core), [0]);
+    for (ms, kind) in [(10, "full"), (590, "partial"), (10, "full")] {
+        core.advance(ms).unwrap();
+        assert_eq!(core.status().refresh, Some(kind));
+    }
+}
+
+#[test]
+fn refreshes_keep_the_last_64_frames() {
+    let mut core = boot(
+        "local n = 0\n\
+         function on_load(c) c:set_tick(10) end\n\
+         function on_tick(c) n = n + 1 if n == 99 then c:invalidate('full') else c:invalidate() end end\n\
+         function on_draw(c, g) end\n",
+    );
+    core.advance(990).unwrap();
+    // frames 0..=99: automatic fulls at 30, 60 and 90, the requested one at 99; the window starts at frame 36
+    assert_eq!(core.status().refreshes.len(), 64);
+    assert_eq!(fulls(&core), [24, 54, 63]);
+}
+
+#[test]
+fn failed_frames_are_not_counted_and_a_restart_starts_full() {
+    let mut core = boot(
+        "function on_input(c, ev) if ev.phase == 'up' then boom = true c:invalidate() end return true end
+         function on_draw(c, g) if boom then error('boom') end end
+",
+    );
+    core.tap(1, 1).unwrap();
+    assert_eq!(core.errors().len(), 1);
+    assert_eq!(core.status().refreshes, ["full"]);
+    core.restart();
+    assert_eq!(core.status().refreshes, ["full", "full"]);
+}
+
+#[test]
+fn perf_counts_the_screen_frame_only() {
+    let mut core = boot(
+        "function on_load(c)
+           l = c.layers:create(10, 10)
+           l:draw(function(g) for i = 1, 5 do g:rect(0, 0, 1, 1) end end)
+         end
+         function on_draw(c, g) g:rect(0, 0, 1, 1) g:image(l, 0, 0) g:text_box(0, 0, 400, 100, 'a\\nb') end
+",
+    );
+    let p = core
+        .lua_eval("local p = ctx.perf:info() return {p.cmd_count, p.image_count, p.draw_frame}")
+        .unwrap();
+    // the two-line text box is two commands
+    assert_eq!(p, serde_json::json!([4, 1, 1]));
 }
 
 #[test]

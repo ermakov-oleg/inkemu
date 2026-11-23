@@ -74,6 +74,15 @@ fn parse_api(s: &str) -> Option<(&str, &str)> {
     (digits(a) && digits(b)).then_some((a, b))
 }
 
+/// The API a manifest declares, as numbers (`0.8` when it says none; a malformed one fails the install).
+pub(crate) fn api_of(m: &Map<String, Value>) -> (u32, u32) {
+    let text = m.get("api").map_or_else(|| "0.8".into(), py_str);
+    parse_api(&text).map_or((0, 8), |(a, b)| {
+        let n = |p: &str| p.parse().unwrap_or(u32::MAX);
+        (n(a), n(b))
+    })
+}
+
 /// Compares decimal digit strings of any length by value.
 fn cmp_digits(a: &str, b: &str) -> std::cmp::Ordering {
     let (a, b) = (a.trim_start_matches('0'), b.trim_start_matches('0'));
