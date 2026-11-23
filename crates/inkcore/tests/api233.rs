@@ -80,7 +80,8 @@ fn clock_now_has_the_26112001_fields() {
                math.type(t.revision)}"
         ),
         // 2026-11-20 is a Friday: 5 counting from Sunday = 0
-        json!([true, true, 5, "/", "dmy", 60, "integer"])
+        json!([true, true, 5, "/", "dmy", 60, "integer"]),
+        "API 2.33.1 contract §12 says otherwise (12/clock_weekday_sunday)"
     );
 }
 
@@ -248,7 +249,7 @@ fn random_bytes_system_act_and_small_members() {
             "string", 16, 1, "nil", "invalid_argument", 0, 436, true, 2, 4, true, false, false, false, false,
             false, true
         ]),
-        "API 2.33.1 contract §5 says otherwise: perf:info() is not empty (05/perf_info)"
+        "API 2.33.1 contract §5 says otherwise: perf:info() is not empty (05/perf_info); random:bytes(0) is invalid_argument (26/random_bytes)"
     );
     assert!(
         core.log().iter().any(|l| l.contains("power_off")),
@@ -301,5 +302,25 @@ fn manifests_up_to_2_33_load_and_above_is_refused() {
         core.errors()[0].contains("the emulated firmware has 2.33"),
         "{:?}",
         core.errors().to_vec()
+    );
+}
+
+#[test]
+fn random_bytes_takes_whole_numbers_only() {
+    let mut core = boot("");
+    assert_eq!(
+        eval(
+            &mut core,
+            "local function f(n) local r, e = ctx.random:bytes(n) return r and #r or e end\n\
+             return {f(3.0), f(2.5), f(0/0), f(math.huge), f(-math.huge)}"
+        ),
+        json!([
+            3,
+            "invalid_argument",
+            "invalid_argument",
+            "invalid_argument",
+            "invalid_argument"
+        ]),
+        "API 2.33.1 contract §0: only a whole float is an integer (26/random_bytes)"
     );
 }

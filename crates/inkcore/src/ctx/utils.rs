@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 
 use super::convert::{big_int_warning, dump, json_to_lua, lua_to_json};
 use super::object::{method, new_object, Method};
-use super::{arg, bytes_arg, check_arg, py_int, raw, soft_fail};
+use super::{arg, bytes_arg, check_arg, raw, soft_fail};
 use crate::emu::{with, Shared};
 use crate::lua::first_in_callback;
 
@@ -152,7 +152,11 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
         method(move |lua, args| {
             let a = args.into_vec();
             check_arg("bytes", 1, arg(&a, 0), "number")?;
-            let n = py_int(arg(&a, 0))?;
+            let n = match arg(&a, 0) {
+                Value::Integer(i) => i64::from(*i),
+                Value::Number(f) if f.fract() == 0.0 => *f as i64,
+                _ => return soft_fail(lua, "invalid_argument"),
+            };
             if !(1..=MAX_RANDOM_BYTES).contains(&n) {
                 return soft_fail(lua, "invalid_argument");
             }
