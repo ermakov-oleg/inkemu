@@ -1,0 +1,14 @@
+{
+ "expect_mismatches":[],
+ "file":"s00_layout_spec_example.api26.json",
+ "scenario":"s00_layout_spec_example",
+ "title":"The ui:layout example of contract 16, plus a frame drawing the same tree",
+ "input":{"api":"2.26","canvas":[480,800],"touch":true,"steps":[
+  {"op":"create","opts":{"focus_style":"outline"}},
+  {"expect":{"a":[24,712,210,64],"b":[246,712,210,64],"body":[24,100,432,600],"head":[24,24,432,64],"root":[0,0,480,800]},"op":"layout","rect":{"h":800,"w":480,"x":0,"y":0},"spec":{"children":[{"h":64,"id":"head"},{"grow":1,"id":"body"},{"children":[{"grow":1,"id":"a"},{"grow":1,"id":"b"}],"gap":12,"h":64,"kind":"row"}],"gap":12,"kind":"column","padding":24}}
+ ]},
+ "output":[
+  {"i":1,"op":"create","ret":"ui object"},
+  {"i":2,"op":"layout","result":{"box":{"c":[{"h":64,"w":432,"x":24,"y":24},{"h":600,"w":432,"x":24,"y":100},{"c":[{"h":64,"w":210,"x":24,"y":712},{"h":64,"w":210,"x":246,"y":712}],"h":64,"w":432,"x":24,"y":712}],"h":800,"keys":["a","b","body","head"],"w":480,"x":0,"y":0},"ids":{"a":".3.1","b":".3.2","body":".2","head":".1"},"n_returns":1}}
+ ]
+}
