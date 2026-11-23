@@ -39,7 +39,8 @@ end
 local function key(st, ev)
   local down = ev.phase == "down"
   if ev.key == "ok" then
-    local t = find_target(st.targets, st.focus, st.part)
+    -- an id the last frame lacks still gets press and activate, with whatever part was set
+    local t = resolve(st.targets, st.owners, st.focus, st.part)
     local pressed = st.pressed
     st.pressed = nil
     if st.focus == nil or (t and not t.enabled) then
@@ -47,6 +48,9 @@ local function key(st, ev)
     end
     if down then
       st.pressed = true
+      if t then
+        return event_result(t.id, "press", t.part)
+      end
       return event_result(st.focus, "press", st.part)
     end
     if pressed then

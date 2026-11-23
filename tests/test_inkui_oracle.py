@@ -15,8 +15,8 @@ Each step is compared in full, except:
   is left out of the named canvas calls, the rest is compared, and the step is skipped.
 - `HOST_REFUSES` lists the canvas calls the core refuses with a Lua error (the oracle's canvas accepted anything); any
   other refusal fails the step.
-- `PARKED` steps differ from the oracle in a known way that a later task decides; they are strict xfails, so one that
-  starts to match fails until its entry is removed.
+- `PARKED` steps differ from the oracle in a known way that a later task decides. They are checked first, in full, and
+  are strict xfails: one that matches, or differs in more than a frame's or a `ui:layout` call's results, fails.
 - An event step that acts on a frame with a control inkemu does not implement yet (the last closed frame had a
   stubbed call), or a step that starts from a focus an earlier stubbed step left elsewhere than the oracle (the focus recorded by
   the step before differs), is an xfail while only focus, its event result and the canvas calls differ
@@ -66,17 +66,25 @@ HOST_REFUSES: dict[tuple[str, int], list[str]] = {
 NON_STRING_TEXT = (
     "a button, switch or label child with a non-string text is refused; the reader takes it unless it is measured"
 )
-PER_CHILD = "the reader checks and registers children one by one, so a later bad child keeps the earlier ones"
+PER_CHILD = (
+    "the reader checks and registers children one by one, so a later child that is bad or placed past 32767 keeps "
+    "the earlier ones"
+)
 COUNT_FIRST = "ui:layout counts the 1024 children before it checks any field"
-RANGE_32767 = "the reader refuses a ui:layout rect wider than 32767 and a child placed past 32767"
+RECT_32767 = "the reader refuses a ui:layout rect wider than 32767"
+# the fields a parked step may differ in: what a frame and a ui:layout call show
+PARKED_FIELDS = {
+    "frame": {"calls", "focused_after", "op_counts", "stream", "stream_count"},
+    "layout": {"result"},
+}
 PARKED: dict[tuple[str, int], str] = {
     (f"s17_layout_edges.api{minor}", step): reason
     for minor in (15, 26)
     for steps, reason in (
         ((6, 7, 10, 11, 12, 13, 16, 17, 33, 34, 37, 38, 41, 42), NON_STRING_TEXT),
-        ((45,), PER_CHILD),
+        ((45, 58), PER_CHILD),
         ((50,), COUNT_FIRST),
-        ((58, 60, 62, 63, 64), RANGE_32767),
+        ((60, 62, 63, 64), RECT_32767),
     )
     for step in steps
 }
@@ -236,6 +244,13 @@ def test_step(scenario: str, i: int, tmp: Path):
     assert len(refused) == len(expected) and all(e in r for e, r in zip(expected, refused, strict=False)), (
         f"{title}: the core refused {refused}, expected {expected}"
     )
+    parked = PARKED.get((scenario, i))
+    if parked:
+        diff = differences(want, got)
+        fields = {f for f, _ in diff}
+        assert diff, f"{title}: matches the oracle now; remove its PARKED entry"
+        assert fields <= PARKED_FIELDS[want["op"]], f"{title}, beyond what is parked:\n" + "\n".join(m for _, m in diff)
+        pytest.xfail(f"parked: {parked}")
     if stubbed(got):
         diff = differences(want, got, partial=True)
         assert not diff, f"{title}, the parts inkemu implements:\n" + "\n".join(m for _, m in diff)
@@ -250,10 +265,6 @@ def test_step(scenario: str, i: int, tmp: Path):
         pytest.skip(f"blocked on host: font:{need} is missing (the rest matches)")
     diff = differences(want, got)
     message = f"{title}:\n" + "\n".join(m for _, m in diff)
-    parked = PARKED.get((scenario, i))
-    if parked:
-        assert diff, f"{title}: matches the oracle now; remove its PARKED entry"
-        pytest.xfail(f"parked: {parked}")
     reason = after_stub(oracle(scenario)["output"], ours, i)
     if diff and reason and {f for f, _ in diff} <= AFTER_STUB:
         pytest.xfail(reason)

@@ -36,7 +36,9 @@ end
 
 -- Splits `len` into `k` cells with `gap` between neighbours, as { start, size }: start_j = j * gap +
 -- floor(j * (len - (k - 1) * gap) / k) for j from 0, each cell stopping `gap` short of the next, the last at `len`.
+-- Not measured: a gap wider than `len` counts as `len` (keeping the products in 32 bits) and a cell is never below 0.
 function split_cells(len, k, gap)
+  gap = math.min(gap, len)
   local free = len - (k - 1) * gap
   local starts = {}
   for j = 0, k - 1 do
@@ -45,7 +47,7 @@ function split_cells(len, k, gap)
   local out = {}
   for j = 1, k do
     local stop = j < k and starts[j + 1] - gap or len
-    out[j] = { starts[j], stop - starts[j] }
+    out[j] = { starts[j], math.max(0, stop - starts[j]) }
   end
   return out
 end
@@ -75,7 +77,8 @@ local ALIGN = { left = true, center = true, right = true }
 
 kinds.radio = composite({
   check = function(c, o, st)
-    if not (optional(o.enabled, "boolean") and check_items(o.items) and check_cell_gap(o.gap)) then
+    -- `nav` is checked as on other controls, then ignored: a composite takes focus by its parts
+    if not (optional(o.enabled, "boolean") and check_nav(o.nav) and check_items(o.items) and check_cell_gap(o.gap)) then
       return false
     end
     local n = #o.items
@@ -129,7 +132,7 @@ kinds.radio = composite({
       if t.part == c.value and s > 10 then
         g:circle(cx, cy, (s - 10) // 2, { fill = true })
       end
-      local item, tw = c.items[t.part], t.w - s - 8
+      local item, tw = c.items[t.part], math.max(0, t.w - s - 8)
       local f = shrink(font, c.font_min, function(f)
         return f:measure(item, measure_opts(c)) <= tw
       end)

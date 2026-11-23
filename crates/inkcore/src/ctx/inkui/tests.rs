@@ -1113,7 +1113,8 @@ fn radio_checks_its_fields() {
          local out = {}\n\
          for _, o in ipairs({{value = 0}, {value = 3}, {value = 1.5}, {value = 2.0}, {columns = 3}, {columns = 2},\n\
            {gap = -1}, {gap = 300}, {align = 'justify'}, {align = 'center'}, {items = {}}, {items = {'a', 5}},\n\
-           {enabled = 1}, {font_min = 7}, {nav = 5}, {bold = 1}, {skin = 'nope'}}) do\n\
+           {enabled = 1}, {font_min = 7}, {nav = 5}, {nav = {up = 5}}, {nav = {up = 'x'}}, {bold = 1},
+           {skin = 'nope'}}) do\n\
            out[#out + 1] = try(o)\n\
          end\n\
          return table.concat(out, ' ')";
@@ -1121,7 +1122,11 @@ fn radio_checks_its_fields() {
     let ok = "ok";
     assert_eq!(
         layout_run("2.26", code),
-        [bad, bad, bad, ok, bad, ok, bad, ok, bad, ok, bad, bad, bad, bad, ok, bad, bad].join(" ")
+        [
+            bad, bad, bad, ok, bad, ok, bad, ok, bad, ok, bad, bad, bad, bad, bad, bad, ok, bad,
+            bad
+        ]
+        .join(" ")
     );
     // `bold` is a 2.16 field
     assert!(layout_run("2.15", code).ends_with(&format!("{ok} {bad}")));
@@ -1176,4 +1181,46 @@ fn before_2_13_the_arrows_step_through_radio_parts_in_order() {
         out,
         "r,focus,1 r,focus,2 r,focus,3 b,focus b,focus b,focus r,focus,3 r,focus,2 r,focus,1 a,focus a,focus"
     );
+}
+
+#[test]
+fn ok_acts_on_the_part_focus_stands_for() {
+    let out = events(
+        "2.26",
+        "local function scene(enabled)\n\
+           frame(function()\n\
+             ui:button('top', {x = 0, y = 0, w = 100, h = 40})\n\
+             ui:radio('r', {x = 0, y = 50, w = 200, h = 90, items = {'a', 'b', 'c'}, value = 2, enabled = enabled})\n\
+           end)\n\
+         end\n\
+         local out = {}\n\
+         scene()\n\
+         ui:focus('r', 7) out[#out + 1] = key('ok') out[#out + 1] = key('ok', 'up')\n\
+         ui:focus('r') out[#out + 1] = key('ok') out[#out + 1] = key('ok', 'up')\n\
+         scene(false)\n\
+         ui:focus('r') out[#out + 1] = key('ok')\n\
+         ui:focus('r', 1) out[#out + 1] = key('ok')\n\
+         return table.concat(out, ' ')",
+    );
+    // a part the radio lacks, or none, stands for the value part; a disabled radio gives nothing
+    assert_eq!(
+        out,
+        "r,press,2 r,activate,2 r,press,2 r,activate,2 nil,nil nil,nil"
+    );
+}
+
+#[test]
+fn narrow_radio_cells_never_get_a_negative_size() {
+    let lua = fixed_library("2.26");
+    let log = frame(
+        &lua,
+        "nil",
+        "",
+        "ui:radio('n', {x = 0, y = 0, w = 30, h = 40, items = {'a'}})\n\
+         ui:radio('g', {x = 0, y = 100, w = 100, h = 20, items = {'a', 'b', 'c'}, gap = 2000000000})",
+    );
+    assert_eq!(log[1], radio_text(40, 0, 0, 40, "a"));
+    // the gap counts as the whole height: every cell is 0 tall but the last, which ends at the box
+    assert_eq!(log[2], "circle(0,100,0,{line_width=2})");
+    assert!(!log.iter().any(|c| c.contains(",-")), "{log:?}");
 }
