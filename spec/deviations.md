@@ -126,6 +126,16 @@ no radio and is not the device, so panel timing and network completion were not 
 - Status: measured on 26112001 (the reader's UI library run as a black box).
 - Checks: `16/layout_content_sizes` (`switch_bold`, `tabs_bold`).
 
+### D13 - reserve without w = "fit"
+
+- Contract says: from 2.16 `reserve` sets the width of a `label` or `button` only when its `w` is `"fit"`, and does
+  nothing otherwise (§16).
+- Reader does: the reserved text widens the content width wherever the width comes from the content, such as a
+  child with no `w` left at its content width by `align_items = "start"`, or a row child with no `w` and no `grow`.
+- inkemu does: the same.
+- Status: measured on 26112001 (the reader's UI library run as a black box).
+- Checks: `16/layout_content_sizes` (`reserve_without_fit`).
+
 ## Notes
 
 ### N1 - completion of PUT, PATCH and DELETE
@@ -200,9 +210,8 @@ the README.
   `16/row_column_before_2_15`, `16/layout_content_sizes`, `16/layout_hidden_and_false`.
 - `ctx.ui` containers, measured later (oracle scenario s17) and equal to what inkemu does: in a frame a control
   child without `id` or with `id = ""`, or a child without `kind`, makes the whole call `invalid_argument`, while
-  `ui:layout` takes both and refuses only `id = ""`; `reserve` widens the content width of a label or button whenever
-  the width comes from the content, not only with `w = "fit"` (the contract says only `fit`); the grow and shrink
-  splits wrap in 32-bit integers the same way.
+  `ui:layout` takes both and refuses only `id = ""`; the grow and shrink splits wrap in 32-bit integers the same way
+  (see D13 for `reserve`).
 - `ctx.ui` containers, measured later (s17) and still different in inkemu; the oracle steps are parked in
   `tests/test_inkui_oracle.py` until a follow-up decides:
   - inkemu checks the whole tree before it lays out or registers anything, and the first `invalid_argument` or
@@ -235,7 +244,12 @@ the README.
   - With `font_min`, each item's font shrinks until its text fits the width after the ring.
   - A tap in the gap between two cells hits no part of the radio and goes to what lies below.
   - An item that is `""` still gets its `text_box`.
-  - After `ui:focus(id)` names a composite without an item, the arrows start from its default part, and `ok` gives
-    `press` and `activate` with no item until `end_frame` settles it.
+  - Until `end_frame` settles it, a focus that `ui:focus` set on a composite without an item, or with an item it
+    lacks, acts as its default part for the arrows and for `ok`; `ok` on a radio that is disabled in the last frame
+    gives `nil, nil`, as on a disabled plain control.
+  - A `nav` on a radio is checked as on the other controls (a non-table, or a value that is not a string, is
+    `invalid_argument`), then ignored.
+  - A cell `gap` wider than the box counts as the box, a cell never gets a negative size, and the text width after
+    the ring is at least 0.
   - A `nav` entry naming a composite whose default part is unavailable falls back to the search by position.
   - A registered `skin` on a radio raises "not implemented in inkemu yet"; an unregistered one is `invalid_argument`.

@@ -41,6 +41,13 @@ function on_load(ctx)
   local tab = { tabular = true }
   is("button_reserve", b[10], math.max(m:measure("12", tab), m:measure("8888", tab)) + 24, lh + 16)
   is("spacer", b[11], 0, 0)
+  -- reserve widens a width taken from the content even without w = "fit": a label left at its content width in a
+  -- column, a button with no width in a row
+  local r = ui:layout({ x = 0, y = 0, w = 470, h = 800 }, { kind = "column", align_items = "start", children = {
+    { kind = "label", text = "7", reserve = "000" },
+    { kind = "row", h = 100, align_items = "start", children = { { kind = "button", text = "7", reserve = "0000" } } },
+  } })
+  T.value("reserve_without_fit", r[1].w == m:measure("000") and r[2][1].w == m:measure("0000") + 24)
   -- switch and tabs, plain and (from 2.16) measured bold
   local bold = { bold = true }
   T.value("bold_is_wider", m:measure("Wi-Fi", bold) > m:measure("Wi-Fi"))
