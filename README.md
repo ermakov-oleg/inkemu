@@ -326,8 +326,10 @@ the start with an error. From each file inkemu takes:
   are the commands and `g:image` calls accepted in the last frame, `draw_frame` the frames of this session), `gc`,
   `budget`, `reader` (answers from `<fixtures dir>/reader.json`), `lockscreen`, `lock`.
 - `ui` (§16), in progress: `create`, `begin_frame`/`end_frame`, `label`, `button`, `region`, `handle_event`,
-  `focus`/`focused` and the arrow keys (by position from API 2.13, in declaration order before it) work; image and
-  skin buttons, and the other methods, raise "not implemented in inkemu yet".
+  `focus`/`focused` and the arrow keys (by position from API 2.13, in declaration order before it) work, and so do
+  `row`/`column` (the 2.15 flex layout with `wrap`, `baseline`, `aspect_ratio`, percentages and the container look;
+  the earlier rules for packages before 2.15) and `ui:layout`; image and skin buttons, container skins in a frame,
+  `grid`/`stack` from 2.15, and the other controls raise "not implemented in inkemu yet".
 
 `clock:now()` has `year month day hour minute second weekday hour12 date_order date_sep epoch_sec local_sec
 offset_minutes revision valid`.

@@ -842,3 +842,148 @@ fn focus_keeps_a_part_until_end_frame() {
          false,ui:focus: id must be a string integer b"
     );
 }
+
+/// What `code` (Lua using `ui`, an object made with `skins = {iron = {}}`, and `g`, a recorder) returns as text,
+/// or its error.
+fn layout_run(api: &str, code: &str) -> String {
+    let lua = fixed_library(api);
+    let code = format!(
+        "local ui = make({{skins = {{iron = {{}}}}}}) local log = {{}} local g = recorder(log)\n{code}"
+    );
+    match run(&lua, &code) {
+        Ok(r) => r
+            .into_iter()
+            .map(|v| v.to_string().unwrap_or_default())
+            .collect::<Vec<_>>()
+            .join(","),
+        Err(e) => e,
+    }
+}
+
+#[test]
+fn containers_raise_what_inkemu_does_not_implement_at_the_app_line() {
+    let cases = [
+        (
+            "ui:begin_frame(g)\nui:column('c', {x = 0, y = 0, w = 100, h = 100, children = {{kind = 'switch', id = 's'}}})",
+            "index.lua:3: ui:switch is not implemented in inkemu yet",
+        ),
+        (
+            "ui:begin_frame(g)\nui:row('c', {x = 0, y = 0, w = 100, h = 100, skin = 'iron', children = {}})",
+            "index.lua:3: ui:row skin is not implemented in inkemu yet",
+        ),
+        (
+            "ui:begin_frame(g)\nui:grid('c', {x = 0, y = 0, w = 100, h = 100, columns = 1})",
+            "index.lua:3: ui:grid is not implemented in inkemu yet",
+        ),
+        (
+            "\nui:layout({x = 0, y = 0, w = 9, h = 9}, {kind = 'row', children = {{kind = 'stack'}}})",
+            "index.lua:3: ui:stack is not implemented in inkemu yet",
+        ),
+        (
+            "\nui:layout({x = 0, y = 0, w = 9, h = 9}, {kind = 'row', children = {{kind = 'button', w = 'fit', skin = 'iron'}}})",
+            "index.lua:3: ui:button skin is not implemented in inkemu yet",
+        ),
+    ];
+    for (code, want) in cases {
+        let err = layout_run("2.26", code);
+        assert!(err.starts_with(want), "{code}: {err}");
+    }
+    // an invalid field anywhere in the tree wins over a part inkemu lacks; a registered container skin is only
+    // validated by ui:layout, which draws nothing
+    assert_eq!(
+        layout_run(
+            "2.26",
+            "ui:begin_frame(g)\nreturn ui:column('c', {x = 0, y = 0, w = 100, h = 100, children = {\n\
+               {kind = 'switch', id = 's'}, {kind = 'button', id = 'b', grow = -1}}})"
+        ),
+        "nil,invalid_argument"
+    );
+    assert_eq!(
+        layout_run(
+            "2.26",
+            "return type(ui:layout({x = 0, y = 0, w = 9, h = 9}, {kind = 'row', skin = 'iron', children = {}}))"
+        ),
+        "table"
+    );
+}
+
+#[test]
+fn ui_layout_counts_toward_no_frame() {
+    let out = layout_run(
+        "2.26",
+        "ui:begin_frame(g)\n\
+         for i = 1, 128 do ui:label('l' .. i, {x = 0, y = 0, w = 1, h = 1}) end\n\
+         local b = ui:layout({x = 0, y = 0, w = 100, h = 10}, {kind = 'row', children = {{id = 'a', grow = 1}}})\n\
+         local r = table.pack(ui:label('x', {x = 0, y = 0, w = 1, h = 1}))\n\
+         ui:end_frame()\n\
+         local c = ui:layout({x = 0, y = 0, w = 100, h = 10}, {kind = 'row', children = {{id = 'a', grow = 1}}})\n\
+         return b.a.w, r[2], c.a.w",
+    );
+    assert_eq!(out, "100,limit_exceeded,100");
+}
+
+#[test]
+fn a_container_registers_itself_before_its_children_in_declaration_order() {
+    let lua = fixed_library("2.26");
+    let log = frame(
+        &lua,
+        "nil",
+        "st.keys = true",
+        "ui:column('page', {x = 0, y = 0, w = 200, h = 200, background = 15, children = {\n\
+           {kind = 'row', h = 50, border = true, children = {\n\
+             {kind = 'button', id = 'a', text = 'A', grow = 1}, {kind = 'button', id = 'b', text = 'B', grow = 1}}},\n\
+           {kind = 'button', id = 'c', text = 'C', h = 50}}})",
+    );
+    let ops: Vec<&str> = log.iter().map(|c| c.split(',').next().unwrap()).collect();
+    // the page's background, the row's border, then a (focused, so filled), b and c
+    assert_eq!(
+        ops.join(" "),
+        "rect(0 rect(0 rect(0 text_box(0 rect(100 text_box(100 rect(0 text_box(0"
+    );
+    assert!(log[0].contains("color=15,fill=true,radius=0"), "{log:?}");
+    assert!(log[1].contains("line_width=1"), "{log:?}");
+    assert!(log[2].starts_with("rect(0,0,100,50,{fill=true"), "{log:?}");
+}
+
+#[test]
+fn a_container_on_a_canvas_without_pattern_fills_with_its_colour() {
+    let code = "g.pattern = %s ui:begin_frame(g)\n\
+         ui:column('c', {x = 0, y = 0, w = 100, h = 50, background = 5, radius = 4, children = {}})\n\
+         ui:end_frame() return table.concat(log, ' ')";
+    let plain = layout_run("2.26", &code.replace("%s", "nil"));
+    assert_eq!(plain, "rect(0,0,100,50,{color=5,fill=true,radius=4})");
+    let dots = layout_run(
+        "2.26",
+        &code.replace("%s", "function(self, ...) log[#log + 1] = 'pattern' end"),
+    );
+    // paper, two dot rows per corner row (radius 4), the middle
+    assert_eq!(
+        dots,
+        format!(
+            "rect(0,0,100,50,{{color=0,fill=true,radius=4}}){}",
+            " pattern".repeat(9)
+        )
+    );
+}
+
+#[test]
+fn before_2_15_children_follow_each_other_and_nest() {
+    let lua = fixed_library("2.12");
+    let log = frame(
+        &lua,
+        "nil",
+        "",
+        "ui:column('col', {x = 10, y = 20, w = 100, h = 100, gap = 5, children = {\n\
+           {kind = 'row', w = 90, h = 30, gap = 3, children = {\n\
+             {kind = 'button', id = 'a', w = 20, h = 30}, {kind = 'button', id = 'b', w = 20, h = 30}}},\n\
+           {kind = 'button', id = 'c', w = 40, h = 10}}})",
+    );
+    assert_eq!(
+        log,
+        [
+            "rect(10,20,20,30,{fill=false,radius=0})",
+            "rect(33,20,20,30,{fill=false,radius=0})",
+            "rect(10,55,40,10,{fill=false,radius=0})",
+        ]
+    );
+}

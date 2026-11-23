@@ -76,6 +76,8 @@ function create(opts)
     -- the open frame, and the targets of the last frame that was closed (events and arrows work on these)
     frame = nil,
     targets = {},
+    -- the skins of `create`, by name
+    skins = opts.skins or {},
   }
   return obj
 end
