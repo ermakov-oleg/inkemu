@@ -6,10 +6,20 @@ character). `fixtures/fonts-fixed/` is that font as BDF, so text widths agree. `
 inkemu, and every step is one test: returns, the canvas calls with their exact arguments, `ui:focused()`, and
 `ui:layout` boxes must equal the oracle.
 
-A step that reaches a ctx.ui method inkemu does not implement yet is skipped with that method's name. A step that
-needs a host function the core lacks is compared without the canvas calls that depend on it, then skipped while the
-core lacks it. `PENDING` lists the steps known to fail for a stated reason (a strict xfail: remove the entry once the
-step passes).
+Each step is compared in full, except:
+
+- A step that reaches a ctx.ui method inkemu does not implement yet is compared in part, then skipped with that
+  method's name: the returns of the other calls, `begin`/`end`, and our canvas calls, which must appear in the
+  oracle's stream in the same order (the missing control's calls are absent). Focus is not compared there.
+- `NEEDS_HOST` steps depend on a font method the core lacks: while it is missing, the `font` the library picked with it
+  is left out of the named canvas calls, the rest is compared, and the step is skipped.
+- `HOST_REFUSES` lists the canvas calls the core refuses with a Lua error (the oracle's canvas accepted anything); any
+  other refusal fails the step.
+- A step after an `event` or `focus` step that was not implemented may find focus elsewhere than the oracle did: it
+  is an xfail while only focus and the canvas calls differ (`AFTER_FOCUS`), a failure when anything else does, and an
+  ordinary pass when it matches.
+
+The JSON files hold inputs we wrote and outputs recorded from the reader's library; see the README next to them.
 """
 
 import json
@@ -28,23 +38,26 @@ FONTS = HERE / "fonts-fixed"
 SCENARIOS = {p.name.removesuffix(".json"): p for p in sorted(ORACLE.glob("s*.json"))}
 NOT_IMPLEMENTED = "not implemented in inkemu yet"
 
-# (scenario, step) -> why the step fails today
-PENDING: dict[tuple[str, int], str] = {
-    ("s01_object_frame.api26", 25): "focus moved by handle_event in step 23, not implemented yet",
-    ("s01_object_frame.api26", 26): "focus moved by handle_event in step 23, not implemented yet",
-    **{
-        ("s03_label_button_region.api26", i): "focus set by ui:focus and drawn after a key event, not implemented yet"
-        for i in range(8, 42, 3)
-    },
-}
+# what a step may get wrong when focus was moved by an earlier event or ui:focus step that inkemu could not run yet
+AFTER_FOCUS = {"focused_after", "stream", "op_counts", "stream_count", "ret", "focused"}
 
-# (scenario, step) -> the font method the step needs, and the stream entries (from 0) that depend on it
+# (scenario, step) -> the font method the step needs, and the stream entries (from 0) whose font it picks
 NEEDS_HOST: dict[tuple[str, int], tuple[str, set[int]]] = {
     ("s03_label_button_region.api26", 3): ("layout", {7, 8}),  # the two labels with font_min
+    ("s16_edge_inputs.api12", 17): ("layout", {0, 1, 2, 3}),  # labels with font_min where no tier fits
+    ("s16_edge_inputs.api26", 17): ("layout", {0, 1, 2, 3}),
+}
+
+# (scenario, step) -> the core's error for each canvas call it refuses, in order
+LABEL_TEXT_REFUSED = ["string expected, got table", "string expected, got boolean"]
+HOST_REFUSES: dict[tuple[str, int], list[str]] = {
+    # label text {} and true reach g:text_box unchanged, which takes only strings and numbers
+    ("s16_edge_inputs.api12", 16): LABEL_TEXT_REFUSED,
+    ("s16_edge_inputs.api26", 16): LABEL_TEXT_REFUSED,
 }
 
 # step fields that are notes or inputs, not results
-IGNORED = {"i", "op", "note", "font_calls", "expect", "expect_focused"}
+IGNORED = {"i", "op", "note", "font_calls", "expect", "expect_focused", "host_errors"}
 
 
 def lua(v) -> str:
@@ -92,7 +105,7 @@ def replay(scenario: str, tmp: Path) -> tuple[list[dict], dict]:
     (app / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     shutil.copy(ORACLE / "runner.lua", app / "index.lua")
     caps = inp.get("canvas_caps", {})
-    steps = {"steps": inp["steps"], "no_pattern": bool(caps.get("no_pattern"))}
+    steps = {"steps": inp["steps"], "no_pattern": bool(caps.get("no_pattern")), "touch": inp.get("touch", True)}
     (app / "steps.lua").write_text("return " + lua(steps) + "\n", encoding="utf-8")
     emu = Emu(app, state_dir=tmp / scenario / "state", fixtures_dir=tmp / scenario / "fx", fresh=True, fonts_dir=FONTS)
     assert emu.errors == [], emu.errors
@@ -115,54 +128,71 @@ def same(a, b) -> bool:
     return a == b
 
 
-def drawn(stream: list[dict]) -> list[dict]:
-    # how often the library looks up a canvas method is not behaviour
-    return [c for c in stream if c.get("op") != "@g_missing_field"]
+def stubbed(v) -> bool:
+    return NOT_IMPLEMENTED in json.dumps(v)
 
 
-def differences(want: dict, got: dict) -> list[str]:
+def in_order(part: list, whole: list) -> bool:
+    """Every entry of `part` appears in `whole`, in the same order."""
+    it = iter(whole)
+    return all(any(same(c, w) for w in it) for c in part)
+
+
+def differences(want: dict, got: dict, *, partial: bool = False) -> list[tuple[str, str]]:
+    """(field, message) for each difference; `partial` compares only what a step with a stubbed call still shows."""
     out = []
-    lookups = want.get("op_counts", {}).get("@g_missing_field", 0)
     for key, w in want.items():
         if key in IGNORED:
             continue
         g = got.get(key)
+        if partial and (key not in ("calls", "stream", "begin", "end") or stubbed(g)):
+            continue
         if key == "calls":
             if len(w) != len(g or []):
-                out.append(f"calls: {len(g or [])} calls, expected {len(w)}")
+                out.append((key, f"calls: {len(g or [])} calls, expected {len(w)}"))
                 continue
             for n, (wc, gc) in enumerate(zip(w, g, strict=True), 1):
+                if partial and stubbed(gc):
+                    continue
                 for k in ("m", "id", "ret", "error"):
                     if k in wc and not same(wc[k], gc.get(k)):
+                        name = wc.get("id", wc["m"])
                         out.append(
-                            f"call {n} ({wc.get('id', wc['m'])}) {k}: {json.dumps(gc.get(k))}, expected {json.dumps(wc[k])}"
+                            (key, f"call {n} ({name}) {k}: {json.dumps(gc.get(k))}, expected {json.dumps(wc[k])}")
                         )
             continue
+        if key == "stream" and partial:
+            if not in_order(g or [], w):
+                out.append((key, f"stream: ours is not in the oracle's order: {json.dumps(g)}"))
+            continue
         if key == "stream":
-            w, g = drawn(w), drawn(g or [])
+            g = g or []
             for n in range(max(len(w), len(g))):
                 wc, gc = (w[n] if n < len(w) else None), (g[n] if n < len(g) else None)
                 if not same(wc, gc):
-                    out.append(f"stream[{n}]: {json.dumps(gc)}, expected {json.dumps(wc)}")
+                    out.append((key, f"stream[{n}]: {json.dumps(gc)}, expected {json.dumps(wc)}"))
                     break
             if len(w) != len(g):
-                out.append(f"stream: {len(g)} calls, expected {len(w)}")
+                out.append((key, f"stream: {len(g)} calls, expected {len(w)}"))
             continue
-        if key == "op_counts":
-            w = {k: v for k, v in w.items() if k != "@g_missing_field"}
-        if key == "stream_count":
-            w = w - lookups
         if not same(w, g):
-            out.append(f"{key}: {json.dumps(g)}, expected {json.dumps(w)}")
+            out.append((key, f"{key}: {json.dumps(g)}, expected {json.dumps(w)}"))
+    return out
+
+
+def without_font(stream: list[dict], entries: set[int]) -> list[dict]:
+    out = []
+    for n, c in enumerate(stream):
+        if n in entries and c.get("a") and isinstance(c["a"][-1], dict):
+            c = {**c, "a": [*c["a"][:-1], {k: v for k, v in c["a"][-1].items() if k != "font"}]}
+        out.append(c)
     return out
 
 
 def cases():
     for scenario in SCENARIOS:
         for step in oracle(scenario)["output"]:
-            reason = PENDING.get((scenario, step["i"]))
-            marks = [pytest.mark.xfail(reason=reason, strict=True)] if reason else []
-            yield pytest.param(scenario, step["i"], id=f"{scenario}#{step['i']}", marks=marks)
+            yield pytest.param(scenario, step["i"], id=f"{scenario}#{step['i']}")
 
 
 @pytest.fixture(scope="module")
@@ -175,15 +205,28 @@ def test_step(scenario: str, i: int, tmp: Path):
     ours, host = replay(scenario, tmp)
     want = oracle(scenario)["output"][i - 1]
     got = ours[i - 1]
-    if NOT_IMPLEMENTED in json.dumps(got):
+    title = want.get("note", want["op"])
+    refused = got.get("host_errors", [])
+    expected = HOST_REFUSES.get((scenario, i), [])
+    assert len(refused) == len(expected) and all(e in r for e, r in zip(expected, refused, strict=False)), (
+        f"{title}: the core refused {refused}, expected {expected}"
+    )
+    if stubbed(got):
+        diff = differences(want, got, partial=True)
+        assert not diff, f"{title}, the parts inkemu implements:\n" + "\n".join(m for _, m in diff)
         missing = sorted({m for m in json.dumps(got).split('"') if NOT_IMPLEMENTED in m})
-        pytest.skip(f"needs a later ctx.ui task: {missing[0]}")
-    need, masked = NEEDS_HOST.get((scenario, i), (None, set()))
+        pytest.skip(f"needs a later ctx.ui task: {missing[0]} (the rest matches)")
+    need, entries = NEEDS_HOST.get((scenario, i), (None, set()))
     if need and not host.get(need):
-        want = {**want, "stream": [c for n, c in enumerate(want["stream"]) if n not in masked]}
-        got = {**got, "stream": [c for n, c in enumerate(got["stream"]) if n not in masked]}
+        want = {**want, "stream": without_font(want["stream"], entries)}
+        got = {**got, "stream": without_font(got["stream"], entries)}
         diff = differences(want, got)
-        assert not diff, f"{want.get('note', want['op'])}, without the calls font:{need} decides:\n" + "\n".join(diff)
-        pytest.skip(f"blocked on host: font:{need} is missing (the other calls match)")
+        assert not diff, f"{title}, without the fonts font:{need} picks:\n" + "\n".join(m for _, m in diff)
+        pytest.skip(f"blocked on host: font:{need} is missing (the rest matches)")
     diff = differences(want, got)
-    assert not diff, f"{want.get('note', want['op'])}:\n" + "\n".join(diff)
+    message = f"{title}:\n" + "\n".join(m for _, m in diff)
+    steps = oracle(scenario)["output"]
+    focus_moved = any(steps[k]["op"] in ("event", "focus") and stubbed(ours[k]) for k in range(i - 1))
+    if diff and focus_moved and {f for f, _ in diff} <= AFTER_FOCUS:
+        pytest.xfail("focus moved by an earlier event or ui:focus step that is not implemented yet")
+    assert not diff, message

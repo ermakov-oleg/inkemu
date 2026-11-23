@@ -1,7 +1,9 @@
 -- Replays one oracle scenario against ctx.ui and keeps one JSON object per step in RESULT (one per line).
 -- The steps come from `steps.lua` (the scenario's `input.steps`, written as a Lua table by the test). Everything runs
 -- in the first on_draw, because begin_frame needs the frame's canvas. Canvas calls are recorded by wrapping the real
--- g's methods in place, so the stream holds the library's exact arguments whatever the core does with them.
+-- g's methods in place, so the stream holds the library's exact arguments whatever the core does with them. A call
+-- the core refuses with a Lua error is kept apart in the step's `host_errors`, so the library carries on as it would
+-- with the oracle's canvas, which accepts anything.
 local input = require("steps")
 
 local DRAW_OPS = {
@@ -10,7 +12,7 @@ local DRAW_OPS = {
 }
 
 local G, FONT_NAMES = nil, {}
-local stream, counts = {}, {}
+local stream, counts, host_errors = {}, {}, {}
 
 -- JSON ---------------------------------------------------------------------------------------------------------
 
@@ -100,7 +102,12 @@ local function patch(g)
     if type(orig) == "function" then
       g[name] = function(self, ...)
         record(object({ op = str(name), a = list(table.pack(...), 1, select("#", ...)) }), name)
-        return orig(self, ...)
+        local r = table.pack(pcall(orig, self, ...))
+        if not r[1] then
+          host_errors[#host_errors + 1] = str(name .. ": " .. strip(r[2]))
+          return
+        end
+        return table.unpack(r, 2, r.n)
       end
     end
   end
@@ -197,8 +204,18 @@ end
 
 local objs = {}
 
+-- what a frame step passes to begin_frame
+local CANVAS_ARGS = { none = function() return nil end, table = function() return {} end, five = function() return 5 end }
+
+local function canvas_arg(marker)
+  if marker == nil then return G end
+  local make = CANVAS_ARGS[marker]
+  if make == nil then error("runner: unknown canvas marker " .. tostring(marker)) end
+  return make()
+end
+
 local function run(i, s)
-  stream, counts = {}, {}
+  stream, counts, host_errors = {}, {}, {}
   local out = { i = value(i), op = str(s.op) }
   local u = objs[s.ui or "ui"]
   if s.op == "create" then
@@ -220,13 +237,7 @@ local function run(i, s)
   end
   if u == nil then return object({ i = value(i), op = str(s.op), error = '"@no such ui object"' }) end
   if s.op == "frame" or s.op == "begin" then
-    if s.g == "none" then
-      out.begin = call(u.begin_frame, u, nil)
-    elseif s.g == "table" then
-      out.begin = call(u.begin_frame, u, {})
-    else
-      out.begin = call(u.begin_frame, u, G)
-    end
+    out.begin = call(u.begin_frame, u, canvas_arg(s.g))
   end
   if s.calls then
     local calls = {}
@@ -259,6 +270,7 @@ local function run(i, s)
   end
   if s.op == "frame" or s.op == "begin" or s.op == "end" or s.op == "call" then
     out.stream = "[" .. table.concat(stream, ",") .. "]"
+    if #host_errors > 0 then out.host_errors = "[" .. table.concat(host_errors, ",") .. "]" end
     out.stream_count = value(#stream)
     out.op_counts = next(counts) and value(counts) or "{}"
     out.focused_after = call(u.focused, u)
@@ -278,6 +290,7 @@ function on_draw(ctx, g)
   HOST_LAYOUT = type(ctx.fonts.medium.layout) == "function"
   patch(g)
   if input.no_pattern then g.pattern = nil end
+  if input.touch == false then ctx.input.pointer = false end
   local out = {}
   for i, s in ipairs(input.steps) do out[i] = run(i, s) end
   RESULT = table.concat(out, "\n")

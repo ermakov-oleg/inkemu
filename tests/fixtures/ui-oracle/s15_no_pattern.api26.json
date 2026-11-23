@@ -1,52 +1,14 @@
 {
-  "expect_mismatches": [],
-  "file": "s15_no_pattern.api26.json",
-  "input": {
-    "api": "2.26",
-    "canvas": [480,800],
-    "canvas_caps": {"no_pattern":true},
-    "steps": [
-      {"op":"create"},
-      {
-        "calls": [
-          {"id":"dis","m":"button","o":{"enabled":false,"h":56,"text":"dis","w":200,"x":10,"y":10}},
-          {"id":"c5","m":"column","o":{"background":5,"children":[{"kind":"spacer"}],"h":50,"w":100,"x":10,"y":100}},
-          {
-            "id": "c10",
-            "m": "column",
-            "o": {"background":10,"children":[{"kind":"spacer"}],"h":50,"radius":4,"w":100,"x":120,"y":100}
-          },
-          {
-            "id": "dv",
-            "m": "column",
-            "o": {
-              "children": [{"h":50,"id":"r1","kind":"region"},{"h":50,"id":"r2","kind":"region"}],
-              "divider": {"color":6,"line_width":2},
-              "h": 200,
-              "w": 200,
-              "x": 10,
-              "y": 200
-            }
-          }
-        ],
-        "op": "frame"
-      }
-    ],
-    "touch": true
-  },
-  "output": [
-    {"i":1,"op":"create","ret":"ui object"},
-    {
-      "begin": [],
-      "calls": [{"id":"dis","m":"button","ret":[]},{"id":"c5","m":"column","ret":[]},{"id":"c10","m":"column","ret":[]},{"id":"dv","m":"column","ret":[]}],
-      "end": [],
-      "focused_after": ["r1"],
-      "i": 2,
-      "op": "frame",
-      "op_counts": {"@g_missing_field":7,"rect":4,"text_box":1},
-      "stream": [{"a":[10,10,200,56,{"fill":false,"radius":0}],"op":"rect"},{"a":[10,10,200,56,"dis",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"name":"pattern","op":"@g_missing_field"},{"name":"pattern","op":"@g_missing_field"},{"name":"pattern","op":"@g_missing_field"},{"a":[10,100,100,50,{"color":5,"fill":true,"radius":0}],"op":"rect"},{"name":"pattern","op":"@g_missing_field"},{"name":"pattern","op":"@g_missing_field"},{"a":[120,100,100,50,{"color":10,"fill":true,"radius":4}],"op":"rect"},{"name":"pattern","op":"@g_missing_field"},{"name":"pattern","op":"@g_missing_field"},{"a":[10,249,200,2,{"color":6,"fill":true}],"op":"rect"}]
-    }
-  ],
-  "scenario": "s15_no_pattern",
-  "title": "canvas without the pattern capability: disabled dots and halftone bands"
+ "expect_mismatches":[],
+ "file":"s15_no_pattern.api26.json",
+ "scenario":"s15_no_pattern",
+ "title":"canvas without the pattern capability: disabled dots and halftone bands",
+ "input":{"api":"2.26","canvas":[480,800],"canvas_caps":{"no_pattern":true},"touch":true,"steps":[
+  {"op":"create"},
+  {"calls":[{"id":"dis","m":"button","o":{"enabled":false,"h":56,"text":"dis","w":200,"x":10,"y":10}},{"id":"c5","m":"column","o":{"background":5,"children":[{"kind":"spacer"}],"h":50,"w":100,"x":10,"y":100}},{"id":"c10","m":"column","o":{"background":10,"children":[{"kind":"spacer"}],"h":50,"radius":4,"w":100,"x":120,"y":100}},{"id":"dv","m":"column","o":{"children":[{"h":50,"id":"r1","kind":"region"},{"h":50,"id":"r2","kind":"region"}],"divider":{"color":6,"line_width":2},"h":200,"w":200,"x":10,"y":200}}],"op":"frame"}
+ ]},
+ "output":[
+  {"i":1,"op":"create","ret":"ui object"},
+  {"begin":[],"calls":[{"id":"dis","m":"button","ret":[]},{"id":"c5","m":"column","ret":[]},{"id":"c10","m":"column","ret":[]},{"id":"dv","m":"column","ret":[]}],"end":[],"focused_after":["r1"],"i":2,"op":"frame","op_counts":{"rect":4,"text_box":1},"stream":[{"a":[10,10,200,56,{"fill":false,"radius":0}],"op":"rect"},{"a":[10,10,200,56,"dis",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[10,100,100,50,{"color":5,"fill":true,"radius":0}],"op":"rect"},{"a":[120,100,100,50,{"color":10,"fill":true,"radius":4}],"op":"rect"},{"a":[10,249,200,2,{"color":6,"fill":true}],"op":"rect"}]}
+ ]
 }
