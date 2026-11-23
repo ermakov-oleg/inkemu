@@ -291,3 +291,60 @@ fn act_sleep_is_inactive_in_a_lock_screen_session() {
         "inactive"
     );
 }
+
+#[test]
+fn act_sleep_and_power_off_are_inactive_in_the_on_leave_of_a_quit() {
+    let mut core = app_with(
+        "function on_input(c, ev)\n\
+           if ev.phase == 'up' then c:quit() end\n\
+           return true\n\
+         end\n\
+         function on_leave(c)\n\
+           local _, e1 = c.system:act('sleep')\n\
+           local _, e2 = c.system:act('power_off')\n\
+           c:log('leave ' .. tostring(e1) .. ' ' .. tostring(e2))\n\
+         end\n",
+    );
+    core.tap(10, 10).unwrap();
+    assert!(
+        logged(&core, "leave inactive inactive").is_some(),
+        "{:?}",
+        core.log().to_vec()
+    );
+    assert!(!core.locked());
+}
+
+#[test]
+fn act_sleep_followed_by_quit_does_not_lock() {
+    let mut core = app_with(
+        "function on_input(c, ev)\n\
+           if ev.phase == 'up' then c.system:act('sleep') c:quit() end\n\
+           return true\n\
+         end\n\
+         function on_leave(c) c:log('on_leave ran') end\n",
+    );
+    core.tap(10, 10).unwrap();
+    assert!(logged(&core, "on_leave ran").is_some());
+    assert!(!core.locked() && !core.status().running);
+}
+
+#[test]
+fn the_on_leave_of_act_sleep_is_outside_the_up_event_window() {
+    let mut core = app_with(
+        "function on_input(c, ev)\n\
+           if ev.phase == 'up' then c.system:act('sleep') end\n\
+           return true\n\
+         end\n\
+         function on_leave(c)\n\
+           local _, e = c.system:act('power_off')\n\
+           c:log('leave ' .. tostring(e))\n\
+         end\n",
+    );
+    core.tap(10, 10).unwrap();
+    assert!(
+        logged(&core, "leave inactive").is_some(),
+        "{:?}",
+        core.log().to_vec()
+    );
+    assert!(core.locked());
+}

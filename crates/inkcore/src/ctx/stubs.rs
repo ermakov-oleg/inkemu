@@ -78,7 +78,11 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
                 }
                 "sleep" | "power_off" => {
                     let user = with(&st, |s| {
-                        s.lock.ctx.is_none() && s.running && s.up_input == Some(s.depth)
+                        // a quit's on_leave runs at the on_input depth before the window closes
+                        s.lock.ctx.is_none()
+                            && s.running
+                            && !s.leaving
+                            && s.up_input == Some(s.depth)
                     });
                     if !user {
                         with(&st, |s| {
