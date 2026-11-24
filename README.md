@@ -241,6 +241,15 @@ included, then seeds `files/` from `<fixtures dir>/files/`.
   `body` over 65536 bytes returns `nil, "limit_exceeded"`.
 - `ctx.net:keep_wifi(ms)` returns nothing (0.1: one nil) and returns `nil, "invalid_argument"` for a number that is
   not an integer from -1 to 2147483647.
+- Lock screen (§15): the first session's `ctx.lock.reason` is `"first"` (0.1: `"lock"`); wakes are aligned to
+  whole multiples of `interval_sec` in local time, so the first one may come sooner than `interval_sec` after
+  locking (0.1: every `interval_sec` from the lock); `interval_sec` defaults to 60 and is clamped to 30..3600 (0.1:
+  no block value, no wakes); a networked session stops waiting 28 s after it started and cancels what is left
+  (0.1: a timer wake waited 30 s and still delivered late answers); `ctx:after` in a lock screen without
+  `"net": true` and `ctx:set_tick` in any lock session do nothing (0.1 ran them); `net_interval_sec` makes later
+  wakes run without `ctx.net`; a networked first session draws twice. `set_interval` takes only an integer 30..3600
+  and returns nothing (0.1: any positive number, `true`), `lock:done()` returns nothing, and `budget:extend`,
+  `input:text`, `input:edit` and `screen:set_orientation` return `nil, "inactive"` in a lock session.
 - `g:image{gray = true}` makes the frame a gray frame (0.1 ignored it), and `emu.shot()` returns a mode `"L"` image
   for it instead of mode `"1"`. Code that reads pixels as 0 or 255 keeps working on the black and white parts; use
   `emu.raw_frame()` if you need a 1-bit image (Pillow's `.convert("1")` dithers; for the same threshold use
@@ -253,8 +262,19 @@ inkemu emulates firmware API 2.33, build 26112001 (`ctx.device.firmware` is `XT 
 `ctx.api`; the API surface is always 2.33.
 
 Callbacks: `on_load`, `on_resume`, `on_draw(ctx, g)`, `on_input(ctx, ev)` (pointer taps, double taps, swipes and
-holds; side-button keys), `on_tick`, `on_leave`. A `lockscreen` block in the manifest runs its own entry file on
-lock and on every `interval_sec` wake, with `ctx.lock` (`reason`, `done`, `set_interval`, ...).
+holds; side-button keys), `on_tick`, `on_leave`. A `lockscreen` block in the manifest runs its own entry file as
+in §15: one short session on lock (`ctx.lock.reason` is `"first"`) and one on every wake (`"timer"`). Wakes come at
+the next whole multiple of `interval_sec` in local time (60 wakes on the minute); `interval_sec` defaults to 60 and,
+like `net_interval_sec`, is clamped to 30..3600. `ctx.lock` has `reason`, `elapsed_sec` (since the previous
+lock-screen present), `interval_sec`, `net`, `set_interval` (an integer 30..3600 for the sleeps after this session,
+else `nil, "invalid_argument"`) and `done`. A session runs `on_load`, then `on_draw`, and ends: `ctx:set_tick`
+does nothing, `ctx:after` does nothing unless the block declares `net`, and `budget:extend`, `input:text`,
+`input:edit` and `screen:set_orientation` return `nil, "inactive"`. With `"net": true`, `ctx.lock.net` (and
+`ctx.net`) is there in the first session and then only once `net_interval_sec` (default `interval_sec`) has passed
+since the last session that had it. A networked session with requests or timers left after `on_load` waits in the
+preparation phase until they are done, `ctx.lock:done()`, or 28 s after the session started; then what is left is
+cancelled and never delivers, and `on_draw` runs. A `first` session draws the stored data at once before waiting, so
+it presents two frames; a `ctx:invalidate()` while waiting draws nothing extra.
 
 Drawing (`g`): `size`, `clear`, `rect`, `line`, `circle`, `arc`, `polyline`, `polygon`, `pattern`, `text`,
 `text_box` and `image`, plus layers via `ctx.layers`. A `g` works only during its callback (`on_draw` or
@@ -322,8 +342,10 @@ as a tap can present more than one frame). The rules, as in the contract:
   full frame starts the count again.
 - `ctx:defer_full_refresh(ms)` holds that automatic full back for `ms` of virtual time; the first frame after the
   deadline gets the full it is owed, and at 60 partial frames the frame is full even while deferred.
-- The first frame of every session (start, restart, reload, unlock, each lock screen session) is full; the contract
-  leaves it open, this is inkemu's choice. Lock screen frames count like app frames.
+- The first frame of every app session (start, restart, reload, unlock) is full; the contract leaves it open, this is
+  inkemu's choice. Lock screen frames count like app frames: the first lock session is full, a timer wake partial
+  (full after `ctx:invalidate("full")`, also from its `on_draw`), the second frame of a networked first session
+  partial, and the partial count goes on across wakes (§15).
 - The error overlay, dialogs and toasts are not frames of the app, and a frame whose `on_draw` fails is not counted.
 - A gray frame (below) is `"gray"`: a full refresh with the grayscale waveform, whatever `invalidate` asked for. The
   next normal frame is full and the one after it partial again.
@@ -434,6 +456,10 @@ offset_minutes revision valid`.
   (`on_leave`) and the device locks as with `emu.lock()`, unless the callback failed or called `ctx:quit()`.
   `"power_off"` is not emulated: there is no confirmation dialog (so no `on_pause`/`on_resume` and never `busy`),
   the call returns nothing, logs it and the app goes on as if the user cancelled.
+- Lock screen: the battery and Wi-Fi rules of `ctx.lock.net` (below 20%, three failed connections) and the radios
+  being off in timer wakes are not emulated; a script error shows the error overlay instead of the system's default
+  lock-screen picture (wakes stop, as on the device); `lockscreen.net` without the `net` permission is not refused;
+  callback time limits (2000 ms for a session, 1500 ms for the final `on_draw`) are not measured.
 - Gray frames: `ctx.image:decode{gray = true}` and the dot patterns of 4-level images in normal frames are not
   emulated.
 - Not verified on the device:
@@ -442,6 +468,10 @@ offset_minutes revision valid`.
   - a toast over a gray frame: §3 names a system input method, dialog or similar screen; inkemu's choice is to treat
     a toast as one too, so the frame is drawn as a normal one;
   - the 2.26 call form `ctx:log(...)`, which still logs;
+  - the lock screen as a whole (§15 is contract only); in particular `set_interval`'s code for a bad value (inkemu:
+    `invalid_argument` by the §0 range rule; §15 gives only the range), `ctx.lock:done()` from `on_load` (inkemu:
+    the session draws at once), and the timer object `ctx:after` returns where it does nothing (inkemu: one with a
+    `cancel` that does nothing);
   - `ctx.perf:info()`'s `tick_us`, `draw_us`, `asset_hit` and `asset_miss`, which measure the device's renderer:
     always 0 in inkemu;
   - the format of the level prefix of `ctx.log:info/warn/error`;

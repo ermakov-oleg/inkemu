@@ -152,6 +152,14 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
         "gc",
         new_object(lua, "gc", &[("collect", collect), ("count", count)])?,
     )?;
-    let extend = method(|lua, _| true.into_lua_multi(lua));
+    let extend = {
+        let st = st.clone();
+        method(move |lua, _| {
+            if with(&st, |s| s.lock.ctx.is_some()) {
+                return soft_fail(lua, "inactive");
+            }
+            true.into_lua_multi(lua)
+        })
+    };
     ctx.raw_set("budget", new_object(lua, "budget", &[("extend", extend)])?)
 }

@@ -41,63 +41,9 @@ All §14 checks are green and pinned: `14/net_methods_accepted`, `14/net_head_no
 
 ## §15 Lock screen
 
-Lock-screen frames count as app frames in `status()["refresh"]` and `status()["refreshes"]` (the refresh kinds are described under "Frames" in `README.md`): after `lock` the list has the session-start frame of the app first, then the frames of the first session, then one per timer wake. The checks below assume that. Frame counts of a networked session follow the contract's step list (one frame at once with the stored data when requests or timers remain after `on_load`, one final frame).
+Lock-screen frames count as app frames in `status()["refresh"]` and `status()["refreshes"]` (the refresh kinds are described under "Frames" in `README.md`): after `lock` the list has the session-start frame of the app first, then the frames of the first session, then one per timer wake. Frame counts of a networked session follow the contract's step list (one frame at once with the stored data when requests or timers remain after `on_load`, one final frame).
 
-### 15/lock_reason_first
-- Contract: `ctx.lock.reason` is `"first"` in the first session after locking and `"timer"` in a wake.
-- Core now: the first session reports `"lock"`; the timer value is right (`15/lock_reason_timer`, green).
-- Touch points: `crates/inkcore/src/lockscreen.rs` (`lock`, `enter`), `crates/inkcore/src/ctx/lock.rs`.
-- Source: contract only.
-
-### 15/lock_timer_alignment
-- Contract: wakes are aligned to wall-clock multiples of `interval_sec`, so a 60 s interval wakes at :00 of each minute. The check locks at 09:00:20 and expects the wake at 09:01:00 with `elapsed_sec` 40.
-- Core now: the wake comes `interval_sec` after locking (09:01:20).
-- Touch points: `crates/inkcore/src/lockscreen.rs` (`schedule`).
-- Source: contract only (not in the task list; the guide and §15 both state it).
-
-### 15/lock_net_interval_blocks, 15/lock_net_interval_clamp, 15/lock_net_interval_clamp_low
-- Contract: `lockscreen.net_interval_sec` defaults to `interval_sec` and is limited to 30-3600. `ctx.lock.net` is true in the first session; later it turns true again only after `net_interval_sec` seconds since the previous networked session, and `ctx.net` is nil while it is false. The clamp check uses `interval_sec` 600 and `net_interval_sec` 100000 and expects the sequence true, five times false, true (the wake of 3600 s). The low bound is pinned by `15/lock_net_interval_clamp_low`: locked at 09:00:50 the first wake comes 10 s later, and `net_interval_sec` 10 is raised to 30, so that wake has no network (it also depends on the alignment rule).
-- Core now: `net_interval_sec` is not read; `lock.net` follows the manifest's `net` flag in every session. Default, elapsed interval and the undeclared case are pinned in `15/lock_net_interval_default`, `15/lock_net_interval_elapsed`, `15/lock_net_first`, `15/lock_net_undeclared` (green).
-- Touch points: `crates/inkcore/src/lockscreen.rs` (`enter`, `LockCtx`), `crates/inkcore/src/ctx/lock.rs`, `crates/inkcore/src/ctx/net.rs` (`ctx.net` must follow `lock.net`).
-- Source: contract only. Not modelled: battery below 20% and the three failed Wi-Fi connections.
-
-### 15/lock_prep_first, 15/lock_first_frames
-- Contract: in a networked first session, when requests are unfinished after `on_load`, `on_draw` runs once at once with the stored data (full refresh) and again after the preparation phase with the fetched data (partial refresh).
-- Core now: the first session draws once at once and never again when the request finishes. A timer session already waits for its request and draws once (`15/lock_prep_timer`, green).
-- Touch points: `crates/inkcore/src/lockscreen.rs` (`after_load`, `present`), `crates/inkcore/src/emu.rs` (frame scheduling).
-- Source: contract only.
-
-### 15/lock_prep_cap
-- Contract: the preparation phase ends 28000 ms after the session start; unfinished requests and timers are cancelled and `on_draw` runs (a request that takes 29 s never delivers). `lock:done()` also ends it early (`15/lock_done_early`, green).
-- Core now: a timer wake waits 30 s (`LOCK_WAIT_MS`) and a 29 s request is delivered before the draw.
-- Touch points: `crates/inkcore/src/lockscreen.rs` (`LOCK_WAIT_MS`, `after_load`), `crates/inkcore/src/ctx/net.rs` (cancel on the end of the phase).
-- Source: contract only.
-
-### 15/lock_invalidate_full_prep, 15/lock_invalidate_plain_prep, 15/lock_refresh_kinds
-- Contract: the first session presents a full refresh and a timer session a partial one; `ctx:invalidate("full")` during the preparation phase makes the frame of step 5 full and a plain `invalidate()` draws no extra frame.
-- Core now: no refresh kind is recorded.
-- Touch points: `crates/inkcore/src/lockscreen.rs`, `crates/inkcore/src/ctx/mod.rs` (`invalidate`), `crates/inkcore/src/emu.rs`.
-- Source: contract only.
-
-### 15/lock_after_noop
-- Contract: in a lock session without `lockscreen.net`, `ctx:after` has no effect (its callback never runs). With `lockscreen.net` timers work during the preparation phase.
-- Core now: the callback runs.
-- Touch points: `crates/inkcore/src/ctx/mod.rs` (`after`), `crates/inkcore/src/lockscreen.rs`.
-- Source: contract only.
-
-### 15/lock_budget_inactive
-- Contract: `ctx.budget:extend()` returns `nil, "inactive"` in a lock session.
-- Core now: returns `true`.
-- Touch points: `crates/inkcore/src/ctx/stubs.rs` (`budget`).
-- Source: contract only.
-
-### 15/lock_set_interval_args
-- Contract: `set_interval` takes an integer from 30 to 3600 and returns nothing. The contract names no result for other values; the check expects `nil, "invalid_argument"` like the other integer arguments (29, 3601 and 45.5).
-- Core now: any positive number is accepted and `true` is returned; only 0 and negatives are refused.
-- Touch points: `crates/inkcore/src/ctx/lock.rs` (`set_interval`).
-- Source: contract only. The error code for a bad value is inferred, confirm it before the fix.
-
-Already green and pinned: `15/lock_reason_timer`, `15/lock_elapsed_first`, `15/lock_net_first`, `15/lock_net_undeclared`, `15/lock_net_interval_default`, `15/lock_net_interval_elapsed`, `15/lock_prep_timer`, `15/lock_done_early`, `15/lock_set_interval_effect`, `15/lock_gray_then_normal` (green with the §3 gray frames). The prelude records reach `emu.log` from a lock session (these checks read them). Not covered: the system lock screen on a missing entry, error or timeout in the script (default picture, no more wakes), low battery, `ctx.lockscreen` wallpaper calls and the confirmation dialog.
+All §15 checks are green and pinned: `15/lock_reason_first`, `15/lock_reason_timer`, `15/lock_elapsed_first`, `15/lock_timer_alignment`, `15/lock_net_first`, `15/lock_net_undeclared`, `15/lock_net_interval_default`, `15/lock_net_interval_elapsed`, `15/lock_net_interval_blocks`, `15/lock_net_interval_clamp`, `15/lock_net_interval_clamp_low`, `15/lock_prep_first`, `15/lock_first_frames`, `15/lock_prep_timer`, `15/lock_prep_cap`, `15/lock_done_early`, `15/lock_invalidate_full_prep`, `15/lock_invalidate_plain_prep`, `15/lock_refresh_kinds`, `15/lock_gray_then_normal`, `15/lock_after_noop`, `15/lock_budget_inactive`, `15/lock_set_interval_args` (the `invalid_argument` code comes from the §0 out-of-range rule; §15 gives only the range), `15/lock_set_interval_effect`. The prelude records reach `emu.log` from a lock session (these checks read them). Not covered: the system lock screen on a missing entry, error or timeout in the script (default picture, no more wakes), low battery, the three failed Wi-Fi connections, `ctx.lockscreen` wallpaper calls and the confirmation dialog.
 
 ## §25 System actions
 

@@ -437,8 +437,10 @@ impl Host<'_> {
     }
 
     pub fn settle(&self) {
+        // a lock-screen session draws only when the host says so (§15)
         if let Some(ready) = with(self.st, |s| {
-            s.lock.waiting.then(|| s.lock.ready(s.net.inflight))
+            let c = s.lock.ctx.as_ref()?;
+            Some(c.phase == lockscreen::Phase::Prep && lockscreen::ready(s))
         }) {
             if ready {
                 lockscreen::present(self);
@@ -451,7 +453,7 @@ impl Host<'_> {
         }
     }
 
-    fn draw(&self) {
+    pub(crate) fn draw(&self) {
         // taken before on_draw: a full request made while drawing is for the next frame
         let (ctx, g, full, was) = with(self.st, |s| {
             s.canvas.begin_frame();
@@ -478,6 +480,8 @@ impl Host<'_> {
                 }
                 None => {
                     s.frame_commands = n;
+                    // in a lock-screen session a full request from on_draw is for this frame (§5)
+                    let full = full || (s.lock.ctx.is_some() && std::mem::take(&mut s.full_next));
                     if s.running {
                         s.presented(full);
                     }
@@ -518,11 +522,16 @@ pub(crate) fn boot(st: &Shared, mode: BootMode) {
         (s.overlay, s.ctx, s.g, s.quit, s.toast) = (None, None, None, false, None);
         (s.images, s.next_image) = (HashMap::new(), 0);
         s.net.inflight = 0;
-        s.lock.waiting = false;
-        (s.full_next, s.partials, s.defer_until, s.perf) = (true, 0, 0, Perf::default());
         if mode != BootMode::Lock {
             s.lock.ctx = None;
         }
+        // a timer wake presents a partial refresh, and the partial count survives sleep (§15)
+        let wake = s.lock.ctx.as_ref().is_some_and(|c| c.reason == "timer");
+        s.full_next = !wake;
+        if !wake {
+            s.partials = 0;
+        }
+        (s.defer_until, s.perf) = (0, Perf::default());
         (
             s.cfg.firmware_api,
             s.cfg.app_dir_label.clone(),

@@ -1,13 +1,13 @@
 //! `ctx.lock` inside the lock screen state and `ctx.lockscreen` in the app when the manifest has a `lockscreen`
 //! block (0.1 `lockscreen.py`).
-use mlua::{IntoLuaMulti, Lua, Table, Value};
+use mlua::{IntoLuaMulti, Lua, MultiValue, Table};
 use serde_json::{Map, Value as J};
 
 use super::convert::dump;
 use super::object::{method, new_object, Method};
-use super::{arg, check_arg, int_value, nil, soft_fail};
+use super::{arg, check_arg, int_value, soft_fail, whole};
 use crate::emu::{with, Shared, State};
-use crate::lockscreen::{self, Num};
+use crate::lockscreen::{self, Phase};
 
 pub(super) fn install(
     lua: &Lua,
@@ -26,28 +26,22 @@ pub(super) fn install(
     }
 }
 
-fn num_value(n: Num) -> Value {
-    match n {
-        Num::Int(i) => int_value(i),
-        Num::Float(f) => Value::Number(f as f32),
-    }
-}
-
 fn install_lock(
     lua: &Lua,
     ctx: &Table,
     st: &Shared,
-    (reason, net, elapsed_sec, interval): (&str, bool, i64, Num),
+    (reason, net, elapsed_sec, interval): (&str, bool, i64, i64),
 ) -> mlua::Result<()> {
     let done = {
         let st = st.clone();
         method(move |_, _| {
             with(&st, |s| {
+                // only the preparation phase of a networked session can end early (§15)
                 if let Some(c) = &mut s.lock.ctx {
-                    c.done = true;
+                    c.done |= c.declared && !c.drawing && c.phase != Phase::Ended;
                 }
             });
-            Ok(nil())
+            Ok(MultiValue::new())
         })
     };
     let set_interval = {
@@ -56,23 +50,19 @@ fn install_lock(
             let a = args.into_vec();
             let sec = arg(&a, 0);
             check_arg("set_interval", 1, sec, "number")?;
-            let n = match sec {
-                Value::Integer(i) => Num::Int(i64::from(*i)),
-                Value::Number(f) => Num::Float(f64::from(*f)),
-                _ => unreachable!(),
-            };
-            if !n.positive() {
+            let Some(n) = whole(sec).filter(|n| (30..=3600).contains(n)) else {
                 return soft_fail(lua, "invalid_argument");
-            }
+            };
+            // the next sleep uses it: the wake is scheduled when the session presents
             let ctx = with(&st, |s| {
                 s.lock.interval = n;
-                lockscreen::schedule(s);
                 s.ctx.clone()
             });
             if let Some(ctx) = ctx {
-                ctx.get::<Table>("lock")?.set("interval_sec", sec.clone())?;
+                ctx.get::<Table>("lock")?
+                    .set("interval_sec", int_value(n))?;
             }
-            true.into_lua_multi(lua)
+            Ok(MultiValue::new())
         })
     };
     let obj = new_object(
@@ -82,7 +72,7 @@ fn install_lock(
     )?;
     obj.raw_set("reason", reason)?;
     obj.raw_set("net", net)?;
-    obj.raw_set("interval_sec", num_value(interval))?;
+    obj.raw_set("interval_sec", int_value(interval))?;
     obj.raw_set("elapsed_sec", int_value(elapsed_sec))?;
     ctx.raw_set("lock", obj)
 }

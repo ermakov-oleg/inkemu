@@ -29,6 +29,9 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
                 Some(Value::String(s)) if s.as_bytes() == b"landscape" => ("landscape", (800, 480)),
                 _ => return soft_fail(lua, "invalid_argument"),
             };
+            if with(&st, |s| s.lock.ctx.is_some()) {
+                return soft_fail(lua, "inactive");
+            }
             let changed = with(&st, |s| {
                 let changed = name != orientation(s.canvas.w, s.canvas.h);
                 if changed {

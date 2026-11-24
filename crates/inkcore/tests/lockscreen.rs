@@ -25,8 +25,9 @@ fn a_wake_inside_one_wait_runs_the_timers_of_the_new_state() {
           c:after(1000, function() fired = c.lock.reason .. ' ' .. c.clock:millis() end)\n\
         end\n\
         function on_draw(c, g) g:text(0, 0, 'reason ' .. c.lock.reason) end\n";
+    // ctx:after works only in a networked lock screen (§15, 15/lock_after_noop)
     let mut core = Core::new(
-        files(r#"{"interval_sec": 60}"#, lock),
+        files(r#"{"interval_sec": 60, "net": true}"#, lock),
         Config::default(),
         Persisted::default(),
     );
@@ -53,7 +54,10 @@ fn a_live_wake_waits_for_its_own_answer_and_drops_the_old_one() {
         Persisted::default(),
     );
     core.lock();
-    assert!(has_text(&core, "lock nil"));
+    assert!(
+        has_text(&core, "first nil"),
+        "reason first (§15, 15/lock_reason_first)"
+    );
     let first = core.take_outgoing();
     core.wait(60_000).unwrap();
     let second = core.take_outgoing();
@@ -67,7 +71,10 @@ fn a_live_wake_waits_for_its_own_answer_and_drops_the_old_one() {
     // the answer to the replaced state's request never reaches the new one
     core.deliver(first[0].id, ok("old"));
     core.wait(1000).unwrap();
-    assert!(has_text(&core, "lock nil") && !has_text(&core, "timer"));
+    assert!(
+        has_text(&core, "first nil") && !has_text(&core, "timer"),
+        "reason first (§15, 15/lock_reason_first)"
+    );
     // due 300 ms after the request, so it fires at once and the waiting wake draws
     core.deliver(second[0].id, ok("new"));
     assert!(has_text(&core, "timer new"), "{:?}", core.texts());
@@ -172,8 +179,97 @@ fn lock_screen_frames_are_recorded_like_app_frames() {
         Persisted::default(),
     );
     core.lock();
+    core.wait(61_000).unwrap();
     core.unlock();
-    assert_eq!(core.status().refreshes, ["full", "full", "full"]);
+    assert_eq!(
+        core.status().refreshes,
+        ["full", "full", "partial", "full"],
+        "a timer session presents a partial refresh (§15, 15/lock_refresh_kinds)"
+    );
+}
+
+#[test]
+fn the_partial_count_survives_lock_screen_wakes() {
+    let lock = "function on_draw(c, g) g:text(0, 0, 'locked') end\n";
+    let mut core = Core::new(
+        files(r#"{"interval_sec": 60}"#, lock),
+        Config::default(),
+        Persisted::default(),
+    );
+    core.lock();
+    core.wait(30 * 60_000).unwrap();
+    let r = core.status().refreshes;
+    // app frame, first session, then 29 partial wakes and the automatic full one
+    assert_eq!(r.len(), 32);
+    assert!(r[2..31].iter().all(|k| *k == "partial"), "{r:?}");
+    assert_eq!(r[31], "full");
+}
+
+#[test]
+fn a_gray_lock_frame_makes_only_the_next_wake_full() {
+    let lock = "local layer\n\
+        function on_load(c)\n\
+          gray = c.storage:read('seen') == nil\n\
+          c.storage:write('seen', '1')\n\
+          layer = c.layers:create(40, 40)\n\
+          layer:draw(function(g) g:rect(0, 0, 40, 40, {fill = true}) end)\n\
+        end\n\
+        function on_draw(c, g) g:clear(0) g:image(layer, 10, 10, {gray = gray}) end\n";
+    let mut core = Core::new(
+        files(r#"{"interval_sec": 60}"#, lock),
+        Config::default(),
+        Persisted::default(),
+    );
+    core.lock();
+    core.wait(121_000).unwrap();
+    assert_eq!(core.status().refreshes, ["full", "gray", "full", "partial"]);
+}
+
+#[test]
+fn a_networked_first_session_draws_twice_and_ends_its_timers() {
+    let lock = "local snap = 'none'\n\
+        function on_load(c)\n\
+          c:after(1000, function() snap = 'timer' end)\n\
+          c:after(40000, function() c:log('late timer') end)\n\
+          c:set_tick(100)\n\
+        end\n\
+        function on_tick(c) c:log('tick') end\n\
+        function on_draw(c, g) g:text(0, 0, 'snap ' .. snap) end\n";
+    let mut core = Core::new(
+        files(r#"{"interval_sec": 60, "net": true}"#, lock),
+        Config::default(),
+        Persisted::default(),
+    );
+    core.lock();
+    assert!(has_text(&core, "snap none"));
+    core.wait(27_999).unwrap();
+    assert!(
+        has_text(&core, "snap none"),
+        "the 40 s timer holds the phase"
+    );
+    core.wait(1).unwrap();
+    assert!(has_text(&core, "snap timer"), "the phase ends at 28 s");
+    core.wait(31_000).unwrap();
+    let log = core.log().to_vec();
+    assert!(!log
+        .iter()
+        .any(|l| l.contains("late timer") || l.ends_with("[app] tick")));
+    assert_eq!(core.status().refreshes, ["full", "full", "partial"]);
+}
+
+#[test]
+fn input_and_budget_are_inactive_in_a_lock_session() {
+    let mut core = app_with("");
+    core.lock();
+    for (call, want) in [
+        ("ctx.budget:extend()", "inactive"),
+        ("ctx.input:text({}, function() end)", "inactive"),
+        ("ctx.input:edit({})", "inactive"),
+        ("ctx.screen:set_orientation('landscape')", "inactive"),
+    ] {
+        let got = core.lua_eval(&format!("return select(2, {call})")).unwrap();
+        assert_eq!(got, want, "{call}");
+    }
 }
 
 fn app_with(index_lua: &str) -> Core {

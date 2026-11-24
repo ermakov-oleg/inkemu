@@ -12,7 +12,7 @@ use mlua::{Function, IntoLuaMulti, Lua, MultiValue, Table, Value};
 
 use super::files::{store_capped, Dir, Mode};
 use super::object::{method, new_object};
-use super::{arg, check_arg, int_value, raw, soft_fail};
+use super::{arg, check_arg, int_value, raw, soft_fail, whole};
 use crate::clock::TimerId;
 use crate::config::{NetMode, APP_FILE_SAVE_MAX, STORAGE_WRITE_MAX};
 use crate::emu::{with, Host, Shared, State};
@@ -288,15 +288,6 @@ fn url_ok(url: &str) -> bool {
     })
 }
 
-/// A §0 integer: an integer, or a float equal to one.
-fn whole(v: &Value) -> Option<i64> {
-    match v {
-        Value::Integer(i) => Some(i64::from(*i)),
-        Value::Number(n) if n.is_finite() && n.fract() == 0.0 => Some(*n as i64),
-        _ => None,
-    }
-}
-
 /// A checked option, or the soft failure the call returns.
 type Checked<T> = mlua::Result<Result<T, &'static str>>;
 
@@ -490,7 +481,15 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
             Ok(MultiValue::new())
         })
     };
-    let websocket = method(|_, _| Err(mlua::Error::runtime("ctx.net:websocket is not emulated")));
+    let websocket = {
+        let st = st.clone();
+        method(move |lua, _| {
+            if with(&st, |s| s.lock.ctx.is_some()) {
+                return soft_fail(lua, "inactive");
+            }
+            Err(mlua::Error::runtime("ctx.net:websocket is not emulated"))
+        })
+    };
     let net = new_object(
         lua,
         "net",
