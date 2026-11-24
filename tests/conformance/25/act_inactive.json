@@ -1,0 +1,72 @@
+{
+  "spec": "\u00a725",
+  "about": "sleep and power_off outside a key or pointer up (load, timer, pointer down) return nil, inactive",
+  "steps": [
+    "wait 1s",
+    "tap 100 100",
+    "wait 1s"
+  ],
+  "expect": {
+    "load_sleep": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "inactive"
+        ]
+      },
+      "spec": "\u00a725"
+    },
+    "load_power_off": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "inactive"
+        ]
+      },
+      "spec": "\u00a725"
+    },
+    "timer_sleep": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "inactive"
+        ]
+      },
+      "spec": "\u00a725"
+    },
+    "timer_power_off": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "inactive"
+        ]
+      },
+      "spec": "\u00a725"
+    },
+    "down_sleep": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "inactive"
+        ]
+      },
+      "spec": "\u00a725"
+    },
+    "down_power_off": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "inactive"
+        ]
+      },
+      "spec": "\u00a725"
+    }
+  },
+  "errors": []
+}

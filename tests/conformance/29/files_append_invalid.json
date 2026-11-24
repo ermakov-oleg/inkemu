@@ -1,0 +1,36 @@
+{
+  "spec": "§29",
+  "about": "append checks the name and takes at most 262144 bytes per call; a refused append changes nothing",
+  "expect": {
+    "append_bad_name": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§29"
+    },
+    "append_over": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§29"
+    },
+    "unchanged": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    }
+  },
+  "errors": []
+}

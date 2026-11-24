@@ -1,0 +1,25 @@
+{
+  "spec": "§9",
+  "about": "remove returns true for a file that is not there, also right after removing it",
+  "expect": {
+    "remove_missing": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§9"
+    },
+    "remove_again": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§9"
+    }
+  },
+  "errors": []
+}

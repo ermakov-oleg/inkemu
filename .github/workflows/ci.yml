@@ -23,12 +23,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+      - run: scripts/vendor-lua.sh
       - uses: astral-sh/setup-uv@v10.4.0
-        with:
-          python-version: "3.11"
-      - run: uv sync --locked
-      - run: uv run --locked ruff check
-      - run: uv run --locked ruff format --check
+      - run: uvx ruff@0.17.6 check
+      - run: uvx ruff@0.17.6 format --check
 
   test:
     name: test (${{ matrix.os }}, py${{ matrix.python }})
@@ -41,6 +39,8 @@ jobs:
         python: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v7
+      - run: scripts/vendor-lua.sh
+      - uses: Swatinem/rust-cache@v2.8.1
       - uses: astral-sh/setup-uv@v10.4.0
         with:
           python-version: ${{ matrix.python }}
@@ -53,23 +53,89 @@ jobs:
         if: runner.os != 'Linux'
         run: uv run --locked pytest -rs
 
-  package:
+  rust:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+      - run: scripts/vendor-lua.sh
+      - uses: Swatinem/rust-cache@v2.8.1
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      # inkemu-py is a PyO3 cdylib linked without extension-module and has no tests
+      - run: cargo test --workspace --exclude inkemu-py
+
+  wasm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - run: scripts/vendor-lua.sh
+      - uses: Swatinem/rust-cache@v2.8.1
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 7.0.0
+      - run: rustup target add wasm32-unknown-emscripten
+      - name: build the Lua number-type check and the hello frame hash for wasm and run them under node
+        env:
+          RUSTFLAGS: -C link-arg=-sSUPPORT_LONGJMP=wasm -C link-arg=-sENVIRONMENT=node -C link-arg=-sALLOW_MEMORY_GROWTH=1
+        run: |
+          cargo build -p inkcore --example lua32_check --example hello_hash --target wasm32-unknown-emscripten --release
+          node target/wasm32-unknown-emscripten/release/examples/lua32_check.js | grep -qx ok
+          node target/wasm32-unknown-emscripten/release/examples/hello_hash.js > "$RUNNER_TEMP/wasm-hash.txt"
+      - name: the wasm frame hash equals the native one
+        run: |
+          cargo run -q -p inkcore --example hello_hash > "$RUNNER_TEMP/native-hash.txt"
+          cd "$RUNNER_TEMP" && echo "native $(cat native-hash.txt), wasm $(cat wasm-hash.txt)"
+          test -s native-hash.txt && cmp native-hash.txt wasm-hash.txt
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - run: scripts/vendor-lua.sh
+      - uses: Swatinem/rust-cache@v2.8.1
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 7.0.0
+      - run: rustup target add wasm32-unknown-emscripten
+      - run: scripts/build-web.sh
+      - run: cargo clippy -p inkcore-wasm --target wasm32-unknown-emscripten -- -D warnings
+      - name: gzip size of the core module
+        run: for f in web/core/*; do echo "$f $(gzip -9c "$f" | wc -c)"; done
+      # after emsdk, so this node runs the tests
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: "22"
+      - run: node --version
+      - run: node --test 'web/tests/**/*.test.mjs'
+
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - run: scripts/vendor-lua.sh
+      - uses: Swatinem/rust-cache@v2.8.1
       - uses: astral-sh/setup-uv@v10.4.0
         with:
           python-version: "3.11"
-      - run: uv build
-      - run: uvx twine check --strict dist/*
+      - run: uvx maturin build --release
+      - run: uvx maturin sdist
+      - run: uvx twine check --strict target/wheels/*
       - name: install the wheel into a clean venv and smoke-test it
         run: |
           cp -r examples/hello "$RUNNER_TEMP/hello"
           uv venv "$RUNNER_TEMP/venv"
-          uv pip install --python "$RUNNER_TEMP/venv/bin/python" dist/*.whl
+          uv pip install --python "$RUNNER_TEMP/venv/bin/python" target/wheels/*.whl
           cd "$RUNNER_TEMP"
           venv/bin/inkemu --help
-          venv/bin/python -c "import inkemu.mcp_server, inkemu.window"
+          venv/bin/python -c "import inkemu.mcp_server, inkemu.window, inkemu._core"
           venv/bin/inkemu run hello --fresh --out run --steps "tap-text 'Tap me'; texts" | tee out.txt
           grep -q "Taps: 1" out.txt
+      - name: build and import the sdist in another clean venv
+        run: |
+          uv venv "$RUNNER_TEMP/venv-sdist"
+          uv pip install --python "$RUNNER_TEMP/venv-sdist/bin/python" target/wheels/*.tar.gz
+          "$RUNNER_TEMP/venv-sdist/bin/python" -c "import inkemu._core"

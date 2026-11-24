@@ -1,0 +1,20 @@
+{
+  "spec": "§16",
+  "about": "a page shaped like the Today app's setup screen (back region and title, a small label wrapped by the library with h = fit, one broken into lines by the app, a large tabular centred code, a spacer): boxes from the font's layout and line heights, the label text boxes the frame draws, and the arrows doing nothing with one focusable control (probe-confirmed)",
+  "manifest": {"api": "2.26"},
+  "files": {"layout_box.lua": "layout_box.util.lua", "canvas_log.lua": "canvas_log.util.lua"},
+  "expect": {
+    "body_wraps": {"value": true, "spec": "§7"},
+    "body": {"value": true, "spec": "§16"},
+    "lines": {"value": true, "spec": "§16"},
+    "code": {"value": true, "spec": "§16"},
+    "spacer_takes_the_rest": {"value": true, "spec": "§16"},
+    "body_box": {"value": true, "spec": "§16"},
+    "code_box": {"value": true, "spec": "§16"},
+    "first_focus": {"value": "back", "spec": "§16"},
+    "down": {"value": "nil nil", "spec": "§16"},
+    "up": {"value": "nil nil", "spec": "§16"},
+    "focus_kept": {"value": "back", "spec": "§16"}
+  },
+  "errors": []
+}

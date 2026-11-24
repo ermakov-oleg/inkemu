@@ -1,0 +1,19 @@
+{
+  "spec": "§16",
+  "about": "focus is kept by id across frames; an absent id or a label id moves focus to the first usable control; a disabled kept control hands focus to the available control with the nearest centre, ties to the one declared first; no available control means no focus, and the next frame with one takes the first (probe-confirmed); two UI objects do not share focus",
+  "expect": {
+    "new_object": {"value": null, "spec": "§16"},
+    "first_frame": {"value": "A", "spec": "§16"},
+    "kept": {"value": "B", "spec": "§16"},
+    "absent": {"value": "A", "spec": "§16"},
+    "disabled_tie": {"value": "A", "spec": "§16"},
+    "disabled_nearest": {"value": "C", "spec": "§16"},
+    "absent_skips_disabled": {"value": "C", "spec": "§16"},
+    "all_disabled": {"value": null, "spec": "§16"},
+    "after_empty": {"value": "C", "spec": "§16"},
+    "no_hittable": {"value": null, "spec": "§16"},
+    "label_id": {"value": "A", "spec": "§16"},
+    "objects": {"value": ["B", "A"], "spec": "§16"}
+  },
+  "errors": []
+}

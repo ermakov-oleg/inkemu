@@ -1,0 +1,17 @@
+{
+  "spec": "§12",
+  "about": "weekday counts from Sunday: Saturday is 6",
+  "start_time": "2026-11-21T10:30:15",
+  "expect": {
+    "weekday": {
+      "value": {
+        "ok": true,
+        "ret": [
+          6
+        ]
+      },
+      "spec": "§12"
+    }
+  },
+  "errors": []
+}

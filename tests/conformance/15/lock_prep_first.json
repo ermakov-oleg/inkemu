@@ -1,0 +1,36 @@
+{
+  "spec": "\u00a715",
+  "about": "in the first session of a networked lock screen on_draw runs twice: before the request finishes with the stored data, then with the fetched data",
+  "manifest": {
+    "permissions": [
+      "net"
+    ],
+    "lockscreen": {
+      "entry": "lockscreen.lua",
+      "interval_sec": 60,
+      "net": true
+    }
+  },
+  "files": {
+    "lockscreen.lua": "lock_fetch.lockscreen.lua"
+  },
+  "fixtures": [
+    {
+      "method": "GET",
+      "url": "https://x.test/lock",
+      "status": 200,
+      "body": "fresh"
+    }
+  ],
+  "steps": [
+    "lock",
+    "wait 1s"
+  ],
+  "expect": {
+    "draws": {
+      "value": "none,fresh",
+      "spec": "\u00a715"
+    }
+  },
+  "errors": []
+}

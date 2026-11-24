@@ -1,0 +1,19 @@
+{
+  "spec": "§12",
+  "about": "a non-string argument to a log method raises a Lua error",
+  "expect": {
+    "info_table_raises": {
+      "value": true,
+      "spec": "§12"
+    },
+    "warn_nil_raises": {
+      "value": true,
+      "spec": "§12"
+    },
+    "error_bool_raises": {
+      "value": true,
+      "spec": "§12"
+    }
+  },
+  "errors": []
+}

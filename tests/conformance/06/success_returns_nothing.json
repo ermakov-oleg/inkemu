@@ -1,0 +1,87 @@
+{
+  "spec": "§6",
+  "about": "a successful drawing call returns no values at all; g:size returns width and height",
+  "expect": {
+    "size": {
+      "value": {
+        "ok": true,
+        "ret": [
+          480,
+          800
+        ]
+      },
+      "spec": "§6"
+    },
+    "clear": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§6"
+    },
+    "line": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§6"
+    },
+    "rect": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§6"
+    },
+    "circle": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§6"
+    },
+    "arc": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§6"
+    },
+    "polyline": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§6"
+    },
+    "polygon": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§6"
+    },
+    "pattern": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§6"
+    },
+    "text": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§6"
+    },
+    "text_box": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§6"
+    }
+  },
+  "errors": []
+}

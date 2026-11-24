@@ -1,0 +1,10 @@
+{
+  "spec": "§16",
+  "about": "a package for 2.15 gets the container look with plain colours: one filled rect for a background or a divider, no halftone, which starts at 2.16 (probe-confirmed)",
+  "manifest": {"api": "2.15"},
+  "expect": {
+    "calls": {"value": true, "spec": "§16"}
+  },
+  "files": {"canvas_log.lua": "canvas_log.util.lua"},
+  "errors": []
+}

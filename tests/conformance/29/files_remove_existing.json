@@ -1,0 +1,25 @@
+{
+  "spec": "§29",
+  "about": "remove deletes an existing app file and returns true",
+  "expect": {
+    "remove_existing": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "exists_after": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    }
+  },
+  "errors": []
+}

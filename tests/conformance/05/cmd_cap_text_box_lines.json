@@ -1,0 +1,27 @@
+{
+  "spec": "\u00a75",
+  "about": "each line g:text_box draws is one command; a text_box that would pass the cap is refused whole, so the next command that fits is still the 1025th",
+  "expect": {
+    "box_three_lines": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "\u00a75"
+    },
+    "rect_1025": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "\u00a75"
+    }
+  },
+  "errors": []
+}

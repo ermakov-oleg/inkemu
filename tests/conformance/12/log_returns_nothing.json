@@ -1,0 +1,28 @@
+{
+  "spec": "§12",
+  "about": "the log methods take a string and return nothing",
+  "expect": {
+    "info": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§12"
+    },
+    "warn": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§12"
+    },
+    "error": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "§12"
+    }
+  },
+  "errors": []
+}

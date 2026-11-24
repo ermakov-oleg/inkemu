@@ -1,0 +1,22 @@
+{
+  "spec": "§14",
+  "about": "a URL of 1025 bytes is limit_exceeded",
+  "manifest": {
+    "permissions": [
+      "net"
+    ]
+  },
+  "expect": {
+    "long1025": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§14"
+    }
+  },
+  "errors": []
+}

@@ -1,0 +1,34 @@
+{
+  "spec": "§29",
+  "about": "the per-call limit does not cap the file: two 262144-byte calls make a 524288-byte file",
+  "expect": {
+    "write": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "append": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "size": {
+      "value": {
+        "ok": true,
+        "ret": [
+          524288
+        ]
+      },
+      "spec": "§29"
+    }
+  },
+  "errors": []
+}

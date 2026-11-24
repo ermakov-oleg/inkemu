@@ -1,0 +1,61 @@
+{
+  "spec": "§14",
+  "about": "GET and POST are accepted and a fixture reaches the callback",
+  "manifest": {
+    "permissions": [
+      "net"
+    ]
+  },
+  "fixtures": [
+    {
+      "method": "GET",
+      "url": "https://m.test/GET",
+      "status": 200,
+      "body": "ok",
+      "headers": {
+        "X-Method": "GET"
+      },
+      "delay_ms": 10
+    },
+    {
+      "method": "POST",
+      "url": "https://m.test/POST",
+      "status": 200,
+      "body": "ok",
+      "headers": {
+        "X-Method": "POST"
+      },
+      "delay_ms": 10
+    }
+  ],
+  "steps": [
+    "wait 5s"
+  ],
+  "expect": {
+    "started_GET": {
+      "value": true,
+      "spec": "§14"
+    },
+    "status_GET": {
+      "value": 200,
+      "spec": "§14"
+    },
+    "header_GET": {
+      "value": "GET",
+      "spec": "§14"
+    },
+    "started_POST": {
+      "value": true,
+      "spec": "§14"
+    },
+    "status_POST": {
+      "value": 200,
+      "spec": "§14"
+    },
+    "header_POST": {
+      "value": "POST",
+      "spec": "§14"
+    }
+  },
+  "errors": []
+}

@@ -1,0 +1,28 @@
+{
+  "spec": "\u00a76",
+  "about": "an image src region of four integers inside the image works in named and positional (2.33) form",
+  "expect": {
+    "src_named_ok": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "\u00a76"
+    },
+    "src_positional_ok": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "\u00a76"
+    },
+    "src_edge_ok": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "\u00a76"
+    }
+  },
+  "errors": []
+}

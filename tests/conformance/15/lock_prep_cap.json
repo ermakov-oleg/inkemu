@@ -1,0 +1,37 @@
+{
+  "spec": "\u00a715",
+  "about": "the preparation phase ends 28 s into the session: a request that would take 29 s is cancelled and on_draw shows no data",
+  "manifest": {
+    "permissions": [
+      "net"
+    ],
+    "lockscreen": {
+      "entry": "lockscreen.lua",
+      "interval_sec": 60,
+      "net": true
+    }
+  },
+  "files": {
+    "lockscreen.lua": "lock_fetch.lockscreen.lua"
+  },
+  "fixtures": [
+    {
+      "method": "GET",
+      "url": "https://x.test/lock",
+      "status": 200,
+      "body": "fresh",
+      "delay_ms": 29000
+    }
+  ],
+  "steps": [
+    "lock",
+    "wait 91s"
+  ],
+  "expect": {
+    "draws": {
+      "value": "none",
+      "spec": "\u00a715"
+    }
+  },
+  "errors": []
+}

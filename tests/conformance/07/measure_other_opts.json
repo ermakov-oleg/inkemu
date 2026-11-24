@@ -1,0 +1,43 @@
+{
+  "spec": "\u00a77",
+  "about": "empty bold text stays 0, bold = false and an empty opts table change nothing, italic/underline/strike change no width",
+  "expect": {
+    "bold_empty": {
+      "value": {
+        "ok": true,
+        "ret": [
+          0
+        ]
+      },
+      "spec": "\u00a77"
+    },
+    "bold_false": {
+      "value": {
+        "ok": true,
+        "ret": [
+          0
+        ]
+      },
+      "spec": "\u00a77"
+    },
+    "plain_opts": {
+      "value": {
+        "ok": true,
+        "ret": [
+          0
+        ]
+      },
+      "spec": "\u00a77"
+    },
+    "italic_ignored": {
+      "value": {
+        "ok": true,
+        "ret": [
+          0
+        ]
+      },
+      "spec": "\u00a77"
+    }
+  },
+  "errors": []
+}

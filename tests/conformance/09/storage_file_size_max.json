@@ -1,0 +1,25 @@
+{
+  "spec": "§9",
+  "about": "a file of exactly 262144 bytes is stored",
+  "expect": {
+    "write_max": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§9"
+    },
+    "size_max": {
+      "value": {
+        "ok": true,
+        "ret": [
+          262144
+        ]
+      },
+      "spec": "§9"
+    }
+  },
+  "errors": []
+}

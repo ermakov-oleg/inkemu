@@ -1,0 +1,23 @@
+{
+  "spec": "\u00a77",
+  "about": "every font object, system or sized, has a layout method",
+  "expect": {
+    "small.layout": {
+      "value": "function",
+      "spec": "\u00a77"
+    },
+    "medium.layout": {
+      "value": "function",
+      "spec": "\u00a77"
+    },
+    "large.layout": {
+      "value": "function",
+      "spec": "\u00a77"
+    },
+    "sized.layout": {
+      "value": "function",
+      "spec": "\u00a77"
+    }
+  },
+  "errors": []
+}

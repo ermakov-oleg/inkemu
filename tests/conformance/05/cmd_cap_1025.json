@@ -1,0 +1,39 @@
+{
+  "spec": "§5",
+  "about": "command 1025 returns nil, limit_exceeded and is not drawn; the first 1024 stay",
+  "expect": {
+    "cmd_1025": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§5"
+    },
+    "cmd_1026": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§5"
+    }
+  },
+  "pixels": [
+    [
+      15,
+      15,
+      1
+    ],
+    [
+      110,
+      110,
+      0
+    ]
+  ],
+  "errors": []
+}

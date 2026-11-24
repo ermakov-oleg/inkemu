@@ -1,0 +1,52 @@
+{
+  "spec": "§14",
+  "about": "a 2xx answer with save to storage replaces the whole file: saved = true, empty body, bytes counted",
+  "manifest": {
+    "permissions": [
+      "net"
+    ]
+  },
+  "fixtures": [
+    {
+      "method": "GET",
+      "url": "https://s.test/ok",
+      "status": 200,
+      "body": "hello",
+      "delay_ms": 10
+    }
+  ],
+  "steps": [
+    "wait 3s"
+  ],
+  "expect": {
+    "ok": {
+      "value": true,
+      "spec": "§14"
+    },
+    "status": {
+      "value": 200,
+      "spec": "§14"
+    },
+    "saved": {
+      "value": true,
+      "spec": "§14"
+    },
+    "body": {
+      "value": "",
+      "spec": "§14"
+    },
+    "bytes": {
+      "value": 5,
+      "spec": "§14"
+    },
+    "err": {
+      "value": "nil",
+      "spec": "§14"
+    },
+    "file": {
+      "value": "hello",
+      "spec": "§14"
+    }
+  },
+  "errors": []
+}

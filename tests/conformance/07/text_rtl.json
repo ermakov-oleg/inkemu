@@ -1,0 +1,37 @@
+{
+  "spec": "\u00a77",
+  "about": "a string with a right-to-left character is invalid_argument for text and text_box",
+  "expect": {
+    "hebrew_text": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a77"
+    },
+    "arabic_text": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a77"
+    },
+    "hebrew_box": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a77"
+    }
+  },
+  "errors": []
+}

@@ -1,0 +1,34 @@
+{
+  "spec": "\u00a715",
+  "about": "net_interval_sec below 30 is limited to 30: a wake 10 s after the first session (locked at 09:00:50) has lock.net false and no ctx.net",
+  "manifest": {
+    "permissions": [
+      "net"
+    ],
+    "lockscreen": {
+      "entry": "lockscreen.lua",
+      "interval_sec": 60,
+      "net": true,
+      "net_interval_sec": 10
+    }
+  },
+  "files": {
+    "lockscreen.lua": "lock_net.lockscreen.lua"
+  },
+  "start_time": "2026-11-20T09:00:50",
+  "steps": [
+    "lock",
+    "wait 11s"
+  ],
+  "expect": {
+    "lock_net": {
+      "value": false,
+      "spec": "\u00a715"
+    },
+    "has_net": {
+      "value": false,
+      "spec": "\u00a715"
+    }
+  },
+  "errors": []
+}

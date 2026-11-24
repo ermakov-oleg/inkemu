@@ -1,0 +1,21 @@
+{
+  "spec": "\u00a75",
+  "about": "a text_box that would pass the cap is refused whole and does not count: the two rectangles after it still fit",
+  "expect": {
+    "rect_1023": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "\u00a75"
+    },
+    "rect_1024": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "\u00a75"
+    }
+  },
+  "errors": []
+}

@@ -1,0 +1,37 @@
+{
+  "spec": "\u00a76",
+  "about": "two points, no points and an odd-length array are invalid_argument for a polygon",
+  "expect": {
+    "two_points": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a76"
+    },
+    "empty": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a76"
+    },
+    "odd_array": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a76"
+    }
+  },
+  "errors": []
+}

@@ -1,0 +1,27 @@
+{
+  "spec": "§7",
+  "about": "font:layout takes up to 65536 bytes per call; one more is limit_exceeded",
+  "expect": {
+    "layout_65536": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "number",
+          "number"
+        ]
+      },
+      "spec": "§7"
+    },
+    "layout_65537": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§7"
+    }
+  },
+  "errors": []
+}

@@ -1,0 +1,25 @@
+{
+  "spec": "\u00a725",
+  "about": "an unknown action name is invalid_argument; a non-string argument raises a Lua error",
+  "expect": {
+    "unknown": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a725"
+    },
+    "number_raises": {
+      "value": true,
+      "spec": "\u00a725"
+    },
+    "nil_raises": {
+      "value": true,
+      "spec": "\u00a725"
+    }
+  },
+  "errors": []
+}

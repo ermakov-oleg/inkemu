@@ -1,0 +1,67 @@
+{
+  "spec": "\u00a76",
+  "about": "an image src region outside the image, with a negative origin, an empty size or fractions is invalid_argument, in named and positional (2.33) form",
+  "expect": {
+    "src_too_big": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a76"
+    },
+    "src_overhang": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a76"
+    },
+    "src_negative_x": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a76"
+    },
+    "src_zero_w": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a76"
+    },
+    "src_fraction": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a76"
+    },
+    "src_positional_bad": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a76"
+    }
+  },
+  "errors": []
+}

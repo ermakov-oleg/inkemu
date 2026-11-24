@@ -1,0 +1,30 @@
+{
+  "spec": "§16",
+  "about": "ui:focus returns nothing and takes effect at once, also inside a frame: focused returns the id, ok presses and activates it, an arrow from an id the last frame lacks goes to the first control; end_frame then checks it like any kept focus; an empty id is invalid_argument and a non-string id raises; a part must be a positive whole number, shows in focused until end_frame and is dropped on a plain control (probe-confirmed)",
+  "expect": {
+    "focus": {"value": {"ok": true, "ret": []}, "spec": "§16"},
+    "focused_at_once": {"value": {"ok": true, "ret": ["C"]}, "spec": "§16"},
+    "ok_down": {"value": {"ok": true, "ret": ["C", "press"]}, "spec": "§16"},
+    "ok_up": {"value": {"ok": true, "ret": ["C", "activate"]}, "spec": "§16"},
+    "arrow_from_kept": {"value": {"ok": true, "ret": ["B", "focus"]}, "spec": "§16"},
+    "unknown_until_end_frame": {"value": {"ok": true, "ret": ["ghost"]}, "spec": "§16"},
+    "ok_on_unknown": {"value": {"ok": true, "ret": ["ghost", "press"]}, "spec": "§16"},
+    "arrow_from_unknown": {"value": {"ok": true, "ret": ["A", "focus"]}, "spec": "§16"},
+    "unknown_at_end_frame": {"value": {"ok": true, "ret": ["A"]}, "spec": "§16"},
+    "inside_a_frame": {"value": {"ok": true, "ret": ["B"]}, "spec": "§16"},
+    "empty_id": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "number_id_raises": {"value": true, "spec": "§16"},
+    "nil_id_raises": {"value": true, "spec": "§16"},
+    "no_id_raises": {"value": true, "spec": "§16"},
+    "part_zero": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "part_negative": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "part_fraction": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "part_string": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "after_refusals": {"value": {"ok": true, "ret": ["B"]}, "spec": "§16"},
+    "part_whole_float": {"value": {"ok": true, "ret": []}, "spec": "§16"},
+    "part_kept": {"value": {"ok": true, "ret": ["B", 2]}, "spec": "§16"},
+    "part_is_integer": {"value": "integer", "spec": "§16"},
+    "part_dropped_on_a_plain_control": {"value": {"ok": true, "ret": ["B"]}, "spec": "§16"}
+  },
+  "errors": []
+}

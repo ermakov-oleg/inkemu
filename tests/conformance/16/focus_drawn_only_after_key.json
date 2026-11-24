@@ -1,0 +1,20 @@
+{
+  "spec": "§16",
+  "about": "on a touch device focus is drawn only after a key event reaches handle_event, even one that gives nil, nil, and stops after any pointer event while focus itself is kept; ui:focus does not change it (probe-confirmed); the keyless records simulate a device with no touch input by setting ctx.input.pointer = false around create, a lever that only inkemu has (its library reads the field at create): such an object draws focus from its first frame, and a pointer event turns that off too",
+  "files": {"canvas_log.lua": "canvas_log.util.lua"},
+  "expect": {
+    "touch": {"value": true, "spec": "§4"},
+    "fresh": {"value": false, "spec": "§16"},
+    "after_key_up": {"value": true, "spec": "§16"},
+    "after_pointer": {"value": false, "spec": "§16"},
+    "focus_kept": {"value": "a", "spec": "§16"},
+    "after_unknown_key": {"value": true, "spec": "§16"},
+    "after_swipe": {"value": false, "spec": "§16"},
+    "focus_call_keeps_it_on": {"value": true, "spec": "§16"},
+    "focus_call_keeps_it_off": {"value": false, "spec": "§16"},
+    "keyless.fresh": {"value": true, "spec": "§16"},
+    "keyless.after_pointer": {"value": false, "deviation": "D8", "spec_value": true}
+  },
+  "pixels": [[25, 25, 1], [265, 25, 0]],
+  "errors": []
+}

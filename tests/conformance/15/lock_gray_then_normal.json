@@ -1,0 +1,29 @@
+{
+  "spec": "\u00a715",
+  "about": "a gray frame in the first lock session is presented as gray, and the next normal frame (the timer wake) as a full refresh",
+  "manifest": {
+    "lockscreen": {
+      "entry": "lockscreen.lua",
+      "interval_sec": 60
+    }
+  },
+  "files": {
+    "lockscreen.lua": "lock_gray.lockscreen.lua"
+  },
+  "steps": [
+    "lock",
+    "wait 61s",
+    "observe s"
+  ],
+  "expect": {
+    "s.refreshes": {
+      "value": [
+        "full",
+        "gray",
+        "full"
+      ],
+      "spec": "\u00a715"
+    }
+  },
+  "errors": []
+}

@@ -1,0 +1,28 @@
+{
+  "spec": "\u00a715",
+  "about": "a timer wake reports reason timer and the seconds since the previous present",
+  "manifest": {
+    "lockscreen": {
+      "entry": "lockscreen.lua",
+      "interval_sec": 60
+    }
+  },
+  "files": {
+    "lockscreen.lua": "lock_reason.lockscreen.lua"
+  },
+  "steps": [
+    "lock",
+    "wait 61s"
+  ],
+  "expect": {
+    "reason": {
+      "value": "timer",
+      "spec": "\u00a715"
+    },
+    "elapsed": {
+      "value": 60,
+      "spec": "\u00a715"
+    }
+  },
+  "errors": []
+}

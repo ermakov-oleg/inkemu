@@ -1,0 +1,11 @@
+{
+  "spec": "§12",
+  "about": "revision is 1 at the start of the session",
+  "expect": {
+    "revision": {
+      "value": 1,
+      "spec": "§12"
+    }
+  },
+  "errors": []
+}

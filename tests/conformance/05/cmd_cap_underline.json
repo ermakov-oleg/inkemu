@@ -1,0 +1,17 @@
+{
+  "spec": "\u00a75",
+  "about": "a 2.28 underline is one more command, so text with an underline takes two slots and the next command is the 1025th",
+  "expect": {
+    "rect_after": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "\u00a75"
+    }
+  },
+  "errors": []
+}

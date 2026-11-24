@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = ["crates/inkcore", "crates/inkcore-wasm", "crates/inkemu", "crates/inkemu-py"]
+
+[workspace.package]
+version = "0.2.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+# Lua with 32-bit numbers: run scripts/vendor-lua.sh to create vendor/
+[patch.crates-io]
+mlua = { path = "vendor/mlua" }
+mlua-sys = { path = "vendor/mlua-sys" }
+lua-src = { path = "vendor/lua-src" }

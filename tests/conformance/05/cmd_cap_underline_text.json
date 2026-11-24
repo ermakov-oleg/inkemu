@@ -1,0 +1,14 @@
+{
+  "spec": "\u00a75",
+  "about": "underlined text that fits in the last two slots of the frame returns nothing",
+  "expect": {
+    "underlined_text": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "\u00a75"
+    }
+  },
+  "errors": []
+}

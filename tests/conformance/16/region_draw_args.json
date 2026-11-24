@@ -1,0 +1,17 @@
+{
+  "spec": "§16",
+  "about": "a region's draw(g, r, st) runs at end_frame in declaration order with the frame canvas, a new {x, y, w, h} and {focused, selected, enabled}; draw may be omitted; an error in draw is raised by end_frame, which still closes the frame (probe-confirmed)",
+  "expect": {
+    "called_when_declared": {"value": 0, "spec": "§16"},
+    "no_draw": {"value": {"ok": true, "ret": []}, "spec": "§16"},
+    "order": {"value": "ab", "spec": "§16"},
+    "a.g_is_frame_canvas": {"value": true, "spec": "§16"},
+    "a.r": {"value": {"h": 40, "w": 30, "x": 10, "y": 20}, "spec": "§16"},
+    "a.r_is_new_table": {"value": true, "spec": "§16"},
+    "a.st": {"value": {"enabled": true, "focused": false, "selected": false}, "spec": "§16"},
+    "b.st": {"value": {"enabled": false, "focused": false, "selected": true}, "spec": "§16"},
+    "end_with_failing_draw": {"value": {"ok": false, "err": "draw failed"}, "spec": "§16"},
+    "begin_after_failing_draw": {"value": {"ok": true, "ret": []}, "spec": "§16"}
+  },
+  "errors": []
+}

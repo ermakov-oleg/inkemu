@@ -1,0 +1,43 @@
+{
+  "spec": "§26",
+  "about": "url:encode escapes every byte outside the unreserved set, decode only handles %XX and keeps +",
+  "expect": {
+    "encode_reserved": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "%20%21%23%24%25%26%28"
+        ]
+      },
+      "spec": "§26"
+    },
+    "encode_unreserved": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "AZaz09-._~"
+        ]
+      },
+      "spec": "§26"
+    },
+    "encode_utf8": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "C%D1%85"
+        ]
+      },
+      "spec": "§26"
+    },
+    "decode": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "a b+cA"
+        ]
+      },
+      "spec": "§26"
+    }
+  },
+  "errors": []
+}

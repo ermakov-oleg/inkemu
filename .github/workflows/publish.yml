@@ -10,11 +10,12 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  sdist:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+      - run: scripts/vendor-lua.sh
       - uses: astral-sh/setup-uv@v10.4.0
         with:
           python-version: "3.11"
@@ -26,7 +27,53 @@ jobs:
             echo "::error::tag $GITHUB_REF_NAME does not match pyproject version $version"
             exit 1
           fi
-      - run: uv build
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-sdist
+          path: dist/
+          if-no-files-found: error
+
+  wheels:
+    name: wheel (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: macos-arm64, os: macos-latest, target: aarch64-apple-darwin}
+          - {name: macos-x86_64, os: macos-latest, target: x86_64-apple-darwin}
+          - {name: manylinux-x86_64, os: ubuntu-latest, target: x86_64-unknown-linux-gnu}
+          - {name: manylinux-aarch64, os: ubuntu-latest, target: aarch64-unknown-linux-gnu}
+    steps:
+      - uses: actions/checkout@v7
+      - run: scripts/vendor-lua.sh
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: auto
+          args: --release --out dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-wheel-${{ matrix.name }}
+          path: dist/
+          if-no-files-found: error
+
+  check:
+    needs: [sdist, wheels]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: dist/
+      - uses: astral-sh/setup-uv@v10.4.0
       - run: uvx twine check --strict dist/*
       - uses: actions/upload-artifact@v7
         with:
@@ -36,7 +83,7 @@ jobs:
 
   pypi:
     if: github.event_name == 'push' && github.ref_type == 'tag'
-    needs: build
+    needs: check
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -52,7 +99,7 @@ jobs:
 
   testpypi:
     if: github.event_name == 'workflow_dispatch'
-    needs: build
+    needs: check
     runs-on: ubuntu-latest
     environment:
       name: testpypi

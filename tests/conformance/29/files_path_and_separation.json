@@ -1,0 +1,29 @@
+{
+  "spec": "§29",
+  "about": "ctx.files.path names the app folder and app files are separate from private storage",
+  "expect": {
+    "path": {
+      "value": "/AppFiles/conformance",
+      "spec": "§29"
+    },
+    "storage_sees": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    },
+    "files_sees": {
+      "value": {
+        "ok": true,
+        "ret": [
+          false
+        ]
+      },
+      "spec": "§29"
+    }
+  },
+  "errors": []
+}

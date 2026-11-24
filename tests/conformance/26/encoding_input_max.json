@@ -1,0 +1,34 @@
+{
+  "spec": "§26",
+  "about": "encoders accept exactly 1048576 bytes of input",
+  "expect": {
+    "hex": {
+      "value": {
+        "ok": true,
+        "ret": [
+          2097152
+        ]
+      },
+      "spec": "§26"
+    },
+    "base64": {
+      "value": {
+        "ok": true,
+        "ret": [
+          1398104
+        ]
+      },
+      "spec": "§26"
+    },
+    "url": {
+      "value": {
+        "ok": true,
+        "ret": [
+          1048576
+        ]
+      },
+      "spec": "§26"
+    }
+  },
+  "errors": []
+}

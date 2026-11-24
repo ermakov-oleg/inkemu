@@ -1,0 +1,22 @@
+{
+  "spec": "§12",
+  "about": "millis is an integer in 0..2147483647 that advances with time",
+  "steps": [
+    "wait 3s"
+  ],
+  "expect": {
+    "type": {
+      "value": "integer",
+      "spec": "§12"
+    },
+    "in_range": {
+      "value": true,
+      "spec": "§12"
+    },
+    "elapsed_at_least_2000": {
+      "value": true,
+      "spec": "§12"
+    }
+  },
+  "errors": []
+}

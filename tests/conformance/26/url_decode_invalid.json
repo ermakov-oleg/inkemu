@@ -1,0 +1,27 @@
+{
+  "spec": "§26",
+  "about": "url:decode of a malformed %XX escape is invalid_argument",
+  "expect": {
+    "bad_hex": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§26"
+    },
+    "truncated": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "§26"
+    }
+  },
+  "errors": []
+}

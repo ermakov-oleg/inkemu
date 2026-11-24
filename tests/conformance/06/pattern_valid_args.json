@@ -1,0 +1,35 @@
+{
+  "spec": "\u00a76",
+  "about": "valid pattern forms, with defaults for kind and density, return nothing",
+  "expect": {
+    "dot_50": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "\u00a76"
+    },
+    "line_default": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "\u00a76"
+    },
+    "cross_default": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "\u00a76"
+    },
+    "defaults": {
+      "value": {
+        "ok": true,
+        "ret": []
+      },
+      "spec": "\u00a76"
+    }
+  },
+  "errors": []
+}

@@ -1,0 +1,45 @@
+{
+  "spec": "§6",
+  "about": "a released image or layer used as a g:image source returns nil, invalid_handle (release itself returns true, repeatedly)",
+  "expect": {
+    "release": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§6"
+    },
+    "release_again": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§6"
+    },
+    "draw_released": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_handle"
+        ]
+      },
+      "spec": "§6"
+    },
+    "image_released": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_handle"
+        ]
+      },
+      "spec": "§6"
+    }
+  },
+  "errors": []
+}

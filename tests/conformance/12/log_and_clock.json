@@ -1,0 +1,19 @@
+{
+  "spec": "§12",
+  "about": "ctx.log is a table of three levels; clock:now() has integer weekday and revision, the 2.5 date fields and no os.date leftovers",
+  "start_time": "2026-11-20T09:00:00",
+  "expect": {
+    "log": {"value": "table", "spec": "§12"},
+    "log.info": {"value": "function", "spec": "§12"},
+    "log.warn": {"value": "function", "spec": "§12"},
+    "log.error": {"value": "function", "spec": "§12"},
+    "now.weekday": {"value": "integer", "spec": "§12"},
+    "now.revision": {"value": "integer", "spec": "§12"},
+    "now.offset_minutes": {"value": "integer", "spec": "§12"},
+    "now.date_order_known": {"value": true, "spec": "§12"},
+    "now.date_sep_known": {"value": true, "spec": "§12"},
+    "now.wday": {"value": "nil", "spec": "§12"},
+    "now.yday": {"value": "nil", "spec": "§12"}
+  },
+  "errors": []
+}

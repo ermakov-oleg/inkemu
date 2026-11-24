@@ -12,14 +12,12 @@ function on_draw(ctx, g) g:clear() g:text(10, 10, 'Taps: ' .. #ctx.state.ev) end
 
 
 def events(emu):
-    out = emu.L.eval(
-        "function() local t = {} for i, v in ipairs(ctx.state.ev) do t[i] = v end return table.concat(t, '|') end"
-    )()
+    out = emu.lua_eval("local t = {} for i, v in ipairs(ctx.state.ev) do t[i] = v end return table.concat(t, '|')")
     return out.split("|") if out else []
 
 
 def last(emu, field):
-    return emu.L.eval("function(f) return ctx.state.last[f] end")(field)
+    return emu.lua_eval("return ctx.state.last." + field)
 
 
 @pytest.fixture
@@ -153,17 +151,17 @@ end
 def test_tap_text_picks_last_drawn(make_app, emu_factory):
     emu = emu_factory(make_app(PICK))
     emu.tap_text("Go")
-    y = emu.L.eval("function() return ctx.state.y end")()
+    y = emu.lua_eval("return ctx.state.y")
     assert 590 < y < 640
 
 
 def test_tap_text_exact_beats_substring(make_app, emu_factory):
     emu = emu_factory(make_app(PICK))
     emu.tap_text("Go on")
-    assert emu.L.eval("function() return ctx.state.y end")() < 340
+    assert emu.lua_eval("return ctx.state.y") < 340
 
 
 def test_tap_text_substring_fallback(make_app, emu_factory):
     emu = emu_factory(make_app(PICK))
     emu.tap_text("again")
-    assert emu.L.eval("function() return ctx.state.y end")() > 690
+    assert emu.lua_eval("return ctx.state.y") > 690

@@ -1,0 +1,17 @@
+{
+  "spec": "§9",
+  "about": "storage:usage() reports file count, byte total and the quota, and counts a fresh write",
+  "expect": {
+    "before": {"value": "table", "spec": "§9"},
+    "before.files": {"value": 0, "spec": "§9"},
+    "before.bytes": {"value": 0, "spec": "§9"},
+    "before.max_files": {"value": 512, "spec": "§9"},
+    "before.max_bytes": {"value": 134217728, "spec": "§9"},
+    "write": {"value": {"ok": true, "ret": [true]}, "spec": "§9"},
+    "after.files": {"value": 1, "spec": "§9"},
+    "after.bytes": {"value": 5, "spec": "§9"},
+    "after.max_files": {"value": 512, "spec": "§9"},
+    "after.max_bytes": {"value": 134217728, "spec": "§9"}
+  },
+  "errors": []
+}

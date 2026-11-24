@@ -1,0 +1,73 @@
+{
+  "spec": "§7",
+  "about": "layout returns three integers: lines, block height n*line_height + (n-1)*line_gap, and bytes consumed including a trailing newline",
+  "expect": {
+    "types": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "integer",
+          "integer",
+          "integer"
+        ]
+      },
+      "spec": "§7"
+    },
+    "three_lines": {
+      "value": {
+        "ok": true,
+        "ret": [
+          3,
+          0,
+          5
+        ]
+      },
+      "spec": "§7"
+    },
+    "line_gap": {
+      "value": {
+        "ok": true,
+        "ret": [
+          3,
+          0,
+          5
+        ]
+      },
+      "spec": "§7"
+    },
+    "clip_two_lines": {
+      "value": {
+        "ok": true,
+        "ret": [
+          2,
+          0,
+          4
+        ]
+      },
+      "spec": "§7"
+    },
+    "nothing_fits": {
+      "value": {
+        "ok": true,
+        "ret": [
+          0,
+          0,
+          0
+        ]
+      },
+      "spec": "§7"
+    },
+    "visible_ignores_height": {
+      "value": {
+        "ok": true,
+        "ret": [
+          3,
+          0,
+          5
+        ]
+      },
+      "spec": "§7"
+    }
+  },
+  "errors": []
+}

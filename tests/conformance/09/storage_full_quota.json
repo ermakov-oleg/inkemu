@@ -1,0 +1,41 @@
+{
+  "spec": "§9",
+  "about": "512 full-size files make exactly the 128 MB total and all fit; rewriting inside the quota still works",
+  "expect": {
+    "failed": {
+      "value": 0,
+      "spec": "§9"
+    },
+    "usage_bytes": {
+      "value": 134217728,
+      "spec": "§9"
+    },
+    "usage_max_bytes": {
+      "value": 134217728,
+      "spec": "§9"
+    },
+    "overwrite_full": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§9"
+    },
+    "overwrite_smaller": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§9"
+    },
+    "usage_after": {
+      "value": 133955585,
+      "spec": "§9"
+    }
+  },
+  "errors": []
+}

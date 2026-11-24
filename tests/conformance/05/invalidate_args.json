@@ -1,0 +1,27 @@
+{
+  "spec": "\u00a75",
+  "about": "invalidate takes nothing or \"full\"; any other argument is invalid_argument",
+  "expect": {
+    "bogus": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a75"
+    },
+    "number": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "invalid_argument"
+        ]
+      },
+      "spec": "\u00a75"
+    }
+  },
+  "errors": []
+}

@@ -1,0 +1,15 @@
+{
+  "spec": "§16",
+  "about": "radio cells split the box by the cumulative cell formula in both directions (columns left to right, then rows), with the same gap both ways; each cell draws a 2 px ring of diameter min(cell height, 32) on its left, a filled dot 10 px smaller for the value item, then its text 8 px after the ring, left-aligned by default; a disabled radio is covered with dots after (cell boxes probe-confirmed)",
+  "expect": {
+    "gap_0": {"value": true, "spec": "§16"},
+    "gap_8": {"value": true, "spec": "§16"},
+    "columns_2": {"value": true, "spec": "§16"},
+    "tall_no_value": {"value": true, "spec": "§16"},
+    "align_font_bold": {"value": true, "spec": "§16"},
+    "disabled": {"value": true, "spec": "§16"}
+  },
+  "files": {"canvas_log.lua": "canvas_log.util.lua"},
+  "pixels": [[36, 160, 1], [36, 120, 0], [36, 200, 0]],
+  "errors": []
+}

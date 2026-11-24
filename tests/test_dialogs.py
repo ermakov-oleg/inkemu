@@ -17,7 +17,7 @@ def words(emu) -> list[str]:
 
 def test_pending_confirm_is_drawn_and_listed(make_app, emu_factory):
     emu = emu_factory(make_app(CONFIRM))
-    plain = emu.canvas.render()
+    plain = emu.raw_frame()
     shot = emu.shot()
     assert shot.tobytes() != plain.tobytes()
     assert {"Delete?", "All notes go", "Yes", "No"} <= set(words(emu))
@@ -27,7 +27,7 @@ def test_pending_confirm_is_drawn_and_listed(make_app, emu_factory):
 
 def test_window_can_ask_for_the_frame_without_the_dialog(make_app, emu_factory):
     emu = emu_factory(make_app(CONFIRM))
-    assert emu.shot(dialog=False).tobytes() == emu.canvas.render().tobytes()
+    assert emu.shot(dialog=False).tobytes() == emu.raw_frame().tobytes()
 
 
 def test_input_does_not_reach_the_app_while_a_dialog_is_open(make_app, emu_factory):
@@ -75,7 +75,22 @@ def test_edit_dialog_cancel_button(make_app, emu_factory):
     )
     assert {"Note", "OK", "Cancel"} <= set(words(emu)) and "" not in words(emu)
     emu.tap_text("Cancel")
-    assert emu.has_text("ended cancel")
+    assert emu.has_text("ended back"), (
+        "API 2.33.1 contract §4 says otherwise: how is back, not cancel (H4, 16/field_edit)"
+    )
+
+
+def test_back_key_ends_edit(make_app, emu_factory):
+    emu = emu_factory(
+        make_app(
+            "ended = 'no'\nfunction on_load(c) c.input:edit({text='hi', "
+            "on_end=function(c, s, why) ended = s .. ':' .. why; c:invalidate() end}) end\n"
+            "function on_input(c, e) ended = 'app got ' .. e.key; c:invalidate() return false end\n"
+            "function on_draw(c, g) g:clear(0); g:text(0, 0, 'ended ' .. ended) end\n"
+        )
+    )
+    emu.key("back")
+    assert emu.pending is None and emu.has_text("ended hi:back")
 
 
 def test_leave_dialog_is_drawn(make_app, emu_factory):
@@ -85,6 +100,12 @@ def test_leave_dialog_is_drawn(make_app, emu_factory):
     emu.key("back")
     assert {"Leave app?", "Yes", "No"} <= set(words(emu))
     emu.tap_text("No")
+    assert emu.pending is None and emu.status()["running"]
+
+
+def test_any_table_from_on_input_handles_back(make_app, emu_factory):
+    emu = emu_factory(make_app("function on_input(c, ev) return {} end"))
+    emu.key("back")
     assert emu.pending is None and emu.status()["running"]
 
 

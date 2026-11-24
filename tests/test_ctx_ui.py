@@ -62,15 +62,18 @@ def test_input_edit_object(make_app, emu_factory):
         make_app(
             "function on_load(c)\n"
             "  ed = c.input:edit({text='x', on_change=function() end, on_end=function() end})\n"
-            "  ed:set_text('hello')\n  seen = ed.text\nend\n"
+            "  ed:set_text('hello')\n  seen = ed:text()\nend\n"
             "function on_draw(c, g) g:text(0, 0, seen) end\n"
         )
     )
     assert emu.pending["text"] == "hello" and emu.has_text("hello")
-    emu._call("on_load", emu._ctx)  # a second edit replaces the first
-    assert emu.pending["kind"] == "edit"
-    emu.L.execute("ed:close()")
-    assert emu.pending is None
+    assert emu.lua_eval("local a, b = ctx.input:edit({}) return {a == nil, b}") == [True, "busy"], (
+        "API 2.33.1 contract §4 says otherwise: a second edit is busy, it does not replace the first (H4, 16/field_edit)"
+    )
+    assert emu.lua_eval("return ed:close()") == "hello", (
+        "API 2.33.1 contract §4 says otherwise: close returns the final text (H4, 16/field_edit)"
+    )
+    assert emu.pending is None and emu.lua_eval("return ed:close()") is None
 
 
 def test_confirm_yes_no(make_app, emu_factory):
@@ -183,6 +186,31 @@ def test_png_decode_warns(make_app, emu_factory):
     assert any("PNG" in w for w in emu.warnings) and any("PNG" in line for line in emu.log)
 
 
+def test_scaled_image_matches_pillow(make_app, emu_factory):
+    src = Image.new("RGBA", (40, 30))
+    src.putdata([(x * 6, y * 8, (x * y) % 256, 255 - (x + y) * 3) for y in range(30) for x in range(40)])
+    buf = BytesIO()
+    src.save(buf, "PNG")
+    app = make_app(
+        "function on_load(c) img = c.image:decode(c.package:read('g.png')) end\n"
+        "function on_draw(c, g) g:image(img, 0, 0, {w=13, h=9}); g:image(img, 100, 0, {w=57, h=41});"
+        " g:image(img, 0, 100, {w=35, h=6}); g:image(img, 200, 0) end\n"
+    )
+    (app / "data").mkdir()
+    (app / "data" / "g.png").write_bytes(buf.getvalue())
+    frame = emu_factory(app).raw_frame()
+    flat = Image.alpha_composite(Image.new("RGBA", src.size, (255, 255, 255, 255)), src).convert("L")
+    for (x, y), size, how in [
+        ((0, 0), (13, 9), Image.LANCZOS),
+        ((100, 0), (57, 41), Image.NEAREST),
+        ((0, 100), (35, 6), Image.LANCZOS),
+        ((200, 0), (40, 30), None),
+    ]:
+        want = (flat if how is None else flat.resize(size, how)).convert("1")
+        got = frame.crop((x, y, x + size[0], y + size[1]))
+        assert got.tobytes() == want.tobytes(), (x, y)
+
+
 def test_decode_garbage(make_app, emu_factory):
     emu = emu_factory(
         make_app(
@@ -193,17 +221,17 @@ def test_decode_garbage(make_app, emu_factory):
     assert emu.has_text("nil decode_failed")
 
 
-@pytest.mark.allow_errors
-def test_released_image_draw_is_an_error(make_app, emu_factory):
+def test_released_image_draw_is_invalid_handle(make_app, emu_factory):
     app = make_app(
-        "function on_load(c) img = c.image:decode(c.package:read('b.jpg')); img:release() end\n"
-        "function on_draw(c, g) g:image(img, 0, 0) end\n"
+        "function on_load(c) img = c.image:decode(c.package:read('b.jpg')); released = img:release() end\n"
+        "function on_draw(c, g) r = {g:image(img, 0, 0)} end\n"
     )
     (app / "data").mkdir()
     (app / "data" / "b.jpg").write_bytes(jpeg_bytes())
     emu = emu_factory(app)
-    assert emu.errors and "released" in emu.errors[0]
-    assert not emu._images
+    assert emu.lua_eval("return {released, r[1] == nil, r[2]}") == [True, True, "invalid_handle"], (
+        "API 2.33.1 contract §6 says otherwise: a released image is nil, invalid_handle (06/image_released)"
+    )
 
 
 def test_qr_encode_draws(make_app, emu_factory):
@@ -267,14 +295,16 @@ def test_layer_accumulates_and_released(make_app, emu_factory):
     assert black(shot, 105, 105) and black(shot, 125, 105)
 
 
-@pytest.mark.allow_errors
-def test_released_layer_draw_is_an_error(make_app, emu_factory):
+def test_released_layer_draw_is_invalid_handle(make_app, emu_factory):
     emu = emu_factory(
         make_app(
-            "function on_load(c) layer = c.layers:create(10, 10); layer:release(); layer:draw(function(g) end) end\n"
+            "function on_load(c) layer = c.layers:create(10, 10); layer:release()\n"
+            "  r = {layer:draw(function(g) called = true end)} end\n"
         )
     )
-    assert emu.errors and "released" in emu.errors[0]
+    assert emu.lua_eval("return {r[1] == nil, r[2], called == nil}") == [True, "invalid_handle", True], (
+        "API 2.33.1 contract §11 says otherwise: draw after release is nil, invalid_handle (06/image_released)"
+    )
 
 
 @pytest.mark.allow_errors
@@ -299,10 +329,7 @@ def test_edit_close_inside_on_change_stops_feeding(make_app, emu_factory):
     assert emu.pending is None and emu.has_text("a,ab no")
 
 
-def test_no_ttf_font_warns_once(make_app, emu_factory, monkeypatch):
-    from inkemu import fonts
-
-    monkeypatch.setattr(fonts, "FONT_FILES", [])
+def test_no_font_warning_is_logged(make_app, emu_factory):
     emu = emu_factory(make_app("function on_draw(c, g) g:text(0, 0, 'Привет') end\n"))
     emu.reload()
-    assert len([w for w in emu.warnings if "no TrueType font" in w and "boxes" in w]) == 1
+    assert emu.has_text("Привет") and not [w for w in emu.warnings if "font" in w.lower()]

@@ -2,6 +2,8 @@ import json
 
 import pytest
 
+from inkemu import Emu
+
 DRAW_MSG = "msg = 'none'\nfunction on_draw(c, g) g:clear(0); g:text(0, 0, 'msg ' .. tostring(msg)) end\n"
 
 
@@ -50,9 +52,10 @@ def test_storage_missing_is_not_found(make_app, emu_factory):
         emu_factory,
         "local a, e = ctx.storage:read('nope')\nlocal b, e2 = ctx.storage:size('nope')\n"
         "local c3, e3 = ctx.storage:remove('nope')\n"
-        "msg = tostring(a) .. e .. tostring(b) .. e2 .. e3 .. tostring(ctx.storage:exists('nope'))",
+        "msg = tostring(a) .. e .. tostring(b) .. e2 .. tostring(c3) .. tostring(ctx.storage:exists('nope'))",
     )
-    assert emu.has_text("msg nilnot_foundnilnot_foundnot_foundfalse")
+    # API 2.33.1 §9 (09/storage_remove_missing): remove of an absent file is true
+    assert emu.has_text("msg nilnot_foundnilnot_foundtruefalse")
 
 
 def test_storage_list_usage_remove(make_app, emu_factory):
@@ -61,20 +64,42 @@ def test_storage_list_usage_remove(make_app, emu_factory):
         emu_factory,
         "ctx.storage:write('b.txt', 'xx'); ctx.storage:write('a.txt', 'yyy')\n"
         "local u = ctx.storage:usage()\nlocal l = ctx.storage:list()\n"
-        "ctx.files:remove('a.txt')\n"
-        "msg = table.concat(l, ',') .. ' ' .. u.max_files .. ' ' .. u.max_bytes .. ' ' .. u.used_files .. ' ' ..\n"
-        "  u.used_bytes .. ' ' .. tostring(ctx.storage:exists('a.txt')) .. #ctx.files:list()",
+        "ctx.storage:remove('a.txt')\n"
+        "msg = table.concat(l, ',') .. ' ' .. u.max_files .. ' ' .. u.max_bytes .. ' ' .. u.files .. ' ' ..\n"
+        "  u.bytes .. ' ' .. tostring(ctx.storage:exists('a.txt')) .. #ctx.storage:list()",
     )
-    assert emu.has_text("msg a.txt,b.txt 512 134217728 2 5 false1")
+    assert emu.has_text("msg a.txt,b.txt 512 134217728 2 5 false1"), (
+        "firmware 26112001 inventory: storage:usage() = {bytes, files, max_bytes=134217728, max_files=512}; "
+        "ctx.files is another directory than ctx.storage on 26112001 (verified in QEMU)"
+    )
 
 
-def test_files_path_and_shared_dir(make_app, emu_factory):
+def test_files_path_and_own_dir(make_app, emu_factory, tmp_path):
     emu = run(
         make_app,
         emu_factory,
-        "ctx.files:write('x.txt', 'shared')\nmsg = ctx.files.path .. ' ' .. ctx.storage:read('x.txt')",
+        "ctx.files:write('x.txt', 'own')\n"
+        "msg = ctx.files.path .. ' ' .. tostring(ctx.storage:read('x.txt')) .. ' ' .. ctx.files:read('x.txt')",
     )
-    assert emu.has_text("msg /AppFiles/testapp shared")
+    # ctx.files and ctx.storage are different directories on 26112001, verified in QEMU
+    assert emu.has_text("msg /AppFiles/testapp nil own"), "26112001: ctx.files is not ctx.storage's directory"
+    assert (tmp_path / "state" / "appfiles" / "x.txt").read_text() == "own"
+
+
+def test_storage_file_written_after_start_is_read(make_app, emu_factory, tmp_path):
+    lua = (
+        "function on_draw(c, g) g:clear(0); g:text(0, 0, 'late=' .. tostring(ctx.storage:read('late.txt'))) end\n"
+        "function on_input(c, ev) c:invalidate() end\n"
+    )
+    emu = emu_factory(make_app(lua))
+    files = tmp_path / "state" / "files"
+    files.mkdir(parents=True, exist_ok=True)
+    (files / "late.txt").write_text("hi")
+    emu.tap(10, 10)
+    assert emu.has_text("late=hi"), "0.1 read ctx.storage from disk on every call"
+    (files / "late.txt").write_text("edited")
+    emu.restart()
+    assert emu.has_text("late=edited")
 
 
 def test_storage_read_offset_warns(make_app, emu_factory):
@@ -84,10 +109,7 @@ def test_storage_read_offset_warns(make_app, emu_factory):
 
 
 def test_storage_quota(make_app, emu_factory, monkeypatch):
-    from inkemu import ctx_basic
-
-    monkeypatch.setattr(ctx_basic, "MAX_FILES", 2)
-    monkeypatch.setattr(ctx_basic, "MAX_BYTES", 10)
+    monkeypatch.setattr(Emu, "storage_quota", (10, 2))
     emu = run(
         make_app,
         emu_factory,
@@ -219,7 +241,7 @@ def test_codecs_and_hashes(make_app, emu_factory):
         "local b = ctx.base64:encode('Привет\\255')\n"
         "local parts = {b, ctx.base64:decode(b) == 'Привет\\255' and 'ok' or 'bad',\n"
         "  ctx.hex:encode('\\0\\255a'), ctx.hex:decode('00ff61') == '\\0\\255a' and 'ok' or 'bad',\n"
-        "  ctx.hash:sha1('abc'), ctx.hash:sha256('abc'),\n"
+        "  ctx.hex:encode(ctx.hash:sha1('abc')), ctx.hex:encode(ctx.hash:sha256('abc')),\n"
         "  ctx.url:encode('a b/я?'), ctx.url:decode('a%20b%2F%D1%8F+'), #ctx.random:uuid(),\n"
         "  tostring((ctx.base64:decode('***')))}\n"
         "msg = table.concat(parts, '|')",
@@ -227,7 +249,10 @@ def test_codecs_and_hashes(make_app, emu_factory):
     b64 = "0J/RgNC40LLQtdGC/w=="
     sha1 = "a9993e364706816aba3e25717850c26c9cd0d89d"
     sha256 = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-    assert emu.has_text(f"msg {b64}|ok|00ff61|ok|{sha1}|{sha256}|a%20b%2F%D1%8F%3F|a b/я+|36|nil")
+    # sha1 and sha256 return raw digests on 26112001, verified in QEMU on firmware 26112001
+    assert emu.has_text(f"msg {b64}|ok|00ff61|ok|{sha1}|{sha256}|a%20b%2F%D1%8F%3F|a b/я+|36|nil"), (
+        "26112001: ctx.hash:sha1 and ctx.hash:sha256 return raw bytes"
+    )
 
 
 def test_random_uuid_is_reproducible_with_a_seed(make_app, emu_factory, tmp_path):
@@ -248,6 +273,23 @@ def test_zlib_decompress(make_app, emu_factory):
         "msg = ctx.zlib:decompress(z) .. tostring(bad) .. e",
     )
     assert emu.has_text("msg Привет мирnilinvalid_argument")
+
+
+def test_zlib_decompress_gzip_and_raw_deflate(make_app, emu_factory):
+    import gzip
+    import zlib
+
+    raw = zlib.compressobj(wbits=-15)
+    deflated = (raw.compress("мир".encode()) + raw.flush()).hex()
+    gz = gzip.compress("Привет".encode()).hex()
+    emu = run(
+        make_app,
+        emu_factory,
+        f"local a = ctx.zlib:decompress(ctx.hex:decode('{gz}'))\n"
+        f"local b = ctx.zlib:decompress(ctx.hex:decode('{deflated}'))\n"
+        "local c, e = ctx.zlib:decompress('')\nmsg = a .. b .. tostring(c) .. e",
+    )
+    assert emu.has_text("msg Приветмирnilinvalid_argument")
 
 
 def test_utility_methods_need_a_colon(make_app, emu_factory):
@@ -378,14 +420,14 @@ def test_capabilities_i18n_and_stubs(make_app, emu_factory):
         make_app,
         emu_factory,
         "local cap = ctx.capabilities\nlocal parts = {tostring(cap.image_decode), tostring(cap.ui), tostring(cap.ttf), ctx.i18n.locale,\n"
-        "  tostring(ctx.ui), tostring(ctx.system:can_open('http://x')), tostring(ctx.system:open('http://x')),\n"
+        "  type(ctx.ui), tostring(ctx.system:can_open('http://x')), tostring(ctx.system:open('http://x')),\n"
         "  type(ctx.perf:info()), type(ctx.gc:count()), tostring(ctx.gc:collect()), tostring(ctx.budget:extend()),\n"
-        "  ctx.frontlight:get()}\n"
-        "ctx.frontlight:set(7)\nctx.display:request_refresh()\nctx.display:full_refresh()\nctx.display:full_refresh()\n"
+        "  ctx.frontlight:get(), tostring(ctx.display)}\n"
+        "ctx.frontlight:set(7)\n"
         "parts[#parts + 1] = ctx.frontlight:get()\nmsg = table.concat(parts, '|')",
     )
-    assert emu.has_text("msg true|false|false|en|nil|false|false|table|number|nil|true|0|7")
-    assert emu.refresh_counts == {"request": 1, "full": 2}
+    inventory = "firmware 26112001 inventory: ctx has no display"
+    assert emu.has_text("msg true|true|false|en|table|false|false|table|number|nil|true|0|nil|7"), inventory
     assert any("http://x" in line for line in emu.log)
 
 

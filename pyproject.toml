@@ -1,6 +1,6 @@
 [project]
 name = "inkemu"
-version = "0.1.1"
+version = "0.2.0"
 description = "Desktop emulator of the Xteink X4 Pro InkApp (XTOS Licorice) Lua host"
 readme = "README.md"
 license = "MIT"
@@ -25,10 +25,8 @@ classifiers = [
     "Topic :: System :: Emulators",
 ]
 dependencies = [
-    "lupa>=2.8",
     "mcp>=2.3.0",
     "pillow>=13.0",
-    "segno>=1.6.6",
 ]
 
 [project.urls]
@@ -41,11 +39,39 @@ inkemu = "inkemu.cli:main"
 inkemu-mcp = "inkemu.mcp_server:main"
 
 [build-system]
-requires = ["hatchling>=1.27"]
-build-backend = "hatchling.build"
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
 
-[tool.hatch.build.targets.sdist]
-include = ["src", "tests", "examples", "README.md", "LICENSE", "pyproject.toml", "uv.lock"]
+[tool.maturin]
+python-source = "src"
+module-name = "inkemu._core"
+manifest-path = "crates/inkemu-py/Cargo.toml"
+features = ["extension-module"]
+include = [
+    { path = "vendor/**/*", format = "sdist" },
+    { path = "patches/**/*", format = "sdist" },
+    { path = "scripts/**/*", format = "sdist" },
+    { path = "assets/**/*", format = "sdist" },
+    { path = "rust-toolchain.toml", format = "sdist" },
+    { path = "tests/**/*", format = "sdist" },
+    { path = "examples/**/*", format = "sdist" },
+    { path = "uv.lock", format = "sdist" },
+]
+
+[tool.uv]
+# rebuild the _core extension on `uv run`/`uv sync` when the Rust side changes
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "Cargo.toml" },
+    { file = "Cargo.lock" },
+    { file = "crates/**/*.rs" },
+    { file = "crates/**/*.lua" },
+    { file = "assets/fonts/*" },
+    { file = "crates/**/Cargo.toml" },
+    { file = "patches/**/*" },
+    { file = "vendor/**/*" },
+    { file = "rust-toolchain.toml" },
+]
 
 [dependency-groups]
 dev = [

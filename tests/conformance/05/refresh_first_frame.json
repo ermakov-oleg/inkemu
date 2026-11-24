@@ -1,0 +1,15 @@
+{
+  "spec": "\u00a75",
+  "about": "the first frame of a session is a full refresh (inkemu choice; the contract does not classify it)",
+  "steps": [
+    "wait 1s",
+    "observe s"
+  ],
+  "expect": {
+    "s.refresh": {
+      "value": "full",
+      "spec": "\u00a75"
+    }
+  },
+  "errors": []
+}

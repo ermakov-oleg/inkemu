@@ -1,0 +1,37 @@
+{
+  "spec": "\u00a77",
+  "about": "g:text, g:text_box and font:measure refuse 8193 bytes per call with limit_exceeded",
+  "expect": {
+    "text_8193": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "\u00a77"
+    },
+    "box_8193": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "\u00a77"
+    },
+    "measure_8193": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "nil",
+          "limit_exceeded"
+        ]
+      },
+      "spec": "\u00a77"
+    }
+  },
+  "errors": []
+}

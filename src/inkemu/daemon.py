@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from .clock import parse_duration
+from ._core import parse_duration
 from .emu import KEYS, SWIPES, Emu
 from .paths import state_root
 
@@ -77,7 +77,7 @@ def _spec() -> dict[str, tuple[str, list[tuple[str, Callable, bool]], Callable[[
         "tap": ("tap X Y", xy, lambda e, a: e.tap(a["x"], a["y"])),
         "tap-text": ("tap-text TEXT", [("text", _str, True)], lambda e, a: e.tap_text(a["text"])),
         "double-tap": ("double-tap X Y", xy, lambda e, a: e.double_tap(a["x"], a["y"])),
-        "swipe": ("swipe DIR", [("direction", _choice(tuple(SWIPES)), True)], lambda e, a: e.swipe(a["direction"])),
+        "swipe": ("swipe DIR", [("direction", _choice(SWIPES), True)], lambda e, a: e.swipe(a["direction"])),
         "hold": ("hold X Y [MS]", xy + [("ms", _int, False)], lambda e, a: e.hold(a["x"], a["y"], a.get("ms", 800))),
         "key": ("key KEY", [("key", _choice(KEYS), True)], lambda e, a: e.key(a["key"])),
         "type": ("type TEXT", [("text", _str, True)], lambda e, a: e.type_text(a["text"])),

@@ -1,0 +1,34 @@
+{
+  "spec": "\u00a77",
+  "about": "a bold line measures one pixel wider than the plain one in every system font",
+  "expect": {
+    "bold_delta_small": {
+      "value": {
+        "ok": true,
+        "ret": [
+          1
+        ]
+      },
+      "spec": "\u00a77"
+    },
+    "bold_delta_medium": {
+      "value": {
+        "ok": true,
+        "ret": [
+          1
+        ]
+      },
+      "spec": "\u00a77"
+    },
+    "bold_delta_large": {
+      "value": {
+        "ok": true,
+        "ret": [
+          1
+        ]
+      },
+      "spec": "\u00a77"
+    }
+  },
+  "errors": []
+}

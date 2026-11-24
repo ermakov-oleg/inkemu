@@ -1,0 +1,39 @@
+{
+  "spec": "§14",
+  "about": "a body of exactly 131072 bytes is kept whole without err",
+  "manifest": {
+    "permissions": [
+      "net"
+    ]
+  },
+  "fixtures": [
+    {
+      "method": "GET",
+      "url": "https://cap.test/exact",
+      "status": 200,
+      "delay_ms": 10,
+      "body_repeat": [
+        "x",
+        131072
+      ]
+    }
+  ],
+  "steps": [
+    "wait 3s"
+  ],
+  "expect": {
+    "exact_len": {
+      "value": 131072,
+      "spec": "§14"
+    },
+    "exact_bytes": {
+      "value": 131072,
+      "spec": "§14"
+    },
+    "exact_err": {
+      "value": "nil",
+      "spec": "§14"
+    }
+  },
+  "errors": []
+}

@@ -1,5 +1,7 @@
 import json
+import threading
 from collections.abc import Callable
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 import pytest
@@ -9,6 +11,12 @@ from inkemu import Emu
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "allow_errors: the test expects Lua errors in emu.errors")
+
+
+@pytest.fixture(autouse=True)
+def _bundled_fonts(monkeypatch):
+    """A shell's INKEMU_FONTS must not change the frames the suite pins."""
+    monkeypatch.delenv("INKEMU_FONTS", raising=False)
 
 
 @pytest.fixture
@@ -46,3 +54,58 @@ def emu_factory(tmp_path, request) -> Callable[..., Emu]:
     if request.node.get_closest_marker("allow_errors") is None:
         for emu in made:
             assert emu.errors == [], "unexpected Lua errors:\n" + "\n".join(emu.errors)
+
+
+@pytest.fixture
+def server():
+    hits = []
+    calls = []  # (method, body) of the requests other than GET
+
+    class H(BaseHTTPRequestHandler):
+        def do_GET(self):
+            hits.append((self.path, dict(self.headers)))
+            if self.path.startswith("/short"):  # promises more than it sends
+                self.send_response(200)
+                self.send_header("Content-Length", "100")
+                self.end_headers()
+                self.wfile.write(b"ab")
+                return
+            body = "привет".encode() if self.path.endswith(".ics") else b"\x00\xff\xfeok"
+            if srv.echo or self.path.startswith("/echo"):
+                body = self.path.encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Set-Cookie", "sid=abc")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def other(self):
+            body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            calls.append((self.command, body))
+            self.send_response(200)
+            self.send_header("X-Method", self.command)
+            self.send_header("Content-Length", "4")
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(b"done")
+
+        do_PUT = do_HEAD = do_PROPFIND = other
+
+        def do_REPORT(self):
+            body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            calls.append((self.command, body))
+            self.send_response(207)
+            self.send_header("Content-Length", str(len(body) + 3))
+            self.end_headers()
+            self.wfile.write(b"re:" + body)
+
+        def log_message(self, *a):
+            pass
+
+    srv = HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    srv.hits, srv.base, srv.echo = hits, f"http://127.0.0.1:{srv.server_port}", False
+    srv.calls = calls
+    yield srv
+    srv.shutdown()
+    srv.server_close()

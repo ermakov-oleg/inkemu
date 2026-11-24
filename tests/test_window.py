@@ -127,6 +127,21 @@ def test_text_dialog_types_answer(make_window, make_app, monkeypatch):
     assert app.emu.has_text("res Привет")
 
 
+def test_edit_dialog_replaces_the_prefilled_text(make_window, make_app, monkeypatch):
+    app = make_window(
+        make_app(
+            ASKING
+            % (
+                "c.input:edit({title='Note', text='hi', on_end=function(c, s, how) res = s .. ':' .. how; c:invalidate() end})"
+            )
+        )
+    )
+    monkeypatch.setattr(window, "ask_string", lambda parent, title, text, initial: initial + "!")
+    key(app, "Return")
+    app.root.update()
+    assert app.emu.pending is None and app.emu.has_text("res hi!:enter"), "the prefilled text is not doubled"
+
+
 def test_text_dialog_cancel(make_window, make_app, monkeypatch):
     app = make_window(
         make_app(ASKING % ("c.input:text({title='Name', text=''}, function(c, s) res = s; c:invalidate() end)"))
@@ -219,6 +234,20 @@ def test_real_hold_is_long_not_tap(make_window, make_app, paused):
     assert app.emu.has_text("res long")
 
 
+def test_real_time_ticks_keep_the_clock_revision_and_minute_keys_change_it(make_window):
+    app = make_window()
+    rev = "return ctx.clock:now().revision"
+    before, start_ms = app.emu.lua_eval(rev), app.emu.lua_eval("return ctx.clock:millis()")
+    real_wait(app, 0.3)
+    app._advance()
+    assert app.emu.lua_eval("return ctx.clock:millis()") > start_ms
+    assert app.emu.lua_eval(rev) == before
+    key(app, "bracketright")
+    assert app.emu.lua_eval(rev) == before + 1
+    key(app, "braceright")
+    assert app.emu.lua_eval(rev) == before + 2
+
+
 def test_close_leaves_and_persists_state(make_window, make_app, emu_factory):
     src = """
 function on_load(c) c.state.n = (c.state.n or 0) + 1 end
@@ -293,7 +322,7 @@ def test_stale_tk_dialog_does_not_answer_a_newer_one(make_window, make_app, monk
 
     def user_slow_to_click(parent, title, text):
         emu.answer(False)  # a remote `answer` resolves A while its Tk dialog is still open
-        emu.L.execute("ctx.dialog:confirm({title='B', text='second'}, function(c, ok) res = 'B ' .. tostring(ok) end)")
+        emu.lua_exec("ctx.dialog:confirm({title='B', text='second'}, function(c, ok) res = 'B ' .. tostring(ok) end)")
         monkeypatch.setattr(window, "ask_yes_no", lambda *a: False)  # later dialogs: leave B unanswered by clicks
         return True
 
@@ -301,6 +330,28 @@ def test_stale_tk_dialog_does_not_answer_a_newer_one(make_window, make_app, monk
     app.on_key(SimpleNamespace(keysym="Return"))
     app._open_dialog()
     assert emu.has_text("res A false")
+    assert any("already answered" in ln for ln in emu.log)
+
+
+def test_tk_dialog_answered_remotely_without_a_successor_is_dropped(make_window, make_app, monkeypatch):
+    app = make_window(
+        make_app(
+            ASKING
+            % (
+                "c.dialog:confirm({title='A', text='first'}, function(c, ok) res = 'A ' .. tostring(ok); c:invalidate() end)"
+            )
+        )
+    )
+    emu = app.emu
+
+    def user_slow_to_click(parent, title, text):
+        emu.answer(False)
+        return True
+
+    monkeypatch.setattr(window, "ask_yes_no", user_slow_to_click)
+    app.on_key(SimpleNamespace(keysym="Return"))
+    app._open_dialog()
+    assert emu.has_text("res A false") and not app.problem
     assert any("already answered" in ln for ln in emu.log)
 
 

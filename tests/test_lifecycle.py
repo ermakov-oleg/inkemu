@@ -28,7 +28,7 @@ def test_lua_error_is_captured(make_app, emu_factory):
     assert "index.lua:1: kaput" in emu.errors[0] and "stack traceback" in emu.errors[0]
     assert "index.lua:2: in function 'on_draw'" in emu.errors[0] and "<python>" not in emu.errors[0]
     assert emu.has_text("App error")
-    assert emu.shot().tobytes() != emu.canvas.render().tobytes()
+    assert emu.shot().tobytes() != emu.raw_frame().tobytes()
     emu.tap(10, 10)
     emu.key("back")
     emu.wait("1s")
@@ -76,13 +76,13 @@ def test_reload_after_fixing_code(make_app, emu_factory):
 
 @pytest.mark.allow_errors
 def test_manifest_api_above_firmware_refused(make_app, emu_factory):
-    emu = emu_factory(make_app("ctx:log('ran')", manifest={"api": "2.30"}))
-    assert "needs firmware with API 2.30" in emu.errors[0]
+    emu = emu_factory(make_app("ctx:log('ran')", manifest={"api": "2.34"}))
+    assert "needs firmware with API 2.34" in emu.errors[0], "firmware 26112001 inventory: ctx.api is 2.33"
     assert emu.status()["running"] is False and not any("ran" in line for line in emu.log)
 
 
 def test_manifest_api_equal_to_firmware_runs(make_app, emu_factory):
-    emu = emu_factory(make_app("ctx:log('ran')", manifest={"api": "2.26"}))
+    emu = emu_factory(make_app("ctx:log('ran')", manifest={"api": "2.33"}))
     assert emu.status()["running"] is True and any("ran" in line for line in emu.log)
 
 
@@ -291,7 +291,7 @@ def test_quit_leaves_after_callback(make_app, emu_factory, tmp_path):
 def test_log_and_ctx_values(make_app, emu_factory):
     app = make_app(
         "local t = ctx.clock:now()\n"
-        "ctx:log('now', t.year, t.month, t.day, t.hour, t.minute, t.second, t.wday, t.valid)\n"
+        "ctx:log('now', t.year, t.month, t.day, t.hour, t.minute, t.second, t.weekday, t.valid)\n"
         "local b = ctx.device:battery()\n"
         "ctx:log('api', ctx.api.major, ctx.api.minor, b.percent, b.charging)\n"
         "local f = ctx.fonts.large\n"
@@ -300,8 +300,10 @@ def test_log_and_ctx_values(make_app, emu_factory):
     )
     emu = emu_factory(app)
     text = "\n".join(emu.log)
-    assert "now 2026 11 20 9 0 0 6 true" in text
-    assert "api 2 26 87 false" in text
+    assert "now 2026 11 20 9 0 0 5 true" in text, (
+        "API 2.33.1 contract §12 says otherwise (12/clock_weekday_sunday): weekday 0 is Sunday"
+    )
+    assert "api 2 33 87 false" in text, "firmware 26112001 inventory: ctx.api is 2.33"
     assert "font large 30 true medium" in text
     assert "millis 0 string" in text
 
@@ -312,6 +314,14 @@ def test_status_is_json_serialisable(make_app, emu_factory):
     json.dumps(st)
     assert st["app_id"] == "testapp" and st["net"] == "replay" and st["paused"] is False
     assert st["time"] == "2026-11-20T09:00:00.000" and st["frame_commands"] == 2
+    assert st["refresh"] == "full" and st["refreshes"] == ["full"]
+
+
+def test_status_reports_refresh_kinds(make_app, emu_factory):
+    app = make_app(DRAW_MSG + "function on_input(c, ev) if ev.phase == 'up' then c:invalidate() end return true end")
+    emu = emu_factory(app)
+    emu.tap(10, 10)
+    assert emu.status()["refreshes"] == ["full", "partial"] and emu.status()["refresh"] == "partial"
 
 
 def test_save_shot_writes_png(make_app, emu_factory, tmp_path):

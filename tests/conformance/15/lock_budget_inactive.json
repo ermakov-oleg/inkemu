@@ -1,0 +1,29 @@
+{
+  "spec": "\u00a715",
+  "about": "budget:extend() returns nil, inactive in a lock session",
+  "manifest": {
+    "lockscreen": {
+      "entry": "lockscreen.lua",
+      "interval_sec": 60
+    }
+  },
+  "files": {
+    "lockscreen.lua": "lock_budget.lockscreen.lua"
+  },
+  "steps": [
+    "lock"
+  ],
+  "expect": {
+    "extend": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "inactive"
+        ]
+      },
+      "spec": "\u00a715"
+    }
+  },
+  "errors": []
+}

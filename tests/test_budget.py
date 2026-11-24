@@ -1,6 +1,6 @@
 import pytest
 
-from inkemu import daemon, lua_env
+from inkemu import Emu, daemon
 
 LOOP = "while true do end"
 BUDGET_MSG = "callback exceeded the instruction budget"
@@ -8,7 +8,7 @@ BUDGET_MSG = "callback exceeded the instruction budget"
 
 @pytest.fixture(autouse=True)
 def small_budget(monkeypatch):
-    monkeypatch.setattr(lua_env, "INSTRUCTION_BUDGET", 1_000_000)
+    monkeypatch.setattr(Emu, "instruction_budget", 1_000_000)
 
 
 def _one_budget_error(emu, where: str) -> str:
@@ -94,10 +94,13 @@ def test_budget_is_per_callback_and_resets(make_app, emu_factory):
 
 
 @pytest.mark.allow_errors
-def test_load_cannot_fake_a_host_chunk(make_app, emu_factory):
+def test_load_is_absent(make_app, emu_factory):
     app = make_app(f"function on_load(c) load('{LOOP}', '<python>')() end\n")
     emu = emu_factory(app)
-    _one_budget_error(emu, "on_load")
+    assert len(emu.errors) == 1 and "attempt to call a nil value (global 'load')" in emu.errors[0], (
+        "firmware 26112001 inventory: no load, loadstring, dofile, loadfile",
+        emu.errors,
+    )
 
 
 @pytest.mark.allow_errors

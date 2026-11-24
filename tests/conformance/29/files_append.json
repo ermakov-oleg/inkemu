@@ -1,0 +1,52 @@
+{
+  "spec": "§29",
+  "about": "append creates a missing file or adds to the end, empty data is fine",
+  "expect": {
+    "append_new": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "append_more": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "read": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "abc"
+        ]
+      },
+      "spec": "§29"
+    },
+    "size": {
+      "value": {
+        "ok": true,
+        "ret": [
+          3
+        ]
+      },
+      "spec": "§29"
+    },
+    "append_empty": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    }
+  },
+  "errors": []
+}

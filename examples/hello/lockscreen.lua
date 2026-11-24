@@ -1,4 +1,5 @@
--- Lock screen for Hello: big clock, date and the tap count. Woken every interval_sec by the host.
+-- Lock screen for Hello: big clock, date and the tap count. Woken by the host at each whole multiple of
+-- interval_sec in local time.
 
 local W, H = 480, 800
 local DAYS = { 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday' }
@@ -12,9 +13,9 @@ function on_draw(c, g)
   local ok, e = pcall(function()
     g:clear(0)
     local t = c.clock:now()
-    g:round_rect(90, 240, W - 180, 120, 16)
+    g:rect(90, 240, W - 180, 120, { radius = 16 })
     g:text(W // 2, 300, string.format('%02d:%02d', t.hour, t.minute), { font = c.fonts.large, align = 'center', valign = 'middle' })
-    g:text(W // 2, 400, string.format('%s, %d %s', DAYS[t.wday], t.day, MONTHS[t.month]),
+    g:text(W // 2, 400, string.format('%s, %d %s', DAYS[t.weekday], t.day, MONTHS[t.month]),
       { font = c.fonts.large, align = 'center' })
     g:line(120, 460, W - 120, 460)
     local taps = type(c.state) == 'table' and tonumber(c.state.taps) or 0

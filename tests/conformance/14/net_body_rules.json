@@ -1,0 +1,32 @@
+{
+  "spec": "§14",
+  "about": "a body over 65536 bytes is limit_exceeded on any method",
+  "manifest": {
+    "permissions": [
+      "net"
+    ]
+  },
+  "expect": {
+    "post_over": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§14"
+    },
+    "put_over": {
+      "value": {
+        "ok": true,
+        "ret": [
+          null,
+          "limit_exceeded"
+        ]
+      },
+      "spec": "§14"
+    }
+  },
+  "errors": []
+}

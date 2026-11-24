@@ -1,0 +1,28 @@
+{
+  "spec": "§16",
+  "about": "fit sizes come from the content: a label's widest line and its line block, a button's text + 24 by a line + 16, switch, tabs, reserve (also where the width comes from the content without fit, probe-confirmed), bold and tabular, a container's padding, gaps and children, the grow rule G × max(ceil(fit / grow)); text controls keep one line; expectations from the font metrics",
+  "expect": {
+    "label": {"value": true, "spec": "§16"},
+    "label_lines": {"value": true, "spec": "§16"},
+    "button": {"value": true, "spec": "§16"},
+    "button_font": {"value": true, "spec": "§16"},
+    "label_reserve": {"value": true, "spec": "§16"},
+    "label_bold": {"value": true, "spec": "§16"},
+    "button_reserve": {"value": true, "spec": "§16"},
+    "spacer": {"value": true, "spec": "§16"},
+    "reserve_without_fit": {"value": true, "deviation": "D13", "spec_value": false},
+    "bold_is_wider": {"value": true, "spec": "§7"},
+    "switch_plain": {"value": true, "spec": "§16"},
+    "switch_bold": {"value": true, "deviation": "D12", "spec_value": false},
+    "switch_note": {"value": true, "spec": "§16"},
+    "tabs_plain": {"value": true, "spec": "§16"},
+    "tabs_bold": {"value": true, "deviation": "D12", "spec_value": false},
+    "fit_column": {"value": true, "spec": "§16"},
+    "grow_content": {"value": true, "spec": "§16"},
+    "percent_in_fit": {"value": true, "spec": "§16"},
+    "label_wraps": {"value": true, "spec": "§16"},
+    "one_line": {"value": true, "spec": "§16"}
+  },
+  "files": {"layout_box.lua": "layout_box.util.lua"},
+  "errors": []
+}

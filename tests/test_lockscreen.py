@@ -32,7 +32,7 @@ def test_lock_draws_lockscreen(make_app, emu_factory, tmp_path):
     emu.lock()
     assert emu.locked and emu.status()["locked"]
     assert (tmp_path / "state" / "files" / "left").read_text() == "yes"
-    assert emu.has_text("reason lock") and not emu.has_text("app screen")
+    assert emu.has_text("reason first") and not emu.has_text("app screen"), "§15, 15/lock_reason_first"
     assert emu.lock_wakes == 0
 
 
@@ -119,12 +119,16 @@ def test_wake_waits_for_net(make_app, emu_factory, tmp_path):
     req = "c.net:request({url = 'http://x.test/a'}, function(c, r) seen.reason = 'got ' .. r.body end)"
     emu = emu_factory(make(make_app, req, manifest={"permissions": ["net"]}))
     emu.lock()
-    emu.wait("60s")
-    assert emu.lock_wakes == 1 and not emu.has_text("reason timer")
+    # the first session draws at once, then again with the answer (§15, 15/lock_prep_first)
+    assert emu.has_text("reason first") and emu.has_text("n 1 ")
+    emu.wait("5s")
+    assert emu.has_text("reason got ok") and emu.has_text("n 1 "), "§15, 15/lock_prep_first"
+    emu.wait("55s")
+    assert emu.lock_wakes == 1 and emu.has_text("n 1 ")
     emu.wait("4999ms")
-    assert not emu.has_text("reason got")
+    assert not emu.has_text("n 2 ")
     emu.wait(1)
-    assert emu.has_text("reason got ok")
+    assert emu.has_text("reason got ok") and emu.has_text("n 2 ")
 
 
 def slow_net(tmp_path):
@@ -156,14 +160,14 @@ def test_wake_done_draws_before_net(make_app, emu_factory, tmp_path):
     assert emu.has_text("reason timer")
 
 
-def test_wake_waits_at_most_30s(make_app, emu_factory, tmp_path):
+def test_wake_waits_at_most_28s(make_app, emu_factory, tmp_path):
     slow_net(tmp_path)
     emu = emu_factory(make(make_app, REQ, manifest={"permissions": ["net"]}))
     emu.lock()
-    emu.wait("89s")
-    assert not emu.has_text("reason timer")
-    emu.wait("1s")
-    assert emu.has_text("reason timer")
+    emu.wait("87999ms")
+    assert not emu.has_text("reason timer"), "§15, 15/lock_prep_cap"
+    emu.wait(1)
+    assert emu.has_text("reason timer"), "§15, 15/lock_prep_cap"
 
 
 def test_lock_without_block_is_blank(make_app, emu_factory, tmp_path):
@@ -182,3 +186,56 @@ def test_lock_state_does_not_overwrite_app_state(make_app, emu_factory):
     emu.lock()
     emu.unlock()
     assert emu.has_text("app screen 2")
+
+
+def test_wake_reads_secrets_again(make_app, emu_factory, tmp_path):
+    d = tmp_path / "fixtures" / "net"
+    d.mkdir(parents=True)
+    (d / "p.json").write_text(
+        json.dumps(
+            {
+                "request": {"method": "GET", "url": "http://x.test/{{pin}}"},
+                "match": "exact",
+                "response": {"status": 200, "headers": {}, "body": "ok"},
+            }
+        )
+    )
+    secrets = tmp_path / "secrets.json"
+    secrets.write_text("{}")
+    # tostring: no fixture is no response, which has no status (§14, 14/net_response_fields)
+    req = "c.net:request({url = 'http://x.test/abcdef'}, function(c, r) seen.reason = 'got ' .. tostring(r.status) end)"
+    emu = emu_factory(make(make_app, req), secrets_file=secrets)
+    emu.lock()
+    emu.wait("1s")
+    # the first session's second frame shows the answer (§15, 15/lock_prep_first)
+    assert emu.has_text("reason got nil"), "§15, 15/lock_prep_first"
+    secrets.write_text(json.dumps({"pin": "abcdef"}))
+    emu.wait("60s")
+    assert emu.lock_wakes == 1 and emu.has_text("reason got 200"), "tostring(status) (§14, 14/net_response_fields)"
+
+
+def test_live_wakes_get_their_answers_within_one_wait(make_app, emu_factory, server):
+    server.echo = True
+    lock = (
+        "local n\n"
+        "function on_load(c)\n"
+        "  n = tonumber(c.storage:read('count') or '0') + 1\n"
+        "  c.storage:write('count', tostring(n))\n"
+        f"  c.net:request({{url = '{server.base}/w' .. n}}, function(c, r)\n"
+        "    got = r.body; c:invalidate()\n"
+        "  end)\n"
+        "end\n"
+        "function on_draw(c, g)\n"
+        "  if got then c.storage:write('drawn', (c.storage:read('drawn') or '') .. got .. ',') end\n"
+        "  g:text(0, 0, 'got ' .. tostring(got))\n"
+        "end\n"
+    )
+    app = make_app(APP, manifest={"lockscreen": {"interval_sec": 60, "net": True}}, files={"lockscreen.lua": lock})
+    emu = emu_factory(app, net="live")
+    emu.lock()
+    emu.wait("181s")
+    hits = [path for path, _ in server.hits]
+    assert emu.lock_wakes == 3 and hits == ["/w1", "/w2", "/w3", "/w4"]
+    drawn = emu.lua_eval("return ctx.storage:read('drawn')")
+    assert drawn == "/w1,/w2,/w3,/w4,"
+    assert emu.has_text("got /w4")

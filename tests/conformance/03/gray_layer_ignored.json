@@ -1,0 +1,20 @@
+{
+  "spec": "\u00a73",
+  "about": "gray = true in a g:image call inside layer:draw has no effect: the frame is a plain partial refresh",
+  "steps": [
+    "wait 1s",
+    "tap 100 100",
+    "wait 1s",
+    "observe s"
+  ],
+  "expect": {
+    "s.refreshes": {
+      "value": [
+        "full",
+        "partial"
+      ],
+      "spec": "\u00a73"
+    }
+  },
+  "errors": []
+}

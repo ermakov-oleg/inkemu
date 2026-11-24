@@ -1,0 +1,34 @@
+{
+  "spec": "§29",
+  "about": "write creates an app file or replaces the whole file and returns true",
+  "expect": {
+    "write_new": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "write_replace": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true
+        ]
+      },
+      "spec": "§29"
+    },
+    "read": {
+      "value": {
+        "ok": true,
+        "ret": [
+          "22"
+        ]
+      },
+      "spec": "§29"
+    }
+  },
+  "errors": []
+}

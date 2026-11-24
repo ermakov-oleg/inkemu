@@ -1,0 +1,33 @@
+{
+  "spec": "\u00a715",
+  "about": "a wake after net_interval_sec has passed has the network again",
+  "manifest": {
+    "permissions": [
+      "net"
+    ],
+    "lockscreen": {
+      "entry": "lockscreen.lua",
+      "interval_sec": 60,
+      "net": true,
+      "net_interval_sec": 120
+    }
+  },
+  "files": {
+    "lockscreen.lua": "lock_net.lockscreen.lua"
+  },
+  "steps": [
+    "lock",
+    "wait 121s"
+  ],
+  "expect": {
+    "lock_net": {
+      "value": true,
+      "spec": "\u00a715"
+    },
+    "has_net": {
+      "value": true,
+      "spec": "\u00a715"
+    }
+  },
+  "errors": []
+}

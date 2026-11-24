@@ -1,0 +1,17 @@
+{
+  "spec": "\u00a73",
+  "about": "a frame with a g:image that sets gray = true is presented as a gray frame",
+  "steps": [
+    "wait 1s",
+    "tap 100 100",
+    "wait 1s",
+    "observe s"
+  ],
+  "expect": {
+    "s.refresh": {
+      "value": "gray",
+      "spec": "\u00a73"
+    }
+  },
+  "errors": []
+}
