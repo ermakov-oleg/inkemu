@@ -306,6 +306,28 @@ Grey, as measured on 26112001: the canvas is 1-bit, and grey is a pattern of bla
 - `g:rect(x, y, w, h, {radius = r})` rounds the corners; this is how the firmware's own UI draws rounded boxes.
 - A grey PNG or JPEG from `ctx.image` is dithered by `g:image` after scaling.
 
+### `ctx.ui`
+
+`ctx.ui` (§16) is the reader's control library written again in Lua from the contract and from black-box
+measurements of firmware 26112001. It runs in the app's Lua state in an environment of its own, and its
+instructions count against the app's budget. `ctx.capabilities.ui` is true without `"requires": ["ui"]`, and the
+package manifest's `api` decides which rules apply.
+
+- Works: `create`, `begin_frame`/`end_frame`, `label`, `button` (text, `selected`, `emphasis`, `badge`, `border`,
+  both focus styles), `region` with its `draw`, `radio` (items are parts with their own hits and focus,
+  `change`/`activate` with the item number), `handle_event`, `focus`/`focused` with parts, the arrow keys (by
+  position from API 2.13, in declaration order before it), `row`/`column` (the 2.15 flex layout with `wrap`,
+  `baseline`, `aspect_ratio`, percentages, background, border, radius and dividers; the earlier rules for packages
+  before 2.15) and `ui:layout`.
+- Raises "not implemented in inkemu yet": `grid`, `stack`, `switch`, `tabs`, `stepper`, `pager`, `list`,
+  `progress`, `field`, image and skin buttons, a radio skin and container skins in a frame.
+- Where the reader measurably differs from the contract, inkemu follows the reader; `spec/deviations.md` lists
+  each case (D3–D15).
+- The recorded firmware outputs are replayed in `tests/test_inkui_oracle.py`. A "Today" app built on `ctx.ui`
+  draws its main, clock-face and setup screens in inkemu with the reader's BDF fonts pixel for pixel as in
+  x4pro-emu, except where the app draws its own shapes. The `ui:layout` boxes, focus and event results matched
+  exactly.
+
 ## Fonts
 
 `ctx.fonts.small`, `medium` and `large` on the reader are the firmware's built-in bitmap font: line height 20/24/30,
@@ -352,13 +374,7 @@ the start with an error. From each file inkemu takes:
   `{tick_us, draw_us, cmd_count, image_count, asset_hit, asset_miss, draw_frame}`: `cmd_count` and `image_count`
   are the commands and `g:image` calls accepted in the last frame, `draw_frame` the frames of this session), `gc`,
   `budget`, `reader` (answers from `<fixtures dir>/reader.json`), `lockscreen`, `lock`.
-- `ui` (§16), in progress: `create`, `begin_frame`/`end_frame`, `label`, `button`, `region`, `radio` (items as
-  parts with their own hits and focus, `change`/`activate` with the item number), `handle_event`,
-  `focus`/`focused` with parts and the arrow keys (by position from API 2.13, in declaration order before it) work,
-  and so do `row`/`column` (the 2.15 flex layout with `wrap`, `baseline`, `aspect_ratio`, percentages and the
-  container look; the earlier rules for packages before 2.15) and `ui:layout`; image and skin buttons, a radio skin,
-  container skins in a frame, `grid`/`stack` from 2.15, and the other controls raise "not implemented in inkemu
-  yet".
+- `ui` (§16), in progress: see [`ctx.ui`](#ctxui) above.
 
 `clock:now()` has `year month day hour minute second weekday hour12 date_order date_sep epoch_sec local_sec
 offset_minutes revision valid`.
