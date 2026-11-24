@@ -26,8 +26,7 @@ no radio and is not the device, so panel timing and network completion were not 
 - Contract says: a wrong point count is `nil, "invalid_argument"` (§6).
 - Reader does: more than 128 points returns `nil, "limit_exceeded"`; too few points and odd coordinate arrays are
   `invalid_argument`, as in the contract (probe).
-- inkemu target: follows the reader for 129 or more points (`nil, "limit_exceeded"`). The core does not follow yet:
-  `06/poly_over_128` is pending (see `tests/conformance/GAPS.md`).
+- inkemu does: follows the reader for 129 or more points (`nil, "limit_exceeded"`).
 - Status: measured on 26112001.
 - Checks: `06/poly_over_128`.
 
@@ -166,6 +165,23 @@ no radio and is not the device, so panel timing and network completion were not 
   `16/layout_limits` (`child_past_32767`), `16/id_rules` (`row_x_32768`, `row_y_minus_32769`),
   `16/row_column_before_2_15` (`x_32768`).
 
+### D16 - polygon and thick-line pixels
+
+- Contract says: a filled `polygon` covers the pixels whose centre is inside by the even-odd rule, and a `line`
+  thicker than 1 the pixels closer than `line_width / 2` to the segment (§6). It does not say where a point lies
+  within its pixel or how a centre on the boundary counts.
+- Reader does: points of `line`, `polyline` and `polygon` are the centres of the named pixels: point `(x, y)` is
+  `(x + 0.5, y + 0.5)`, as for the `circle` centre. A filled `polygon` covers the pixels whose centre is inside by
+  the even-odd rule and draws no outline; a centre exactly on the boundary counts as inside when the interior lies
+  immediately to its right, or, where the boundary is horizontal there, immediately below it. A `line` thicker than
+  1 covers the pixels whose centre is strictly closer than `line_width / 2` to the segment between its end pixels'
+  centres (round ends).
+- inkemu does: the same. Mostly this settles what §6 leaves open; the one departure from a literal reading is that a
+  filled polygon has no outline.
+- Status: measured on 26112001 for filled polygons and for widths 2 and 3 on slanted segments (the "Today" app's
+  screens in x4pro-emu, 0 px apart); even widths along an axis were not measured.
+- Checks: `06/polygon_pixel_centres`, `06/polygon_fill_stroke`.
+
 ## Notes
 
 ### N1 - completion of PUT, PATCH and DELETE
@@ -173,8 +189,7 @@ no radio and is not the device, so panel timing and network completion were not 
 - Contract says: the 13 listed methods are accepted and their completion reaches the callback (§14).
 - Reader does: the three methods are accepted synchronously (a job is returned). Whether the callback completes was not
   measured: the probe has no radio, and an older firmware (26102401) hung on them.
-- inkemu target: follows the contract. The core does not follow yet: `14/net_methods_accepted` is pending (see
-  `tests/conformance/GAPS.md`).
+- inkemu does: follows the contract; every listed method completes through the callback.
 - Status: unverified on 26112001.
 - Checks: `14/net_methods_accepted`.
 

@@ -314,7 +314,7 @@ Shapes and images, as in the contract (§6):
   than 128 points is `nil, "limit_exceeded"`, as on the reader (deviation D2; the contract says `invalid_argument`).
 - `polygon` fills the pixels whose centre is inside it by the even-odd rule, closed from the last point to the
   first, with no outline; without `fill` it is the closed `polyline`. As measured on firmware 26112001, a point
-  `(x, y)` stands for the centre of pixel `(x, y)`, as the ends of a `line` do.
+  `(x, y)` stands for the centre of pixel `(x, y)`, as the ends of a `line` do (deviation D16).
 - `line` with `line_width` above 1 covers the pixels whose centre is closer than `line_width / 2` to the segment
   between the centres of its end pixels, so its ends are round (firmware 26112001). `polyline` is one `line` per
   pair of adjacent points, overlaps drawn once.
