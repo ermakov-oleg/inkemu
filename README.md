@@ -202,6 +202,9 @@ included, then seeds `files/` from `<fixtures dir>/files/`.
   returns `nil, "busy"` while a text input, an edit or a confirm is open, and `dialog:confirm` while an edit is.
 - Circles and arcs follow the pixel rules of §6: half a pixel smaller than in 0.1, an arc of whole turns draws
   nothing, and a filled `arc` is a stroke, not a pie slice.
+- Polygons and thick lines are drawn as firmware 26112001 draws them: a filled `polygon` has no outline (0.1 also
+  stroked its edges, one pixel more along the lower and right sides), a `line` or `polyline` thicker than 1 has round
+  ends instead of square ones, and `polyline` adds no joints of its own. Pixel baselines with these shapes move.
 - `g:text_box` with an `h` below one line height draws nothing and succeeds; 0.1 drew one line. Give it at least
   `font.line_height`. A line that cannot wrap is clipped at the box edge, CJK and Thai text wraps between
   characters, and packages declaring API 2.16 or later get kinsoku.
@@ -288,6 +291,12 @@ Shapes and images, as in the contract (§6):
 - `polyline` takes 2 to 128 points and `polygon` 3 to 128, as a flat `{x1, y1, x2, y2, ...}` array (inkemu also
   takes 0.1's `{x, y}` and `{x = , y = }` points). Fewer points or an odd array is `nil, "invalid_argument"`; more
   than 128 points is `nil, "limit_exceeded"`, as on the reader (deviation D2; the contract says `invalid_argument`).
+- `polygon` fills the pixels whose centre is inside it by the even-odd rule, closed from the last point to the
+  first, with no outline; without `fill` it is the closed `polyline`. As measured on firmware 26112001, a point
+  `(x, y)` stands for the centre of pixel `(x, y)`, as the ends of a `line` do.
+- `line` with `line_width` above 1 covers the pixels whose centre is closer than `line_width / 2` to the segment
+  between the centres of its end pixels, so its ends are round (firmware 26112001). `polyline` is one `line` per
+  pair of adjacent points, overlaps drawn once.
 - `circle` fills the pixels whose centre is closer than `r` to `(cx + 0.5, cy + 0.5)`; its stroke is the ring of
   those at `r - line_width` or more. `arc` is that stroke from `start_deg` clockwise to `end_deg` (`fill` does not
   apply); when the two differ by a whole multiple of 360 nothing is drawn.
@@ -488,6 +497,8 @@ offset_minutes revision valid`.
   - whether `density` changes the `line` and `cross` patterns (inkemu: no); whether `line` and `cross` are anchored
     to the screen like `dot` or to the box (inkemu: the screen; the probe's boxes started where both agree);
   - `g:pattern` with a `density` that is not a number (inkemu: the frame fails with "g: bad values in on_draw");
+  - a thick `line` of even `line_width` along an axis: inkemu takes §6 literally, so a horizontal line of width 2
+    is one pixel tall (the probe measured widths 2 and 3 on slanted segments only);
   - the colour threshold in `arc`, `polyline` and `text_box` (the probe tried `rect`, `circle`, `line` and text);
   - `color` outside 0–15: inkemu applies the same threshold (below 8 is white);
   - `g:clear(color)`, which keeps the 0.1 rule (0 white, any other number black);

@@ -1,4 +1,4 @@
-//! Shapes on a 1-bit frame, close to what 0.1 got from Pillow's ImageDraw (not pixel-identical on curves).
+//! Shapes on a 1-bit frame by the pixel rules of §6; polygons and thick lines as firmware 26112001 draws them.
 //! Every loop runs over the shape's box clipped to the frame, so huge coordinates cost nothing.
 use super::Frame;
 
@@ -66,15 +66,15 @@ impl Frame {
             x0.max(x1) + half + 1.0,
             y0.max(y1) + half + 1.0,
         );
-        // segment between pixel centres, square ends
+        // the ends are pixel centres; firmware 26112001 rounds the caps (distance to the segment, not its line)
         let (ax, ay) = (x0 + 0.5, y0 + 0.5);
         self.paint(bbox, ink, |px, py| {
-            if len2 == 0.0 {
-                return (px - ax).abs() <= half && (py - ay).abs() <= half;
-            }
-            let t = ((px - ax) * dx + (py - ay) * dy) / len2;
-            let dist = ((px - ax) * dy - (py - ay) * dx).abs() / len2.sqrt();
-            (0.0..=1.0).contains(&t) && dist <= half
+            let t = if len2 == 0.0 {
+                0.0
+            } else {
+                (((px - ax) * dx + (py - ay) * dy) / len2).clamp(0.0, 1.0)
+            };
+            (px - ax - t * dx).hypot(py - ay - t * dy) < half
         });
     }
 
@@ -114,18 +114,6 @@ impl Frame {
         for seg in pts.windows(2) {
             self.line(seg[0].0, seg[0].1, seg[1].0, seg[1].1, width, ink);
         }
-        if width > 1 {
-            // Pillow's joint="curve"
-            let half = f64::from(width) / 2.0;
-            for &(x, y) in &pts[1..pts.len().saturating_sub(1)] {
-                let (cx, cy) = (x.round() + 0.5, y.round() + 0.5);
-                self.paint(
-                    (cx - half, cy - half, cx + half, cy + half),
-                    ink,
-                    |px, py| (px - cx).powi(2) + (py - cy).powi(2) <= half * half,
-                );
-            }
-        }
     }
 
     /// Circle of radius `r` around the centre of pixel `x`, `y` (§6): fill covers the pixel centres closer than
@@ -152,6 +140,8 @@ impl Frame {
         });
     }
 
+    /// A vertex `(x, y)` is the centre of pixel `(x, y)`, as for a line end (firmware 26112001): fill covers the
+    /// pixels whose centre is inside by the even-odd rule, with no outline; a stroke is the closed polyline.
     pub fn polygon(&mut self, pts: &[(f64, f64)], st: Style) {
         if st.fill {
             let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
@@ -161,6 +151,7 @@ impl Frame {
             self.paint((x0, y0, x1, y1), st.ink, |px, py| {
                 even_odd(pts, px - 0.5, py - 0.5)
             });
+            return;
         }
         let closed = pts.iter().chain(pts.first());
         for (a, b) in closed.clone().zip(closed.skip(1)) {
