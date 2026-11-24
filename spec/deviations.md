@@ -177,7 +177,8 @@ no radio and is not the device, so panel timing and network completion were not 
   1 covers the pixels whose centre is strictly closer than `line_width / 2` to the segment between its end pixels'
   centres (round ends).
 - inkemu does: the same. Mostly this settles what §6 leaves open; the one departure from a literal reading is that a
-  filled polygon has no outline.
+  filled polygon has no outline. An even `line_width` along an axis follows the rule literally, so a horizontal line
+  of width 2 is one pixel tall.
 - Status: measured on 26112001 for filled polygons and for widths 2 and 3 on slanted segments (the "Today" app's
   screens in x4pro-emu, 0 px apart); even widths along an axis were not measured.
 - Checks: `06/polygon_pixel_centres`, `06/polygon_fill_stroke`.
