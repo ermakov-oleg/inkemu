@@ -399,3 +399,113 @@ fn app_files_on_disk_keep_the_creation_spelling_and_one_file_per_name() {
     assert_eq!(names, ["BOOK.txt"]);
     assert_eq!(fs::read(dir.join("BOOK.txt")).unwrap(), b"3");
 }
+
+#[test]
+fn fixtures_written_or_edited_during_a_run_answer_the_next_request() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = tmp.path().join("net-app");
+    fs::create_dir_all(&app).unwrap();
+    fs::write(
+        app.join("manifest.json"),
+        r#"{"app_id": "netapp", "entry": "index.lua", "api": "2.26", "permissions": ["net"]}"#,
+    )
+    .unwrap();
+    fs::write(
+        app.join("index.lua"),
+        "got = 'idle'\nfunction ask() ctx.net:request({url = 'https://x.test/a', method = 'GET'}, \
+         function(_, r) got = tostring(r.status) .. ':' .. tostring(r.body or r.err) end) end\n",
+    )
+    .unwrap();
+    let mut s = Session::open(&app, opts(tmp.path())).unwrap();
+    let fixture = |body: &str| {
+        let net = tmp.path().join("fixtures/net");
+        fs::create_dir_all(&net).unwrap();
+        let doc = json!({"request": {"method": "GET", "url": "https://x.test/a"},
+                         "response": {"status": 200, "body": body}});
+        fs::write(net.join("a.json"), doc.to_string()).unwrap();
+    };
+    let ask = |s: &mut Session| {
+        s.lua_exec("ask()").unwrap();
+        s.wait(1000).unwrap();
+        s.lua_eval("return got").unwrap()
+    };
+    assert_eq!(ask(&mut s), json!("nil:no_fixture"));
+    fixture("first");
+    assert_eq!(
+        ask(&mut s),
+        json!("200:first"),
+        "written after the start, as 0.1 read net/ per request"
+    );
+    fixture("second answer");
+    assert_eq!(
+        ask(&mut s),
+        json!("200:second answer"),
+        "edited during the run"
+    );
+}
+
+#[test]
+fn files_changed_on_disk_during_a_run_are_seen_and_kept() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = write_app(tmp.path(), "");
+    let mut s = Session::open(&app, opts(tmp.path())).unwrap();
+    let (storage, appfiles) = (
+        tmp.path().join("state/files"),
+        tmp.path().join("state/appfiles"),
+    );
+    fs::create_dir_all(&storage).unwrap();
+    fs::create_dir_all(&appfiles).unwrap();
+    let read = |s: &mut Session, code: &str| s.lua_eval(code).unwrap();
+
+    fs::write(storage.join("late.txt"), "hi").unwrap();
+    fs::write(appfiles.join("Note.txt"), "app").unwrap();
+    assert_eq!(
+        read(&mut s, "return ctx.storage:read('late.txt')"),
+        json!("hi"),
+        "added after the start"
+    );
+    assert_eq!(
+        read(&mut s, "return ctx.files:read('note.txt')"),
+        json!("app")
+    );
+
+    fs::write(storage.join("late.txt"), "edited").unwrap();
+    assert_eq!(
+        read(&mut s, "return ctx.storage:read('late.txt')"),
+        json!("edited")
+    );
+
+    s.lua_exec("ctx.storage:write('own.txt', 'mine')").unwrap();
+    fs::write(storage.join("late.txt"), "edited again").unwrap();
+    s.lua_exec("ctx.storage:write('own.txt', 'mine 2')")
+        .unwrap();
+    assert_eq!(
+        fs::read_to_string(storage.join("late.txt")).unwrap(),
+        "edited again",
+        "not overwritten by a save"
+    );
+    assert_eq!(
+        fs::read_to_string(storage.join("own.txt")).unwrap(),
+        "mine 2"
+    );
+
+    fs::remove_file(storage.join("late.txt")).unwrap();
+    fs::remove_file(appfiles.join("Note.txt")).unwrap();
+    assert_eq!(
+        read(&mut s, "return ctx.storage:exists('late.txt')"),
+        json!(false),
+        "removed"
+    );
+    assert_eq!(
+        read(&mut s, "return ctx.files:exists('Note.txt')"),
+        json!(false)
+    );
+
+    fs::write(storage.join("after.txt"), "restart").unwrap();
+    s.restart();
+    assert_eq!(
+        read(&mut s, "return ctx.storage:read('after.txt')"),
+        json!("restart")
+    );
+    assert!(s.core().errors().is_empty(), "{:?}", &*s.core().errors());
+}

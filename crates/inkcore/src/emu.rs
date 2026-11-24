@@ -1000,6 +1000,19 @@ impl Core {
         with(&self.st, |s| s.warn(msg));
     }
 
+    /// Replaces the `ctx.storage` and `ctx.files` contents with the host's (files changed outside the app); they are
+    /// not marked as changed, so nothing is written back.
+    pub fn set_files(
+        &mut self,
+        files: std::collections::BTreeMap<String, Vec<u8>>,
+        app_files: std::collections::BTreeMap<String, Vec<u8>>,
+    ) {
+        with(&self.st, |s| {
+            s.persisted.files = files;
+            s.persisted.app_files = app_files;
+        });
+    }
+
     /// The app data to write to disk, when state, files or lock data changed since the last take.
     pub fn take_persist(&mut self) -> Option<Persisted> {
         with(&self.st, |s| {

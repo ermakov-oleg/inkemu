@@ -167,7 +167,8 @@ non-JSON content type.
 Fixtures live in `<fixtures dir>/net/` (default `tests/fixtures/<app_id>/net/`, relative to the working directory),
 one `METHOD_host_hash.json` (request key, response status/headers/`body_file`/`delay_ms`) plus a `.body` file.
 A request body is matched by its SHA-256 (`request.body_sha256`), whatever the method. A fixture can be written by
-hand; a malformed one is ignored with a warning.
+hand; a malformed one is ignored with a warning. A fixture written or edited while an `Emu` runs answers its next
+request.
 
 `<state root>/secrets.json` (default `.emu/secrets.json`) is a flat `{"name": "value"}` object. Values are replaced by
 `{{name}}` in recorded URLs, bodies and headers, and `{{name}}` in app files seeded from the project is replaced
@@ -182,7 +183,8 @@ back for `live` and `record` requests, including their percent-encoded forms. A 
 and `/AppFiles/<app_id>/`); inkemu keeps the §9 quota (128 MiB, 512 files) on `files/` and the 512-file limit on
 `appfiles/`. The state root is
 `.emu/` in the working directory, or `$INKEMU_STATE_ROOT`. `--fresh` wipes the app state first, both file directories
-included, then seeds `files/` from `<fixtures dir>/files/`.
+included, then seeds `files/` from `<fixtures dir>/files/`. A file added, edited or removed in `files/` or
+`appfiles/` while an `Emu` runs is what the app sees from its next call on, and the app's own saves leave it alone.
 
 ## Breaking changes in 0.2
 
