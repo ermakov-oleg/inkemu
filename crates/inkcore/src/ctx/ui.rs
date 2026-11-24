@@ -19,6 +19,9 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
             let (Value::Table(opts), Value::Function(f)) = (arg(&a, 0), arg(&a, 1).clone()) else {
                 unreachable!()
             };
+            if with(&st, |s| s.lock.ctx.is_some()) {
+                return soft_fail(lua, "inactive");
+            }
             if busy(&Host { lua, st: &st }) {
                 return soft_fail(lua, "busy");
             }
@@ -56,6 +59,9 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
             let Some(o) = edit_opts(opts, screen)? else {
                 return soft_fail(lua, "invalid_argument");
             };
+            if with(&st, |s| s.lock.ctx.is_some()) {
+                return soft_fail(lua, "inactive");
+            }
             if busy(&h) {
                 return soft_fail(lua, "busy");
             }
@@ -149,6 +155,9 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
             let (Value::Table(opts), Value::Function(f)) = (arg(&a, 0), arg(&a, 1).clone()) else {
                 unreachable!()
             };
+            if with(&st, |s| s.lock.ctx.is_some()) {
+                return soft_fail(lua, "inactive");
+            }
             let h = Host { lua, st: &st };
             if h.pending_kind() == Some("edit") {
                 return soft_fail(lua, "busy");
@@ -174,6 +183,9 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
             let Value::String(s) = arg(&a, 0) else {
                 unreachable!()
             };
+            if with(&st, |s| s.lock.ctx.is_some()) {
+                return soft_fail(lua, "inactive");
+            }
             Host { lua, st: &st }.show_toast(&s.to_string_lossy());
             Ok(MultiValue::new())
         })

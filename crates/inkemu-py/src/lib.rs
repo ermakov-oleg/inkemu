@@ -27,10 +27,18 @@ type Status = (
 );
 type Text = (String, i32, i32, i32, i32, &'static str);
 
-/// (width, height, PIL raw mode "1" bytes).
-fn pack(f: inkcore::Frame) -> (u32, u32, Vec<u8>) {
-    let px = f.packed();
-    (f.w, f.h, px)
+/// (width, height, PIL raw mode, bytes): mode "L" for a gray frame, else mode "1" of `frame()`.
+fn pack(
+    gray: Option<inkcore::Frame>,
+    frame: impl FnOnce() -> inkcore::Frame,
+) -> (u32, u32, &'static str, Vec<u8>) {
+    match gray {
+        Some(g) => (g.w, g.h, "L", g.gray_bytes()),
+        None => {
+            let f = frame();
+            (f.w, f.h, "1", f.packed())
+        }
+    }
 }
 
 #[pyclass(module = "inkemu._core")]
@@ -240,16 +248,20 @@ impl Session {
         })
     }
 
-    /// The screen with plates, as (width, height, PIL mode "1" bytes).
-    fn frame<'py>(&self, py: Python<'py>, dialog: bool) -> (u32, u32, Bound<'py, PyBytes>) {
-        let (w, h, px) = self.with(py, |s| pack(s.frame(dialog)));
-        (w, h, PyBytes::new(py, &px))
+    /// The screen with plates, as (width, height, PIL mode, bytes): "L" for a gray frame, else "1".
+    fn frame<'py>(
+        &self,
+        py: Python<'py>,
+        dialog: bool,
+    ) -> (u32, u32, &'static str, Bound<'py, PyBytes>) {
+        let (w, h, mode, px) = self.with(py, |s| pack(s.core().frame_gray(), || s.frame(dialog)));
+        (w, h, mode, PyBytes::new(py, &px))
     }
 
-    /// The app's own frame without plates, as (width, height, PIL mode "1" bytes).
-    fn raw_frame<'py>(&self, py: Python<'py>) -> (u32, u32, Bound<'py, PyBytes>) {
-        let (w, h, px) = self.with(py, |s| pack(s.core().raw_frame()));
-        (w, h, PyBytes::new(py, &px))
+    /// The app's own frame without plates, always mode "1" (a gray frame's threshold).
+    fn raw_frame<'py>(&self, py: Python<'py>) -> (u32, u32, &'static str, Bound<'py, PyBytes>) {
+        let (w, h, mode, px) = self.with(py, |s| pack(None, || s.core().raw_frame()));
+        (w, h, mode, PyBytes::new(py, &px))
     }
 
     fn log(&self, py: Python<'_>) -> Vec<String> {

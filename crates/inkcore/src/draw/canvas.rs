@@ -5,7 +5,7 @@ use super::image::{self, Gray, Look};
 use super::pattern::{self, Pattern};
 use super::raster::Style;
 use super::text::{Fonts, LayoutOpts, Overflow, Paint};
-use super::{Frame, TextItem};
+use super::{Depth, Frame, TextItem};
 
 /// A frame accepts this many draw commands; the device refuses every call past it.
 pub const CAP: usize = 1024;
@@ -26,17 +26,20 @@ pub struct TextOpts {
     pub font: &'static str,
     pub align: Align,
     pub valign: Align,
-    /// 1 black, 0 white.
-    pub ink: u8,
+    /// 0 paper … 15 ink.
+    pub color: u8,
     /// The style, and for `text_box` the wrapping options.
     pub layout: LayoutOpts,
 }
 
-/// A draw command with its values already checked.
+/// A draw command with its values already checked. Colours stay 0..15 (`style.ink` too) until the frame is
+/// rendered, since a later `g:image{gray = true}` can make the whole frame gray.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Cmd {
     Clear {
-        ink: u8,
+        color: u8,
+        /// A normal frame clears black for any colour but 0, as 0.1 did; a gray frame takes `color`'s step.
+        black: bool,
     },
     Rect {
         x: f64,
@@ -52,7 +55,7 @@ pub enum Cmd {
         x1: f64,
         y1: f64,
         width: i32,
-        ink: u8,
+        color: u8,
     },
     Circle {
         x: f64,
@@ -68,7 +71,7 @@ pub enum Cmd {
     Polyline {
         pts: Vec<(f64, f64)>,
         width: i32,
-        ink: u8,
+        color: u8,
     },
     Text {
         x: f64,
@@ -92,6 +95,8 @@ pub enum Cmd {
         w: u32,
         h: u32,
         look: Look,
+        /// `gray = true` on the screen's `g`.
+        gray: bool,
     },
     Pattern {
         x: i32,
@@ -99,13 +104,14 @@ pub enum Cmd {
         w: i32,
         h: i32,
         kind: Pattern,
-        ink: u8,
+        color: u8,
     },
 }
 
 enum Op {
     Draw(Cmd),
-    /// Lines of text: the left and top of each line box, the text, its width and whether `paint.clip` cuts it.
+    /// Lines of text: the left and top of each line box, the text, its width and whether `paint.clip` cuts it;
+    /// `paint.ink` is the colour.
     Lines {
         font: &'static str,
         paint: Paint,
@@ -129,6 +135,9 @@ pub struct Canvas {
     tried: usize,
     /// `g:image` commands accepted.
     images: usize,
+    /// A `g:image{gray = true}` was accepted in the frame being recorded, and in the last finished one.
+    rec_gray: bool,
+    gray: bool,
     /// Bytes of text accepted in the frame being recorded.
     text_bytes: usize,
     warnings: Vec<String>,
@@ -155,6 +164,8 @@ impl Canvas {
             n: 0,
             tried: 0,
             images: 0,
+            rec_gray: false,
+            gray: false,
             text_bytes: 0,
             warnings: vec![],
             bad: None,
@@ -186,6 +197,7 @@ impl Canvas {
         self.rec_texts.clear();
         self.warnings.clear();
         (self.n, self.tried, self.images, self.text_bytes) = (0, 0, 0, 0);
+        (self.rec_gray, self.gray) = (false, false);
         self.bad = None;
     }
 
@@ -222,8 +234,9 @@ impl Canvas {
         }
         self.n += cost;
         self.text_bytes += bytes;
-        if let Some(Op::Draw(Cmd::Image { .. })) = op {
+        if let Some(Op::Draw(Cmd::Image { gray, .. })) = op {
             self.images += 1;
+            self.rec_gray |= gray;
         }
         self.rec_texts.extend(text);
         self.rec_ops.extend(op);
@@ -238,6 +251,7 @@ impl Canvas {
     pub fn end_frame(&mut self) -> usize {
         self.ops = std::mem::take(&mut self.rec_ops);
         self.texts = std::mem::take(&mut self.rec_texts);
+        self.gray = std::mem::take(&mut self.rec_gray);
         if self.tried > CAP {
             let msg = format!(
                 "{} draw commands in one frame; the device refuses every call past {CAP}",
@@ -251,6 +265,11 @@ impl Canvas {
     /// Commands and `g:image` calls accepted in the frame being recorded (after `end_frame`: the finished one).
     pub fn accepted(&self) -> (usize, usize) {
         (self.n, self.images)
+    }
+
+    /// The last finished frame is a gray frame (§3).
+    pub fn gray(&self) -> bool {
+        self.gray
     }
 
     /// Warnings of this frame, oldest first.
@@ -276,14 +295,15 @@ impl Canvas {
         let (font, f, style) = (opts.font, &self.fonts, opts.layout.style);
         let lh = f.line_height(font);
         let place = |at: f64, size: f64, room: f64, a: Align| match a {
-            Align::Middle => at + (room - size) / 2.0,
+            // where a centred `g:text` at the box centre lands: `x - width // 2` (§7) at `x + w // 2`
+            Align::Middle => at + (room / 2.0).floor() - (size / 2.0).floor(),
             Align::End => at + room - size,
             Align::Start | Align::Baseline => at,
         };
         // a stroke under a line of width 0 is not drawn
         let cost = |w: i32| 1 + if w > 0 { style.strokes() } else { 0 };
         let mut paint = Paint {
-            ink: opts.ink,
+            ink: opts.color,
             style,
             clip: None,
         };
@@ -348,17 +368,28 @@ impl Canvas {
         self.fonts.wrap(font, s, width)
     }
 
+    /// The last finished frame in 1 bit, gray or not.
     pub fn render(&self) -> Frame {
         self.render_on(Frame::new(self.w, self.h))
     }
 
-    /// The last finished frame drawn over `f` (a layer's previous contents).
-    pub fn render_on(&self, mut f: Frame) -> Frame {
+    /// The last finished frame in `depth`.
+    pub fn render_in(&self, depth: Depth) -> Frame {
+        self.draw_on(Frame::new(self.w, self.h), depth)
+    }
+
+    /// The last finished frame drawn over `f` (a layer's previous contents) in 1 bit.
+    pub fn render_on(&self, f: Frame) -> Frame {
+        self.draw_on(f, Depth::Bits)
+    }
+
+    fn draw_on(&self, mut f: Frame, depth: Depth) -> Frame {
         for op in &self.ops {
             match op {
                 Op::Lines { font, paint, lines } => {
                     for (x, y, line, w, cut) in lines {
                         let p = Paint {
+                            ink: depth.of(paint.ink),
                             clip: paint.clip.filter(|_| *cut),
                             ..*paint
                         };
@@ -366,53 +397,60 @@ impl Canvas {
                         self.fonts.draw_strokes(&mut f, font, (*x, *y, *w), p);
                     }
                 }
-                Op::Draw(cmd) => draw(&mut f, cmd),
+                Op::Draw(cmd) => draw(&mut f, cmd, depth),
             }
         }
         f
     }
 }
 
-fn draw(f: &mut Frame, cmd: &Cmd) {
+fn draw(f: &mut Frame, cmd: &Cmd, depth: Depth) {
+    let style = |st: Style| Style {
+        ink: depth.of(st.ink),
+        ..st
+    };
     match *cmd {
-        Cmd::Clear { ink } => f.clear(ink),
+        Cmd::Clear { color, black } => f.clear(match depth {
+            Depth::Bits => u8::from(black),
+            Depth::Gray => depth.of(color),
+        }),
         Cmd::Rect {
             x,
             y,
             w,
             h,
             radius,
-            style,
-        } if w > 0.0 && h > 0.0 => f.rect(x, y, w, h, radius, style),
+            style: st,
+        } if w > 0.0 && h > 0.0 => f.rect(x, y, w, h, radius, style(st)),
         Cmd::Line {
             x0,
             y0,
             x1,
             y1,
             width,
-            ink,
-        } => f.line(x0, y0, x1, y1, width, ink),
+            color,
+        } => f.line(x0, y0, x1, y1, width, depth.of(color)),
         Cmd::Circle {
             x,
             y,
             r,
             arc,
-            style,
-        } => f.circle(x, y, r, arc, style),
-        Cmd::Polygon { ref pts, style } if pts.len() >= 3 => f.polygon(pts, style),
+            style: st,
+        } => f.circle(x, y, r, arc, style(st)),
+        Cmd::Polygon { ref pts, style: st } if pts.len() >= 3 => f.polygon(pts, style(st)),
         Cmd::Polyline {
             ref pts,
             width,
-            ink,
-        } if pts.len() >= 2 => f.polyline(pts, width, ink),
+            color,
+        } if pts.len() >= 2 => f.polyline(pts, width, depth.of(color)),
         Cmd::Pattern {
             x,
             y,
             w,
             h,
             kind,
-            ink,
-        } => pattern::fill(f, (x, y, w, h), kind, ink),
+            color,
+        } => pattern::fill(f, (x, y, w, h), kind, depth.of(color)),
         Cmd::Image {
             ref img,
             x,
@@ -420,7 +458,8 @@ fn draw(f: &mut Frame, cmd: &Cmd) {
             w,
             h,
             look,
-        } => image::paste(f, img, (x, y), (w, h), look),
+            ..
+        } => image::paste(f, img, (x, y), (w, h), look, depth),
         _ => {}
     }
 }

@@ -127,7 +127,7 @@ impl Session {
         if opts.seed_files.unwrap_or(opts.fresh) && problem.is_none() {
             state_disk::seed_files(&fixtures_dir, &state_dir);
         }
-        let (on_disk, state_read_error) = state_disk::load(&state_dir);
+        let (on_disk, state_read_error, load_warnings) = state_disk::load(&state_dir);
         let secrets = secrets::load(&secrets_file);
         let net_dir = fixtures_dir.join("net");
         let cfg = Config {
@@ -154,7 +154,10 @@ impl Session {
             fonts,
         };
         let fetcher = fetcher(net_mode, secrets.values, net_dir);
-        let core = Core::with_fetcher(files, cfg, on_disk.clone(), fetcher);
+        let mut core = Core::with_fetcher(files, cfg, on_disk.clone(), fetcher);
+        for w in &load_warnings {
+            core.warn(w);
+        }
         let mut session = Session {
             core,
             app_dir,

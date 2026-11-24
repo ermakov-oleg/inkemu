@@ -110,17 +110,18 @@ fn seeding_copies_fixture_files_without_overwriting() {
     let app = write_app(tmp.path(), "");
     let files = tmp.path().join("fixtures/files");
     fs::create_dir_all(&files).unwrap();
-    fs::write(files.join("{{cal}}.ics"), "seed").unwrap();
-    fs::write(files.join("has space"), "bad name").unwrap();
+    fs::write(files.join("cal.ics"), "seed").unwrap();
+    // API 2.33.1 §9 (09/storage_name_invalid): storage names are lower case
+    fs::write(files.join("Has.Upper"), "bad name").unwrap();
     let fresh = |seed| SessionOptions {
         fresh: true,
         seed_files: seed,
         ..opts(tmp.path())
     };
     drop(Session::open(&app, fresh(None)).unwrap());
-    let seeded = tmp.path().join("state/files/{{cal}}.ics");
+    let seeded = tmp.path().join("state/files/cal.ics");
     assert_eq!(fs::read(&seeded).unwrap(), b"seed");
-    assert!(!tmp.path().join("state/files/has space").exists());
+    assert!(!tmp.path().join("state/files/Has.Upper").exists());
     // not fresh and not asked to seed: nothing is copied over what the app has
     fs::write(&seeded, "app wrote this").unwrap();
     drop(
@@ -365,4 +366,36 @@ fn ctx_files_live_in_appfiles_apart_from_storage_and_fresh_wipes_them() {
     };
     let _s = Session::open(&app, fresh).unwrap();
     assert!(!state.join("appfiles/z").exists());
+}
+
+#[test]
+fn app_files_on_disk_keep_the_creation_spelling_and_one_file_per_name() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = write_app(
+        tmp.path(),
+        "function on_load(c)\n\
+           if not c.files:exists('Book.TXT') then c.files:write('Book.TXT', '1') end\n\
+         end\n",
+    );
+    drop(Session::open(&app, opts(tmp.path())).unwrap());
+    let dir = tmp.path().join("state/appfiles");
+    assert_eq!(fs::read(dir.join("Book.TXT")).unwrap(), b"1");
+
+    let mut s = Session::open(&app, opts(tmp.path())).unwrap();
+    s.lua_exec("ctx.files:write('book.txt', '22')").unwrap();
+    assert_eq!(
+        s.lua_eval("local l = ctx.files:list() return {#l, l[1].name, ctx.files:read('BOOK.txt')}")
+            .unwrap(),
+        json!([1, "Book.TXT", "22"])
+    );
+    // removed and recreated in another case within one save: the old spelling must not delete the new file
+    s.lua_exec("ctx.files:remove('book.txt') ctx.files:write('BOOK.txt', '3')")
+        .unwrap();
+    drop(s);
+    let names: Vec<_> = fs::read_dir(&dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().into_string().unwrap())
+        .collect();
+    assert_eq!(names, ["BOOK.txt"]);
+    assert_eq!(fs::read(dir.join("BOOK.txt")).unwrap(), b"3");
 }

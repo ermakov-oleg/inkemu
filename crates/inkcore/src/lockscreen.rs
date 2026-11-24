@@ -1,5 +1,5 @@
-//! The lock screen (0.1 `emu.py` lock section): `lock`/`unlock`, the manifest's `lockscreen` block, a separate
-//! Lua state for its entry, wakes every `interval_sec`, the 30 s network wait and the stale frame on timer wakes.
+//! The lock screen (§15): `lock`/`unlock`, the manifest's `lockscreen` block, one short session per lock and per
+//! wake in a fresh Lua state, wakes aligned to the interval, and the preparation phase of a networked session.
 use std::rc::Rc;
 
 use serde_json::{Map, Value as J};
@@ -9,68 +9,62 @@ use crate::clock::TimerId;
 use crate::draw::Canvas;
 use crate::emu::{boot, with, BootMode, Host, Shared, State};
 
-/// How long a timer wake waits for the lock screen's requests before it shows the frame anyway.
-pub(crate) const LOCK_WAIT_MS: i64 = 30_000;
+/// The preparation phase of a networked session ends this long after the session started.
+pub(crate) const PREP_MS: i64 = 28_000;
+const INTERVAL_DEFAULT: i64 = 60;
+const INTERVAL_MIN: i64 = 30;
+const INTERVAL_MAX: i64 = 3600;
 
-/// A number as the app or the manifest gave it: Lua shows `120` and `120.0` differently.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum Num {
-    Int(i64),
-    Float(f64),
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Phase {
+    /// `on_load` runs; nothing is presented yet.
+    Load,
+    /// A networked session waits for its requests and timers.
+    Prep,
+    /// The session's frame is presented; no callback runs any more.
+    Ended,
 }
 
-impl Default for Num {
-    fn default() -> Self {
-        Num::Int(0)
-    }
-}
-
-impl Num {
-    pub(crate) fn positive(self) -> bool {
-        match self {
-            Num::Int(i) => i > 0,
-            Num::Float(f) => f > 0.0,
-        }
-    }
-
-    /// Python `int(sec * 1000)`.
-    fn ms(self) -> i64 {
-        match self {
-            Num::Int(i) => i.saturating_mul(1000),
-            Num::Float(f) => (f * 1000.0) as i64,
-        }
-    }
-}
-
-/// 0.1 `_lock_ctx`: why the running lock screen state was started.
+/// The running lock-screen session.
 pub(crate) struct LockCtx {
-    /// "lock" or "timer".
+    /// "first" or "timer".
     pub(crate) reason: &'static str,
+    /// The manifest declares `lockscreen.net`: `ctx:after` works and the session can wait for it.
+    pub(crate) declared: bool,
+    /// `ctx.lock.net`.
     pub(crate) net: bool,
     pub(crate) done: bool,
     pub(crate) elapsed_sec: i64,
+    pub(crate) phase: Phase,
+    /// `on_draw` runs: `lock:done()` has no effect there.
+    pub(crate) drawing: bool,
+    /// The session's `ctx:after` timers, which the preparation phase waits for.
+    pub(crate) afters: Vec<TimerId>,
 }
 
 /// The lock screen's part of the core state.
 #[derive(Default)]
 pub(crate) struct Lock {
-    /// Set while the lock screen entry runs.
+    /// Set while the lock screen is up.
     pub(crate) ctx: Option<LockCtx>,
-    pub(crate) interval: Num,
-    /// Clock ms of the last lock or wake.
-    pub(crate) cycle_ms: i64,
-    /// A timer wake waits for its requests (or `ctx.lock:done()`) before drawing.
-    pub(crate) waiting: bool,
+    pub(crate) interval: i64,
+    pub(crate) net_interval: i64,
+    /// Clock ms when the running session started.
+    pub(crate) start_ms: i64,
+    /// Clock ms of the last lock-screen present.
+    pub(crate) presented_ms: i64,
+    /// Clock ms when the last session with `lock.net` started.
+    pub(crate) net_ms: Option<i64>,
     pub(crate) wake_timer: Option<TimerId>,
-    pub(crate) deadline: Option<TimerId>,
-    /// The previous frame stays on screen until the woken state draws.
+    /// The previous frame stays on screen until the woken session draws.
     pub(crate) stale: bool,
 }
 
-impl Lock {
-    pub(crate) fn ready(&self, inflight: u32) -> bool {
-        self.ctx.as_ref().is_some_and(|c| c.done) || inflight == 0
-    }
+/// The preparation phase may end: `lock:done()`, or no request and no `ctx:after` timer left.
+pub(crate) fn ready(s: &State) -> bool {
+    s.lock.ctx.as_ref().is_some_and(|c| {
+        c.done || (s.net.inflight == 0 && !c.afters.iter().any(|t| s.timers.contains(t)))
+    })
 }
 
 /// Python truthiness of a JSON value.
@@ -102,14 +96,19 @@ fn manifest(st: &Shared) -> Map<String, J> {
     read_manifest(&app, fw, &label).0
 }
 
-/// 0.1 `int(_lock_block_get("interval_sec", 0))`: a positive number (not a boolean), else 0.
-fn interval_sec(manifest: &Map<String, J>) -> i64 {
-    match block(manifest).and_then(|b| b.get("interval_sec")) {
-        Some(J::Number(n)) if n.as_f64().is_some_and(|f| f > 0.0) => n
-            .as_i64()
-            .unwrap_or_else(|| n.as_f64().unwrap_or_default() as i64),
-        _ => 0,
-    }
+/// A manifest interval in seconds, clamped to 30..3600 as at install (§0).
+fn seconds(v: Option<&J>) -> Option<i64> {
+    let f = v?.as_f64().filter(|f| f.is_finite())?;
+    Some((f as i64).clamp(INTERVAL_MIN, INTERVAL_MAX))
+}
+
+/// `interval_sec` and `net_interval_sec` of the manifest's block; 0 without a block (no wakes).
+fn intervals(manifest: &Map<String, J>) -> (i64, i64) {
+    let Some(b) = block(manifest) else {
+        return (0, 0);
+    };
+    let iv = seconds(b.get("interval_sec")).unwrap_or(INTERVAL_DEFAULT);
+    (iv, seconds(b.get("net_interval_sec")).unwrap_or(iv))
 }
 
 /// Leaves the app, then runs the manifest's lock screen (a blank screen without one).
@@ -118,13 +117,15 @@ pub(crate) fn lock(h: &Host) {
         return;
     }
     h.leave();
-    let iv = interval_sec(&manifest(h.st));
+    let (iv, net_iv) = intervals(&manifest(h.st));
     with(h.st, |s| {
         s.locked = true;
         s.lock_wakes = 0;
-        s.lock.interval = Num::Int(iv);
+        s.lock.interval = iv;
+        s.lock.net_interval = net_iv;
+        s.lock.net_ms = None;
     });
-    enter(h.st, "lock");
+    enter(h.st, "first");
 }
 
 /// Drops the lock screen state and starts the app again (`on_load` + `on_resume`, saved state kept).
@@ -142,48 +143,57 @@ pub(crate) fn end_lock(st: &Shared) {
         s.stop();
         s.locked = false;
         s.lock.ctx = None;
-        s.lock.waiting = false;
         s.lock.stale = false;
         s.lock.wake_timer = None;
     });
 }
 
-/// 0.1 `_lock_enter`: boots the lock screen entry in a fresh Lua state and schedules the next wake.
+/// Boots one lock-screen session in a fresh Lua state.
 fn enter(st: &Shared, reason: &'static str) {
-    let net = block(&manifest(st))
+    let declared = block(&manifest(st))
         .and_then(|b| b.get("net"))
         .is_some_and(truthy);
     with(st, |s| {
         let now = s.sched.clock.ms;
-        let elapsed_sec = if reason == "timer" {
-            now.saturating_sub(s.lock.cycle_ms).div_euclid(1000)
-        } else {
+        let first = reason == "first";
+        let net = declared
+            && (first
+                || s.lock.net_ms.is_none_or(|t| {
+                    now.saturating_sub(t) >= s.lock.net_interval.saturating_mul(1000)
+                }));
+        if net {
+            s.lock.net_ms = Some(now);
+        }
+        let elapsed_sec = if first {
             0
+        } else {
+            now.saturating_sub(s.lock.presented_ms).div_euclid(1000)
         };
         s.lock.ctx = Some(LockCtx {
             reason,
+            declared,
             net,
             done: false,
             elapsed_sec,
+            phase: Phase::Load,
+            drawing: false,
+            afters: Vec::new(),
         });
-        s.lock.cycle_ms = now;
+        s.lock.start_ms = now;
     });
     boot(st, BootMode::Lock);
-    with(st, schedule);
 }
 
-/// 0.1 `_lock_schedule`: the next wake, `interval` after the last lock or wake.
+/// The next wake: the next whole multiple of the interval in local time.
 pub(crate) fn schedule(s: &mut State) {
     if let Some(t) = s.lock.wake_timer.take() {
         s.cancel_timer(t);
     }
-    if s.locked && s.running && s.lock.interval.positive() {
-        let due = s
-            .lock
-            .cycle_ms
-            .saturating_add(s.lock.interval.ms())
-            .saturating_sub(s.sched.clock.ms);
-        s.lock.wake_timer = Some(s.add_timer(due, Rc::new(wake), 0));
+    if s.locked && s.running && s.lock.interval > 0 {
+        let local = s.cfg.start_local_ms.saturating_add(s.sched.clock.ms);
+        let iv = s.lock.interval.saturating_mul(1000);
+        let next = (local.div_euclid(iv) + 1).saturating_mul(iv);
+        s.lock.wake_timer = Some(s.add_timer(next - local, Rc::new(wake), 0));
     }
 }
 
@@ -195,37 +205,92 @@ fn wake(h: &Host) {
     enter(h.st, "timer");
 }
 
-/// 0.1 `_lock_after_load`: a lock draws at once; a timer wake first waits for its requests, at most 30 s.
+/// After `on_load`: draws at once, or (a networked session with requests or timers left) enters the preparation
+/// phase, drawing the stored data first in a `first` session.
 pub(crate) fn after_load(h: &Host) {
-    let now = with(h.st, |s| {
+    let prep = with(h.st, |s| {
+        let c = s.lock.ctx.as_ref()?;
         if !s.running {
-            return false;
+            return None;
         }
-        let by_lock = s.lock.ctx.as_ref().is_some_and(|c| c.reason == "lock");
-        if by_lock || s.lock.ready(s.net.inflight) {
-            return true;
-        }
-        s.lock.waiting = true;
-        s.lock.deadline = Some(s.add_timer(LOCK_WAIT_MS, Rc::new(present), 0));
-        false
+        Some((c.declared && !ready(s)).then_some(c.reason == "first"))
     });
-    if now {
-        present(h);
+    match prep {
+        None => {}
+        Some(None) => present(h),
+        Some(Some(early)) => {
+            if early {
+                draw(h);
+            }
+            with(h.st, |s| {
+                let Some(c) = s.lock.ctx.as_mut().filter(|_| s.running) else {
+                    return;
+                };
+                c.phase = Phase::Prep;
+                let due = s
+                    .lock
+                    .start_ms
+                    .saturating_add(PREP_MS)
+                    .saturating_sub(s.sched.clock.ms);
+                s.add_timer(due, Rc::new(present), 0);
+            });
+        }
     }
 }
 
-/// 0.1 `_lock_present`: ends the wait and draws the lock screen on a fresh canvas.
-pub(crate) fn present(h: &Host) {
+/// Unfinished requests and timers never deliver once the session draws its last frame.
+fn cancel_all(s: &mut State) {
+    for t in std::mem::take(&mut s.timers) {
+        s.sched.cancel(t);
+    }
+    s.tick = None;
+    s.lock.wake_timer = None;
+    s.net.stop();
+    s.net.inflight = 0;
+    if let Some(c) = &mut s.lock.ctx {
+        c.afters.clear();
+    }
+}
+
+/// One `on_draw` of the session, presented.
+fn draw(h: &Host) {
+    let go = with(h.st, |s| {
+        let c = s.lock.ctx.as_mut().filter(|_| s.running)?;
+        c.drawing = true;
+        Some(())
+    });
+    if go.is_none() {
+        return;
+    }
+    h.draw();
     with(h.st, |s| {
-        if std::mem::take(&mut s.lock.waiting) {
-            if let Some(t) = s.lock.deadline.take() {
-                s.cancel_timer(t);
-            }
+        if let Some(c) = &mut s.lock.ctx {
+            c.drawing = false;
         }
+    });
+}
+
+/// Ends the session: cancels what is left, draws the frame on a fresh canvas and schedules the next wake.
+pub(crate) fn present(h: &Host) {
+    let go = with(h.st, |s| {
+        let c = s.lock.ctx.as_mut()?;
+        if c.phase == Phase::Ended {
+            return None;
+        }
+        c.phase = Phase::Ended;
+        cancel_all(s);
         if std::mem::take(&mut s.lock.stale) {
             s.canvas = Canvas::new(s.canvas.w, s.canvas.h, s.fonts.clone());
         }
-        s.invalid = true;
+        Some(())
     });
-    h.settle();
+    if go.is_none() {
+        return;
+    }
+    draw(h);
+    with(h.st, |s| {
+        cancel_all(s);
+        s.lock.presented_ms = s.sched.clock.ms;
+        schedule(s);
+    });
 }

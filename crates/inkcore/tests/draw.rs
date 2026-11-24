@@ -210,6 +210,33 @@ fn text_box_wraps() {
 }
 
 #[test]
+fn text_box_centres_a_line_where_a_centred_text_lands() {
+    // 7 spare pixels each way: an odd text in an even box, then an even text in an odd box (line heights are even,
+    // so the box height is odd); 3.5 rounded half to even gave 4 where `//` gives 3
+    for parity in [1, 0] {
+        let setup = format!(
+            "local f = ctx.fonts.medium
+             for _, c in ipairs({{'x', 'xx', 'i', 'ii', 'm', 'W', 'ab'}}) do
+               if f:measure(c) % 2 == {parity} then s = c break end
+             end
+             local w, h = f:measure(s) + 7, f.line_height + 7
+             g:clear(0)"
+        );
+        let opts = "{font = 'medium', align = 'center', valign = 'middle'}";
+        let boxed = draw(&format!("{setup}; g:text_box(10, 20, w, h, s, {opts})"));
+        let plain = draw(&format!(
+            "{setup}; g:text(10 + w // 2, 20 + h // 2, s, {opts})"
+        ));
+        let (b, p) = (boxed.raw_frame(), plain.raw_frame());
+        assert!(black(&b) > 0, "parity {parity}");
+        assert_eq!(
+            b.px, p.px,
+            "parity {parity}: §7 en-07:80, x - width // 2 and y - line_height // 2 at the box centre"
+        );
+    }
+}
+
+#[test]
 fn wrap_splits_words_and_long_words() {
     let (c, fonts) = (Canvas::new(480, 800, Fonts::new()), Fonts::new());
     let lines = c.wrap("small", "aaaaaaaaaaaaaaaaaaaa b\nc", 60.0);
@@ -235,6 +262,101 @@ fn huge_values_are_clipped_not_looped() {
     assert!(
         black(&core.raw_frame()) > 0,
         "API 2.33.1 contract §6 says otherwise: round_rect and pattern_rect are gone (06/g_methods)"
+    );
+}
+
+fn ink_runs(f: &Frame, y: u32, xs: std::ops::Range<u32>) -> Vec<(u32, u32)> {
+    let mut runs: Vec<(u32, u32)> = Vec::new();
+    for x in xs.filter(|&x| f.get(x, y) == 1) {
+        match runs.last_mut() {
+            Some(r) if r.1 + 1 == x => r.1 = x,
+            _ => runs.push((x, x)),
+        }
+    }
+    runs
+}
+
+// The point lists are the "Today" app's calls (xteink 882c929) at 14:06, measured on firmware 26112001.
+#[test]
+fn polygon_fill_matches_firmware_lcd_segment() {
+    let core = draw("g:clear(0); g:polygon({159, 166, 167, 158, 199, 158, 207, 166, 198, 174, 166, 174}, {fill = true})");
+    let f = core.raw_frame();
+    let rows: Vec<_> = (156..176).map(|y| (y, ink_runs(&f, y, 150..215))).collect();
+    let mut want: Vec<(u32, Vec<(u32, u32)>)> = vec![(156, vec![]), (157, vec![])];
+    for y in 158..174u32 {
+        let d = y.abs_diff(166);
+        want.push((y, vec![(159 + d, 206 - d)]));
+    }
+    want.extend([(174, vec![]), (175, vec![])]);
+    assert_eq!(
+        rows, want,
+        "firmware 26112001: vertices at pixel centres, no outline"
+    );
+}
+
+#[test]
+fn refresh_icon_matches_firmware() {
+    let core = draw(
+        "g:clear(0)
+         g:polyline({448, 28, 452, 33, 453, 38, 451, 44, 447, 48, 441, 49, 436, 47, 432, 42, 431, 36, 433, 31, 438, 28},
+           {line_width = 3})
+         g:polygon({446, 21, 455, 28, 445, 33}, {fill = true})",
+    );
+    let f = core.raw_frame();
+    for (x, y) in [(438, 27), (439, 27), (439, 28), (439, 29)] {
+        assert_eq!(
+            f.get(x, y),
+            1,
+            "({x}, {y}): firmware 26112001 rounds thick line ends"
+        );
+    }
+    let extra = [
+        (446, 21),
+        (449, 23),
+        (450, 24),
+        (453, 26),
+        (454, 27),
+        (445, 28),
+        (455, 28),
+        (445, 29),
+        (453, 29),
+        (454, 29),
+        (445, 30),
+        (452, 30),
+        (445, 31),
+        (445, 32),
+        (447, 32),
+        (448, 32),
+        (445, 33),
+        (446, 33),
+    ];
+    for (x, y) in extra {
+        assert_eq!(
+            f.get(x, y),
+            0,
+            "({x}, {y}): firmware 26112001 draws no outline around a filled polygon"
+        );
+    }
+}
+
+#[test]
+fn thick_line_covers_centres_closer_than_half_the_width() {
+    let core = draw("g:clear(0); g:line(456, 124, 462, 134, {line_width = 2}); g:line(10, 10, 20, 10, {line_width = 2})");
+    let f = core.raw_frame();
+    // distance exactly 1 from an end: firmware 26112001 leaves these white (chevron of the "Today" rows)
+    assert_eq!(
+        (
+            f.get(455, 124),
+            f.get(456, 123),
+            f.get(456, 124),
+            f.get(462, 134)
+        ),
+        (0, 0, 1, 1)
+    );
+    // §6 "less than line_width / 2" from the pixel-centre segment; even widths on an axis are not measured
+    assert_eq!(
+        (9..12).map(|y| ink_runs(&f, y, 0..30)).collect::<Vec<_>>(),
+        [vec![], vec![(10, 20)], vec![]]
     );
 }
 

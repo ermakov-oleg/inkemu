@@ -161,7 +161,8 @@ non-JSON content type.
 
 Fixtures live in `<fixtures dir>/net/` (default `tests/fixtures/<app_id>/net/`, relative to the working directory),
 one `METHOD_host_hash.json` (request key, response status/headers/`body_file`/`delay_ms`) plus a `.body` file.
-POST bodies are matched by SHA-256. A fixture can be written by hand; a malformed one is ignored with a warning.
+A request body is matched by its SHA-256 (`request.body_sha256`), whatever the method. A fixture can be written by
+hand; a malformed one is ignored with a warning.
 
 `<state root>/secrets.json` (default `.emu/secrets.json`) is a flat `{"name": "value"}` object. Values are replaced by
 `{{name}}` in recorded URLs, bodies and headers, and `{{name}}` in app files seeded from the project is replaced
@@ -173,7 +174,8 @@ back for `live` and `record` requests, including their percent-encoded forms. A 
 
 `<state root>/<app_id>/` holds `state.json` (`ctx.state`), `files/` (`ctx.storage`), `appfiles/` (`ctx.files`),
 `lock.json` and `shots/`. On the device `ctx.storage` and `ctx.files` are two directories too (`XTApps/<app_id>/files/`
-and `/AppFiles/<app_id>/`); inkemu applies the quota of 128 MiB and 512 files to each of them. The state root is
+and `/AppFiles/<app_id>/`); inkemu keeps the §9 quota (128 MiB, 512 files) on `files/` and the 512-file limit on
+`appfiles/`. The state root is
 `.emu/` in the working directory, or `$INKEMU_STATE_ROOT`. `--fresh` wipes the app state first, both file directories
 included, then seeds `files/` from `<fixtures dir>/files/`.
 
@@ -183,6 +185,15 @@ included, then seeds `files/` from `<fixtures dir>/files/`.
   26112001 has none of them. Use `g:rect(x, y, w, h, {radius = r})`, `font:measure(text)` (for example
   `ctx.fonts.medium:measure("Hi")`) and `g:pattern`. There is no compatibility mode.
 - A `g` kept after its callback returns `nil, "inactive"` instead of drawing into the next frame.
+- `clock:now().weekday` counts from Sunday = 0 (0.1: Sunday = 1), and `revision` starts at 1 (0.1: 0).
+- `ctx.log:info`, `warn` and `error` raise a Lua error for a non-string argument.
+- `ctx.system:act("sleep")` and `act("power_off")` returned `nil, "invalid_argument"` in 0.1. Now both return
+  `nil, "inactive"` except in an `on_input` delivering a key or pointer `up`. There, `"sleep"` returns nothing, and
+  when that `on_input` returns the app leaves (`on_leave`, its session ends) and the device locks; `"power_off"`
+  returns nothing and the app goes on as if the user cancelled (there is no confirmation dialog).
+- `hash`, `hex`, `base64` and `url` take at most 1048576 bytes of input, else `nil, "limit_exceeded"`.
+  `base64:decode` also takes the `-_` alphabet and unpadded input, `url:decode` of a malformed `%XX` returns
+  `nil, "invalid_argument"` (0.1 kept it), and `random:bytes(n)` takes 1 to 1024 (0.1: 0 to 1048576).
 - `g:image` of something that is not an image is `nil, "invalid_argument"`, and of a released `ctx.image` or
   `ctx.qr` image or layer `nil, "invalid_handle"`, instead of drawing nothing or failing the frame (a released
   `ctx.package:image` stays drawable). `layer:draw` on a released layer returns
@@ -196,6 +207,14 @@ included, then seeds `files/` from `<fixtures dir>/files/`.
   returns `nil, "busy"` while a text input, an edit or a confirm is open, and `dialog:confirm` while an edit is.
 - Circles and arcs follow the pixel rules of §6: half a pixel smaller than in 0.1, an arc of whole turns draws
   nothing, and a filled `arc` is a stroke, not a pie slice.
+- Polygons and thick lines are drawn as firmware 26112001 draws them: a filled `polygon` has no outline (0.1 also
+  stroked its edges, one pixel more along the lower and right sides), a `line` or `polyline` thicker than 1 has round
+  ends instead of square ones, and `polyline` adds no joints of its own. Thick lines of even width along an axis are
+  thinner: width 2 covers 1 row instead of 0.1's 2, width 4 covers 3 rows instead of 4 (not verified on the device,
+  see "Differences from the device"). Pixel baselines with these shapes move.
+- A centred `g:text_box` line lands where a centred `g:text` at the box centre would: it starts at
+  `x + w // 2 - width // 2`, and a middle block at `y + h // 2 - height // 2`. 0.1 rounded `x + (w - width) / 2`
+  half to even, so some centred lines move by one pixel.
 - `g:text_box` with an `h` below one line height draws nothing and succeeds; 0.1 drew one line. Give it at least
   `font.line_height`. A line that cannot wrap is clipped at the box edge, CJK and Thai text wraps between
   characters, and packages declaring API 2.16 or later get kinsoku.
@@ -213,6 +232,52 @@ included, then seeds `files/` from `<fixtures dir>/files/`.
   with only a log warning. Check the result, or draw fewer commands (a layer or one `g:image`).
 - `ctx:invalidate(x)` with anything but nothing or `"full"`, and `ctx:defer_full_refresh(ms)` outside 1..60000 or
   fractional, return `nil, "invalid_argument"`, and a refused `invalidate` no longer asks for a frame.
+- `ctx.storage` names are `[a-z0-9._-]`, 1 to 64 bytes, not starting or ending with `.`; others return
+  `nil, "invalid_argument"` (0.1 took any name up to 255 bytes). A file already in `files/` with another name is not
+  loaded. `write` of more than 262144 bytes and every quota overrun return `nil, "limit_exceeded"` (0.1: `no_space`),
+  and `remove` of an absent file returns true.
+- `ctx.files` follows §29: names of 1 to 128 bytes without `/ \ : * ? " < > | ~`, a leading `.` or device names
+  (a space inside is legal now); names differing only in case are one file; `list()` returns `{name, size}` items,
+  not bare names; `read(name, offset, len)` returns at most `len` bytes (default and largest 65536) instead of the
+  whole file; the folder has no byte quota, and a 513th file is `limit_exceeded`. A `write` or `append` of more than
+  262144 bytes and every quota overrun return `nil, "limit_exceeded"` (0.1: `no_space`), `remove` of an absent file
+  returns true, and `append` checks the name like `write`.
+- `--fresh` seeding skips fixture files whose names `ctx.storage` would refuse (uppercase, braces).
+- `ctx.net:request` answers follow §14: the 0.1 fields `code` and `error` are gone (read `status` and `err`), a
+  complete answer has `ok = true` with any status, and an answer without a response (`no_fixture`, `no_network`,
+  `timeout`) has `ok = false` and no `status` or `body` (0.1: `status = 0`). A body over 131072 bytes is cut there
+  with `err = "limit_exceeded"`; `bytes` stays the full size.
+- `request` takes one request at a time: another one before the answer returns `nil, "busy"`, so start the next one
+  in the callback (or with `ctx:after`). The method must be one of the 13 of §14, uppercase (0.1 upper-cased `post`
+  and never answered others). Bad options return `nil, "invalid_argument"` instead of starting a request: a missing
+  or non-string `url` (0.1 raised), a `body` on `GET` or `HEAD`, `timeout_ms` outside 1000..60000 or fractional,
+  more than 16 headers, a header name over 64 bytes, headers over 65536 bytes in all, CR, LF or NUL in a header
+  (0.1 dropped a header value that was not a string or number; now the call fails). A `url` over 1024 bytes or a
+  `body` over 65536 bytes returns `nil, "limit_exceeded"`.
+- Fixtures key on the body of every method that sends one, not only `POST`: a `PUT`, `PATCH`, `REPORT`, ... fixture
+  needs the body's `body_sha256`. Such fixtures with a `null` hash (recorded by early 0.2 builds, since 0.1 never
+  answered those methods, or written by hand) no longer match; record them again or add the hash. `GET` and `POST`
+  fixtures stay valid.
+- A request body without a `content-type` header goes out as `text/plain; charset=utf-8` (§14). 0.1's native
+  `live` and `record` sent `application/x-www-form-urlencoded`, so a server that relied on that now needs an
+  explicit `content-type` header from the app.
+- `ctx.net:keep_wifi(ms)` returns nothing (0.1: one nil) and returns `nil, "invalid_argument"` for a number that is
+  not an integer from -1 to 2147483647.
+- Lock screen (§15): the first session's `ctx.lock.reason` is `"first"` (0.1: `"lock"`); wakes are aligned to
+  whole multiples of `interval_sec` in local time, so the first one may come sooner than `interval_sec` after
+  locking (0.1: every `interval_sec` from the lock); `interval_sec` defaults to 60 and is clamped to 30..3600 (0.1:
+  no block value, no wakes); a networked session stops waiting 28 s after it started and cancels what is left
+  (0.1: a timer wake waited 30 s and still delivered late answers); `ctx:after` in a lock screen without
+  `"net": true` and `ctx:set_tick` in any lock session do nothing (0.1 ran them); `net_interval_sec` makes later
+  wakes run without `ctx.net`; a networked first session draws twice. `set_interval` takes only an integer 30..3600
+  and returns nothing (0.1: any positive number, `true`), `lock:done()` returns nothing, and `budget:extend`,
+  `input:text`, `input:edit`, `dialog:confirm`, `dialog:toast` and `screen:set_orientation` return
+  `nil, "inactive"` in a lock session.
+  `ctx.lock.elapsed_sec` counts from the previous lock-screen present (0.1: from the start of the previous cycle).
+- `g:image{gray = true}` makes the frame a gray frame (0.1 ignored it), and `emu.shot()` returns a mode `"L"` image
+  for it instead of mode `"1"`. Code that reads pixels as 0 or 255 keeps working on the black and white parts; use
+  `emu.raw_frame()` if you need a 1-bit image (Pillow's `.convert("1")` dithers; for the same threshold use
+  `.point(lambda v: 0 if v < 128 else 255, "1")`).
 
 ## Supported API
 
@@ -221,8 +286,19 @@ inkemu emulates firmware API 2.33, build 26112001 (`ctx.device.firmware` is `XT 
 `ctx.api`; the API surface is always 2.33.
 
 Callbacks: `on_load`, `on_resume`, `on_draw(ctx, g)`, `on_input(ctx, ev)` (pointer taps, double taps, swipes and
-holds; side-button keys), `on_tick`, `on_leave`. A `lockscreen` block in the manifest runs its own entry file on
-lock and on every `interval_sec` wake, with `ctx.lock` (`reason`, `done`, `set_interval`, ...).
+holds; side-button keys), `on_tick`, `on_leave`. A `lockscreen` block in the manifest runs its own entry file as
+in §15: one short session on lock (`ctx.lock.reason` is `"first"`) and one on every wake (`"timer"`). Wakes come at
+the next whole multiple of `interval_sec` in local time (60 wakes on the minute); `interval_sec` defaults to 60 and,
+like `net_interval_sec`, is clamped to 30..3600. `ctx.lock` has `reason`, `elapsed_sec` (since the previous
+lock-screen present), `interval_sec`, `net`, `set_interval` (an integer 30..3600 for the sleeps after this session,
+else `nil, "invalid_argument"`) and `done`. A session runs `on_load`, then `on_draw`, and ends: `ctx:set_tick`
+does nothing, `ctx:after` does nothing unless the block declares `net`, and `budget:extend`, `input:text`,
+`input:edit`, `dialog:confirm`, `dialog:toast` and `screen:set_orientation` return `nil, "inactive"`. With
+`"net": true`, `ctx.lock.net` (and `ctx.net`) is there in the first session and then only once `net_interval_sec`
+(default `interval_sec`) has passed since the last session that had it. A networked session with requests or timers
+left after `on_load` waits in the preparation phase until they are done, `ctx.lock:done()`, or 28 s after the session
+started; then what is left is cancelled and never delivers, and `on_draw` runs. A `first` session draws the stored
+data at once before waiting, so it presents two frames; a `ctx:invalidate()` while waiting draws nothing extra.
 
 Drawing (`g`): `size`, `clear`, `rect`, `line`, `circle`, `arc`, `polyline`, `polygon`, `pattern`, `text`,
 `text_box` and `image`, plus layers via `ctx.layers`. A `g` works only during its callback (`on_draw` or
@@ -236,9 +312,16 @@ Shapes and images, as in the contract (§6):
 - `polyline` takes 2 to 128 points and `polygon` 3 to 128, as a flat `{x1, y1, x2, y2, ...}` array (inkemu also
   takes 0.1's `{x, y}` and `{x = , y = }` points). Fewer points or an odd array is `nil, "invalid_argument"`; more
   than 128 points is `nil, "limit_exceeded"`, as on the reader (deviation D2; the contract says `invalid_argument`).
+- `polygon` fills the pixels whose centre is inside it by the even-odd rule, closed from the last point to the
+  first, with no outline; without `fill` it is the closed `polyline`. As measured on firmware 26112001, a point
+  `(x, y)` stands for the centre of pixel `(x, y)`, as the ends of a `line` do.
+- `line` with `line_width` above 1 covers the pixels whose centre is closer than `line_width / 2` to the segment
+  between the centres of its end pixels, so its ends are round (firmware 26112001). `polyline` is one `line` per
+  pair of adjacent points, overlaps drawn once.
 - `circle` fills the pixels whose centre is closer than `r` to `(cx + 0.5, cy + 0.5)`; its stroke is the ring of
   those at `r - line_width` or more. `arc` is that stroke from `start_deg` clockwise to `end_deg` (`fill` does not
-  apply); when the two differ by a whole multiple of 360 nothing is drawn.
+  apply); when the two differ by a whole multiple of 360 nothing is drawn, and any other span over 360 degrees draws
+  only its remainder modulo 360 (from 0 to 370 is the arc from 0 to 10).
 - `g:pattern`: `kind` defaults to `dot` and `density` to 50. An unknown `kind`, or a `density` that is not a whole
   number from 0 to 100, is `nil, "invalid_argument"` and draws nothing.
 - `g:image(img, x, y, opts)` takes an object from `ctx.package:image`, `ctx.image`, `ctx.qr` or `ctx.layers`.
@@ -268,6 +351,8 @@ Text, as in the contract (§7):
   at `w - 1`; from API 2.16 the line-start and line-end punctuation rules move a break back. `clip` keeps the lines
   that fit whole (none is fine: nothing is drawn, the call succeeds) and cuts a line that cannot wrap at the box
   edge; `ellipsis` ends the last line that fits with `…` (`...` in a font without one); `visible` keeps every line.
+  A centred line starts at `x + w // 2 - width // 2` and a middle block at `y + h // 2 - height // 2`, where a
+  centred `g:text` at the box centre lands (§7: `x - width // 2`, `y - line_height // 2`).
 - `font:layout(text, w, h, opts)` returns `lines, height, consumed`, three integers, by the same rules: `height` is
   `n * line_height + (n - 1) * line_gap` and `consumed` the bytes taken, on a code-point boundary, with the newline
   or the space at the page's end. `lines` is the number of commands the same `text_box` costs.
@@ -280,9 +365,9 @@ Text, as in the contract (§7):
   valid UTF-8, no NUL, no right-to-left text), else `nil, "invalid_argument"`; a `sample` that is neither a string
   nor nil (a number included) raises an error. The answer is still the nearest of the three system fonts.
 
-Frames: `emu.status()["refresh"]` is the waveform of the last app frame presented, `"partial"` or `"full"`, and
-`emu.status()["refreshes"]` lists the waveforms of the last 64 app frames, oldest first (one step such as a tap can
-present more than one frame). The rules, as in the contract:
+Frames: `emu.status()["refresh"]` is the waveform of the last app frame presented, `"partial"`, `"full"` or
+`"gray"`, and `emu.status()["refreshes"]` lists the waveforms of the last 64 app frames, oldest first (one step such
+as a tap can present more than one frame). The rules, as in the contract:
 
 - `ctx:invalidate()` asks for a partial frame and `ctx:invalidate("full")` or `ctx.system:act("refresh")` for a full
   one; one full request among several makes the frame full. A request made in `on_draw` is for the next frame.
@@ -290,12 +375,24 @@ present more than one frame). The rules, as in the contract:
   full frame starts the count again.
 - `ctx:defer_full_refresh(ms)` holds that automatic full back for `ms` of virtual time; the first frame after the
   deadline gets the full it is owed, and at 60 partial frames the frame is full even while deferred.
-- The first frame of every session (start, restart, reload, unlock, each lock screen session) is full; the contract
-  leaves it open, this is inkemu's choice. Lock screen frames count like app frames.
+- The first frame of every app session (start, restart, reload, unlock) is full; the contract leaves it open, this is
+  inkemu's choice. Lock screen frames count like app frames: the first lock session is full, a timer wake partial
+  (full after `ctx:invalidate("full")`, also from its `on_draw`), the second frame of a networked first session
+  partial, and the partial count goes on across wakes (§15).
 - The error overlay, dialogs and toasts are not frames of the app, and a frame whose `on_draw` fails is not counted.
-- `"gray"` is reserved for a frame with a `g:image{gray = true}`; inkemu does not draw gray frames yet.
+- A gray frame (below) is `"gray"`: a full refresh with the grayscale waveform, whatever `invalidate` asked for. The
+  next normal frame is full and the one after it partial again.
 
-Grey, as measured on 26112001: the canvas is 1-bit, and grey is a pattern of black and white pixels.
+Gray frames (§3): a frame in which a `g:image` call sets `gray = true` is drawn in `ctx.screen.gray_still` = 4 ink
+steps. Every colour becomes `(color * 4) // 16` steps (3, 4, 8, 12, 15 give 0, 1, 2, 3, 3) for `clear`, rectangles,
+lines, text, patterns and images alike; a black-and-white image or layer keeps its two levels (ink dots in `color`),
+and a grey image takes the step of each pixel's own grey. `gray` inside `layer:draw` has no effect (layers are black
+and white). `emu.shot()` returns a Pillow image of mode `"L"` for a gray frame, with 255, 170, 85 and 0 for 0 to 3
+steps, and mode `"1"` for every other frame; `emu.raw_frame()` stays mode `"1"`, the steps' threshold (2 and 3 are
+ink), also while the frame is covered. The page shows the frame in gray. While the error overlay, a dialog or a toast
+covers the app, a gray frame is drawn as a normal one and presented as `"full"`.
+
+Grey, as measured on 26112001: the canvas of a normal frame is 1-bit, and grey is a pattern of black and white pixels.
 
 - `color` is a threshold on the device's scale of 0 (paper) to 15 (ink): 0–7 draw white and 8–15 black in `rect`,
   `circle`, `arc`, `line`, `polygon`, `polyline`, `text` and `text_box`. Without `color` they draw black.
@@ -304,7 +401,7 @@ Grey, as measured on 26112001: the canvas is 1-bit, and grey is a pattern of bla
   anchored to the screen, with `density` percent of ink. `'line'` inks every other row and `'cross'` is a grid with a
   3 px pitch (about 57 %). Any other kind is `nil, "invalid_argument"` and draws nothing, as on the device.
 - `g:rect(x, y, w, h, {radius = r})` rounds the corners; this is how the firmware's own UI draws rounded boxes.
-- A grey PNG or JPEG from `ctx.image` is dithered by `g:image` after scaling.
+- A grey PNG or JPEG from `ctx.image` is dithered by `g:image` after scaling (in a gray frame it keeps 4 steps).
 
 ### `ctx.ui`
 
@@ -361,23 +458,30 @@ the start with an error. From each file inkemu takes:
 - `log`: a table with `error`, `info` and `warn`, each logging with its level (`[app] WARN ...`).
 - `capabilities`, `clock` (`now`, `millis`), `device` (`battery`, `firmware`, `model`, `name`, `id_for_app`,
   `lock_timer`), `fonts`.
-- `storage` (`read`, `write`, `exists`, `size`, `remove`, `list`, `usage` = `{bytes, files, max_bytes, max_files}`).
-- `files` (`read`, `write`, `append`, `exists`, `size`, `remove`, `list`; `path` = `/AppFiles/<app_id>`).
+- `storage` (`read`, `write`, `exists`, `size`, `remove`, `list`, `usage` = `{bytes, files, max_bytes, max_files}`;
+  names `[a-z0-9._-]` up to 64 bytes; 262144 bytes per `write`, 512 files, 128 MiB in all, over that is
+  `limit_exceeded`; `remove` of an absent file is true).
+- `files` (`read(name, offset, len)`, `write`, `append`, `exists`, `size`, `remove`, `list` = `{name, size}` items;
+  `path` = `/AppFiles/<app_id>`; names as §29, case-insensitive with the creation spelling kept; 262144 bytes per
+  call, 512 files, no total limit).
 - `package` (`read`, `open_text`, `image`, `exists`, `size`, `cache_stats` = `{}`).
-- `net` (`request`; GET and POST), `dialog` (`confirm`, `toast`), `input` (`text`, `edit`, `keyboard_h` = 436,
+- `net`: `request` with the 13 methods of §14 (a `HEAD` answer has `body = ""` and `bytes = 0`), one at a time,
+  and `save = {to = "files" | "storage", name}` (a 2xx body replaces the file before the callback, up to 8388608
+  bytes in the app folder and 262144 in storage, within their quotas); `keep_wifi` checks its argument and only
+  logs. `dialog` (`confirm`, `toast`), `input` (`text`, `edit`, `keyboard_h` = 436,
   `pointer` = true). `input:edit` checks its options as §4 (`rect`, `text`, `placeholder`, `max_chars`, `kind`,
   `multiline`, `enter`, else `nil, "invalid_argument"`) and returns `ed` with `set_text`, `text` and `close`;
   `on_end` gets `how` = `"enter"` or `"back"` (the Back key or `answer no`). While it is open, another `edit`,
   `input:text` and `dialog:confirm` return `nil, "busy"`; `edit` and `input:text` are also busy while a text input
   or a confirm is open.
-- `image`, `qr`, `json`, `base64` (`encode`, `decode`), `hex`, `url` (`encode`, `decode`), `zlib`, `random` (`uuid`, `bytes`).
+- `image`, `qr`, `json`, `base64` (`encode` with `{url = true}`, `decode`), `hex`, `url` (`encode`, `decode`, `query`), `zlib`, `random` (`uuid`, `bytes` of 1 to 1024).
 - `hash`: `sha256`, `md5` and `hmac_sha256` return the raw digest bytes (use `ctx.hex:encode` for text); `sha1` returns the
   20 raw bytes too; `crc32` returns a signed 32-bit integer (values from 2^31 wrap to negative); all verified in QEMU on firmware 26112001.
 - `screen` (`width`, `height`, `orientation`, `set_orientation`, `gray_levels` = 2, `gray_still` = 4),
-  `frontlight` (`get`, `set`, `reset`), `system` (`can_open`, `open`, `act`), `i18n` (`locale`), `perf` (`info` =
-  `{tick_us, draw_us, cmd_count, image_count, asset_hit, asset_miss, draw_frame}`: `cmd_count` and `image_count`
-  are the commands and `g:image` calls accepted in the last frame, `draw_frame` the frames of this session), `gc`,
-  `budget`, `reader` (answers from `<fixtures dir>/reader.json`), `lockscreen`, `lock`.
+  `frontlight` (`get`, `set`, `reset`), `system` (`can_open`, `open`, `act`: `refresh`, `sleep`), `i18n`
+  (`locale`), `perf` (`info` = `{tick_us, draw_us, cmd_count, image_count, asset_hit, asset_miss, draw_frame}`:
+  `cmd_count` and `image_count` are the commands and `g:image` calls accepted in the last frame, `draw_frame` the
+  frames of this session), `gc`, `budget`, `reader` (answers from `<fixtures dir>/reader.json`), `lockscreen`, `lock`.
 - `ui` (§16), in progress: see [`ctx.ui`](#ctxui) above.
 
 `clock:now()` has `year month day hour minute second weekday hour12 date_order date_sep epoch_sec local_sec
@@ -394,9 +498,9 @@ offset_minutes revision valid`.
   `16777217.0 == 16777216.0`).
 - The app sees no `io`, `os`, `debug`, `package`, `load`, `loadstring`, `dofile`, `loadfile`, `collectgarbage` or
   `print`, as on the device; `require` searches only the app folder. Lua 5.5's global `warn` is visible to the app.
-- Not emulated, so nil: `ctx.crypto`, `ctx.nn`, `ctx.widget`, `dialog:choose`, `i18n:t`, `url:query`,
+- Not emulated, so nil: `ctx.crypto`, `ctx.nn`, `ctx.widget`, `dialog:choose`, `i18n:t`,
   `input.keys`, `input.listen`, `input.gamepad`, `device.display`, `device.keep_awake`, `device.radios`,
-  `screen.occlusion`. No BLE, no WebSocket; only GET and POST get a network callback.
+  `screen.occlusion`. No BLE, no WebSocket.
 - `ctx.capabilities` reports what inkemu emulates, except that `image_transform` is true as on the device: `dialog frontlight image_decode image_transform pattern reader ui`
   are true, `ble identity nn ttf` false. The device reports `ble dialog frontlight identity image_decode
   image_transform nn pattern reader ui` as true and `ttf` as false.
@@ -405,27 +509,53 @@ offset_minutes revision valid`.
   checked and logged), `kind` and `placeholder` are only checked, and there is no composition and no full-screen
   fallback. `type` types the text and presses the confirm key; a newline in it is the confirm key too. With
   `enter = "newline"`, `type` and `answer yes` insert a line break and the field stays open.
-- `ctx.system:act(s)` needs a string ("string expected" otherwise), as on the device. `"refresh"` makes the next
-  frame full, like `ctx:invalidate("full")`; inkemu answers every other string, `"sleep"` and `"power_off"`
-  included, with `nil, "invalid_argument"` and logs it.
+- `ctx.system:act(s)` needs a string ("string expected" otherwise), as on the device; an unknown name returns
+  `nil, "invalid_argument"`. `"refresh"` makes the next frame full, like `ctx:invalidate("full")`. `"sleep"` and
+  `"power_off"` work only in an `on_input` delivering a key or pointer `up`, elsewhere (and in a lock screen
+  session) they return `nil, "inactive"`. `"sleep"` returns nothing; when that `on_input` returns, the app leaves
+  (`on_leave`) and the device locks as with `emu.lock()`, unless the callback failed or called `ctx:quit()`.
+  `"power_off"` is not emulated: there is no confirmation dialog (so no `on_pause`/`on_resume` and never `busy`),
+  the call returns nothing, logs it and the app goes on as if the user cancelled.
+- Lock screen: the battery and Wi-Fi rules of `ctx.lock.net` (below 20%, three failed connections) and the radios
+  being off in timer wakes are not emulated; a script error shows the error overlay instead of the system's default
+  lock-screen picture (wakes stop, as on the device); `lockscreen.net` without the `net` permission is not refused;
+  callback time limits (2000 ms for a session, 1500 ms for the final `on_draw`) are not measured.
+- Gray frames: `ctx.image:decode{gray = true}` and the dot patterns of 4-level images in normal frames are not
+  emulated.
 - Not verified on the device:
+  - gray frames as a whole: a probe of 26112001 in an emulator saw only 1-bit app frames, but it never drew a
+    `g:image{gray = true}`; inkemu follows the contract;
+  - a toast over a gray frame: §3 names a system input method, dialog or similar screen; inkemu's choice is to treat
+    a toast as one too, so the frame is drawn as a normal one;
   - the 2.26 call form `ctx:log(...)`, which still logs;
+  - the lock screen as a whole (§15 is contract only); in particular `set_interval`'s code for a bad value (inkemu:
+    `invalid_argument` by the §0 range rule; §15 gives only the range), `ctx.lock:done()` from `on_load` (inkemu:
+    the session draws at once), and the timer object `ctx:after` returns where it does nothing (inkemu: one with a
+    `cancel` that does nothing);
   - `ctx.perf:info()`'s `tick_us`, `draw_us`, `asset_hit` and `asset_miss`, which measure the device's renderer:
     always 0 in inkemu;
   - the format of the level prefix of `ctx.log:info/warn/error`;
-  - the numbering of `clock:now().weekday` (inkemu: Sunday = 1, as 2.26's `wday`);
   - the meaning of `clock:now().revision` (inkemu: it changes when the clock is moved by a wait, `]` or `}`, not
     when time passes in the window or with an input);
   - the result format of `ctx.hash:hmac_sha256` (raw bytes in inkemu);
   - the level `ctx.frontlight:reset()` goes back to (inkemu: the level at start, 0);
-  - `ctx.random:bytes(n)` with `n` below 0 or above 1 MiB: inkemu refuses it with `nil, "invalid_argument"`;
-  - the quota of `ctx.files` (inkemu: the same as `ctx.storage`'s, counted separately);
+  - `url:query` with more than 64 items (inkemu: `nil, "limit_exceeded"`; the contract names no code);
+  - completion of `PUT`, `PATCH`, `DELETE` and the other methods after `GET` and `POST` (note N1 in
+    `spec/deviations.md`; inkemu answers them as the contract says);
+  - the code for a `url` over 1024 bytes or a `body` over 65536 bytes (inkemu: `limit_exceeded` by §18; §14 names
+    none), and for a `save` table without `to` or `name` (inkemu: `invalid_argument`);
+  - a number as a header value (inkemu sends it as text; §14 says strings);
+  - the default `content-type`: §14 names every method except `GET` and `HEAD`, and inkemu sets the header only when
+    a body is sent, because a request without a body needs no `content-type`;
   - whether `density` changes the `line` and `cross` patterns (inkemu: no); whether `line` and `cross` are anchored
     to the screen like `dot` or to the box (inkemu: the screen; the probe's boxes started where both agree);
   - `g:pattern` with a `density` that is not a number (inkemu: the frame fails with "g: bad values in on_draw");
+  - a thick `line` of even `line_width` along an axis: inkemu takes §6 literally, so a horizontal line of width 2
+    is one pixel tall (the probe measured widths 2 and 3 on slanted segments only);
   - the colour threshold in `arc`, `polyline` and `text_box` (the probe tried `rect`, `circle`, `line` and text);
   - `color` outside 0–15: inkemu applies the same threshold (below 8 is white);
-  - `g:clear(color)`, which keeps the 0.1 rule (0 white, any other number black);
+  - `g:clear(color)` in a normal frame, which keeps the 0.1 rule (0 white, any other number black, not the 8–15
+    threshold); in a gray frame it clears to the colour's step like the other calls;
   - the `fill` option of shapes, which uses Python-style truthiness in inkemu (0, `""` and `{}` are false);
   - text options the contract leaves open: `line_gap` outside 0–255 (inkemu clamps it), an unknown `wrap` or
     `overflow` (inkemu: the default), a newline at the very end of the text (inkemu: no empty line after it),
@@ -435,12 +565,15 @@ offset_minutes revision valid`.
 - `g:image` resolves the image when the command is recorded, not at the end of `on_draw`.
 - Images and layers have no transparency: a new layer is white, not transparent, so a layer covers what lies under
   it and `invert` turns its undrawn area black. `g:image`'s `background` is not emulated (with opaque images there is
-  nothing for it to show through), nor are `gray` and the transforms (`flip_x`, `flip_y`, `rotate`, `pivot_x`,
+  nothing for it to show through), nor are the transforms (`flip_x`, `flip_y`, `rotate`, `pivot_x`,
   `pivot_y`): `ctx.capabilities.image_transform` is true as on the device, but these options are ignored and the
   log warns once per session. `w` and `h` scale
   each side on its own, up to 8192 (the contract scales only when both are set, up to 4096), and shrinking the width
   is Lanczos plus dithering, not nearest-neighbour. `color` tints only an image (or `src` region) whose pixels are
   all pure black or white, so an anti-aliased PNG icon is not tinted.
+- `job:cancel()` frees the request slot at once; on the device the cancelled request holds it until the abort
+  finishes, and `request` returns `nil, "busy"` meanwhile. After a cancel, retry from `ctx:after` or the next
+  callback, not straight away.
 - Layers: `draw` inside `on_draw` or inside another `draw` still runs (the contract returns `nil, "busy"`), an error
   in its function fails the app, and `set_bits` and the limit of 4 layers are not emulated.
 - Remote commands (daemon verbs, MCP) freeze the window clock, read-only ones included, so a screenshot is stable;

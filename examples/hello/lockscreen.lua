@@ -1,4 +1,5 @@
--- Lock screen for Hello: big clock, date and the tap count. Woken every interval_sec by the host.
+-- Lock screen for Hello: big clock, date and the tap count. Woken by the host at each whole multiple of
+-- interval_sec in local time.
 
 local W, H = 480, 800
 local DAYS = { 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday' }

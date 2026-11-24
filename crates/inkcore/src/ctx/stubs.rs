@@ -61,7 +61,6 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
     )?;
 
     let can_open = method(|lua, _| false.into_lua_multi(lua));
-    // the strings the device accepts are unknown: every one is refused, as an unknown one is there
     let act = {
         let st = st.clone();
         method(move |lua, args| {
@@ -70,15 +69,47 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
                     "bad argument #1 to 'act' (string expected)",
                 ));
             };
-            if what == "refresh" {
-                with(&st, |s| request_frame(s, true));
-                return Ok(MultiValue::new());
-            }
             let what = what.to_string_lossy();
-            with(&st, |s| {
-                s.log_line(&format!("system:act {what}: not emulated"))
-            });
-            soft_fail(lua, "invalid_argument")
+            match what.as_str() {
+                "refresh" => {
+                    with(&st, |s| request_frame(s, true));
+                    Ok(MultiValue::new())
+                }
+                "sleep" | "power_off" => {
+                    let user = with(&st, |s| {
+                        // a quit's on_leave runs at the on_input depth before the window closes
+                        s.lock.ctx.is_none()
+                            && s.running
+                            && !s.leaving
+                            && s.up_input == Some(s.depth)
+                    });
+                    if !user {
+                        with(&st, |s| {
+                            s.log_line(&format!(
+                                "system:act {what}: inactive outside on_input for a key or pointer up"
+                            ))
+                        });
+                        return soft_fail(lua, "inactive");
+                    }
+                    with(&st, |s| {
+                        if what == "sleep" {
+                            s.sleep_asked = true;
+                        } else {
+                            s.log_line(
+                                "system:act power_off: the confirmation dialog is not emulated, \
+                                 taken as cancelled",
+                            );
+                        }
+                    });
+                    Ok(MultiValue::new())
+                }
+                _ => {
+                    with(&st, |s| {
+                        s.log_line(&format!("system:act {what}: unknown action"))
+                    });
+                    soft_fail(lua, "invalid_argument")
+                }
+            }
         })
     };
     let open = {
@@ -120,6 +151,14 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
         "gc",
         new_object(lua, "gc", &[("collect", collect), ("count", count)])?,
     )?;
-    let extend = method(|lua, _| true.into_lua_multi(lua));
+    let extend = {
+        let st = st.clone();
+        method(move |lua, _| {
+            if with(&st, |s| s.lock.ctx.is_some()) {
+                return soft_fail(lua, "inactive");
+            }
+            true.into_lua_multi(lua)
+        })
+    };
     ctx.raw_set("budget", new_object(lua, "budget", &[("extend", extend)])?)
 }

@@ -25,8 +25,9 @@ fn a_wake_inside_one_wait_runs_the_timers_of_the_new_state() {
           c:after(1000, function() fired = c.lock.reason .. ' ' .. c.clock:millis() end)\n\
         end\n\
         function on_draw(c, g) g:text(0, 0, 'reason ' .. c.lock.reason) end\n";
+    // ctx:after works only in a networked lock screen (§15, 15/lock_after_noop)
     let mut core = Core::new(
-        files(r#"{"interval_sec": 60}"#, lock),
+        files(r#"{"interval_sec": 60, "net": true}"#, lock),
         Config::default(),
         Persisted::default(),
     );
@@ -53,7 +54,10 @@ fn a_live_wake_waits_for_its_own_answer_and_drops_the_old_one() {
         Persisted::default(),
     );
     core.lock();
-    assert!(has_text(&core, "lock nil"));
+    assert!(
+        has_text(&core, "first nil"),
+        "reason first (§15, 15/lock_reason_first)"
+    );
     let first = core.take_outgoing();
     core.wait(60_000).unwrap();
     let second = core.take_outgoing();
@@ -67,7 +71,10 @@ fn a_live_wake_waits_for_its_own_answer_and_drops_the_old_one() {
     // the answer to the replaced state's request never reaches the new one
     core.deliver(first[0].id, ok("old"));
     core.wait(1000).unwrap();
-    assert!(has_text(&core, "lock nil") && !has_text(&core, "timer"));
+    assert!(
+        has_text(&core, "first nil") && !has_text(&core, "timer"),
+        "reason first (§15, 15/lock_reason_first)"
+    );
     // due 300 ms after the request, so it fires at once and the waiting wake draws
     core.deliver(second[0].id, ok("new"));
     assert!(has_text(&core, "timer new"), "{:?}", core.texts());
@@ -172,6 +179,358 @@ fn lock_screen_frames_are_recorded_like_app_frames() {
         Persisted::default(),
     );
     core.lock();
+    core.wait(61_000).unwrap();
     core.unlock();
-    assert_eq!(core.status().refreshes, ["full", "full", "full"]);
+    assert_eq!(
+        core.status().refreshes,
+        ["full", "full", "partial", "full"],
+        "a timer session presents a partial refresh (§15, 15/lock_refresh_kinds)"
+    );
+}
+
+#[test]
+fn the_partial_count_survives_lock_screen_wakes() {
+    let lock = "function on_draw(c, g) g:text(0, 0, 'locked') end\n";
+    let mut core = Core::new(
+        files(r#"{"interval_sec": 60}"#, lock),
+        Config::default(),
+        Persisted::default(),
+    );
+    core.lock();
+    core.wait(30 * 60_000).unwrap();
+    let r = core.status().refreshes;
+    // app frame, first session, then 29 partial wakes and the automatic full one
+    assert_eq!(r.len(), 32);
+    assert!(r[2..31].iter().all(|k| *k == "partial"), "{r:?}");
+    assert_eq!(r[31], "full");
+}
+
+#[test]
+fn a_gray_lock_frame_makes_only_the_next_wake_full() {
+    let lock = "local layer\n\
+        function on_load(c)\n\
+          gray = c.storage:read('seen') == nil\n\
+          c.storage:write('seen', '1')\n\
+          layer = c.layers:create(40, 40)\n\
+          layer:draw(function(g) g:rect(0, 0, 40, 40, {fill = true}) end)\n\
+        end\n\
+        function on_draw(c, g) g:clear(0) g:image(layer, 10, 10, {gray = gray}) end\n";
+    let mut core = Core::new(
+        files(r#"{"interval_sec": 60}"#, lock),
+        Config::default(),
+        Persisted::default(),
+    );
+    core.lock();
+    core.wait(121_000).unwrap();
+    assert_eq!(core.status().refreshes, ["full", "gray", "full", "partial"]);
+}
+
+#[test]
+fn a_networked_first_session_draws_twice_and_ends_its_timers() {
+    let lock = "local snap = 'none'\n\
+        function on_load(c)\n\
+          c:after(1000, function() snap = 'timer' end)\n\
+          c:after(40000, function() c:log('late timer') end)\n\
+          c:set_tick(100)\n\
+        end\n\
+        function on_tick(c) c:log('tick') end\n\
+        function on_draw(c, g) g:text(0, 0, 'snap ' .. snap) end\n";
+    let mut core = Core::new(
+        files(r#"{"interval_sec": 60, "net": true}"#, lock),
+        Config::default(),
+        Persisted::default(),
+    );
+    core.lock();
+    assert!(has_text(&core, "snap none"));
+    core.wait(27_999).unwrap();
+    assert!(
+        has_text(&core, "snap none"),
+        "the 40 s timer holds the phase"
+    );
+    core.wait(1).unwrap();
+    assert!(has_text(&core, "snap timer"), "the phase ends at 28 s");
+    core.wait(31_000).unwrap();
+    let log = core.log().to_vec();
+    assert!(!log
+        .iter()
+        .any(|l| l.contains("late timer") || l.ends_with("[app] tick")));
+    assert_eq!(core.status().refreshes, ["full", "full", "partial"]);
+}
+
+#[test]
+fn a_full_request_from_a_wake_on_draw_is_for_that_frame() {
+    let lock = "function on_draw(c, g)\n\
+          if c.lock.reason == 'timer' and not c.storage:read('full') then\n\
+            c.storage:write('full', '1') c:invalidate('full')\n\
+          end\n\
+          g:text(0, 0, 'locked')\n\
+        end\n";
+    let mut core = Core::new(
+        files(r#"{"interval_sec": 60}"#, lock),
+        Config::default(),
+        Persisted::default(),
+    );
+    core.lock();
+    core.wait(121_000).unwrap();
+    assert_eq!(
+        core.status().refreshes,
+        ["full", "full", "full", "partial"],
+        "ctx:invalidate(\"full\") makes the frame of step 5 full (§15)"
+    );
+}
+
+#[test]
+fn requests_not_taken_by_the_host_are_dropped_when_the_app_stops() {
+    let lock =
+        "function on_load(c) c.net:request({url = 'http://x.test/lock'}, function() end) end\n\
+        function on_draw(c, g) end\n";
+    let mut files = files(r#"{"interval_sec": 60, "net": true}"#, lock);
+    files.0.insert(
+        "index.lua".into(),
+        b"function on_load(c) c.net:request({url = 'http://x.test/app'}, function() end) end\n"
+            .to_vec(),
+    );
+    let cfg = Config {
+        net_mode: NetMode::Live,
+        ..Config::default()
+    };
+    let mut core = Core::new(files, cfg, Persisted::default());
+    // the app's request is still in the outbox when it leaves for the lock screen
+    core.lock();
+    core.wait(28_000).unwrap();
+    assert!(
+        core.take_outgoing().is_empty(),
+        "the page must not send them"
+    );
+}
+
+#[test]
+fn input_and_budget_are_inactive_in_a_lock_session() {
+    // ctx.net exists only in a lock block with "net"
+    let mut core = net_app_with("");
+    core.lock();
+    for (call, want) in [
+        ("ctx.budget:extend()", "inactive"),
+        ("ctx.input:text({}, function() end)", "inactive"),
+        ("ctx.input:edit({})", "inactive"),
+        ("ctx.dialog:confirm({}, function() end)", "inactive"),
+        ("ctx.dialog:toast('hi')", "inactive"),
+        ("ctx.screen:set_orientation('landscape')", "inactive"),
+        ("ctx.net:websocket({url = 'ws://x.test/'})", "inactive"),
+    ] {
+        let got = core.lua_eval(&format!("return select(2, {call})")).unwrap();
+        assert_eq!(got, want, "{call}");
+    }
+}
+
+#[test]
+fn a_confirm_from_the_lock_screen_opens_no_dialog() {
+    let lock = "function on_load(c)\n\
+          got = select(2, c.dialog:confirm({title = 'T'}, function() end))\n\
+        end\n\
+        function on_draw(c, g) g:text(0, 0, 'confirm ' .. tostring(got)) end\n";
+    let mut core = Core::new(
+        files(r#"{"interval_sec": 60}"#, lock),
+        Config::default(),
+        Persisted::default(),
+    );
+    core.lock();
+    assert!(has_text(&core, "confirm inactive"));
+    assert!(core.status().pending.is_none());
+    core.wait(61_000).unwrap();
+    assert_eq!(core.lock_wakes(), 1);
+    assert!(core.status().pending.is_none());
+    core.unlock();
+    assert!(!core.locked() && has_text(&core, "app screen"));
+}
+
+#[test]
+fn clock_revision_is_1_in_every_lock_session() {
+    let mut core = app_with("");
+    core.wait(60_000).unwrap();
+    assert_ne!(core.lua_eval("return ctx.clock:now().revision").unwrap(), 1);
+    core.lock();
+    assert_eq!(
+        core.lua_eval("return ctx.clock:now().revision").unwrap(),
+        1,
+        "§12: 1 at the start of the session; §15: each lock refresh is a session"
+    );
+    core.wait(61_000).unwrap();
+    assert_eq!(core.lock_wakes(), 1);
+    assert_eq!(core.lua_eval("return ctx.clock:now().revision").unwrap(), 1);
+    core.unlock();
+    assert_eq!(core.lua_eval("return ctx.clock:now().revision").unwrap(), 1);
+}
+
+fn app_with(index_lua: &str) -> Core {
+    let manifest = r#"{"app_id": "testapp", "entry": "index.lua", "api": "2.33",
+        "lockscreen": {"interval_sec": 60}}"#;
+    core_with(manifest, index_lua)
+}
+
+/// A networked lock block: the app holds the `net` permission.
+fn net_app_with(index_lua: &str) -> Core {
+    let manifest = r#"{"app_id": "testapp", "entry": "index.lua", "api": "2.33", "permissions": ["net"],
+        "lockscreen": {"interval_sec": 60, "net": true}}"#;
+    core_with(manifest, index_lua)
+}
+
+fn core_with(manifest: &str, index_lua: &str) -> Core {
+    let lock = "function on_draw(c, g) g:text(0, 0, 'locked') end\n";
+    let files = AppFiles(BTreeMap::from([
+        ("manifest.json".to_string(), manifest.as_bytes().to_vec()),
+        ("index.lua".to_string(), index_lua.as_bytes().to_vec()),
+        ("lockscreen.lua".to_string(), lock.as_bytes().to_vec()),
+    ]));
+    Core::new(files, Config::default(), Persisted::default())
+}
+
+fn logged(core: &Core, s: &str) -> Option<usize> {
+    core.log().iter().position(|l| l.contains(s))
+}
+
+#[test]
+fn act_sleep_locks_once_the_up_event_on_input_returns() {
+    let mut core = app_with(
+        "function on_draw(c, g) g:text(0, 0, 'app screen') end\n\
+         function on_input(c, ev)\n\
+           if ev.type == 'key' and ev.phase == 'up' then\n\
+             c:log('act ' .. select('#', c.system:act('sleep')))\n\
+             c:log('after act')\n\
+           end\n\
+           return true\n\
+         end\n\
+         function on_leave(c) c:log('on_leave ran') end\n",
+    );
+    core.key("ok").unwrap();
+    let after = logged(&core, "after act").expect("on_input went on after act");
+    let left = logged(&core, "on_leave ran").expect("on_leave ran");
+    assert!(after < left);
+    assert!(logged(&core, "act 0").is_some());
+    assert!(core.locked() && has_text(&core, "locked"));
+    core.unlock();
+    assert!(!core.locked() && has_text(&core, "app screen"));
+}
+
+#[test]
+fn act_sleep_and_power_off_are_inactive_outside_an_up_event() {
+    let mut core = app_with(
+        "function on_input(c, ev)\n\
+           if ev.phase ~= 'up' then\n\
+             local _, e1 = c.system:act('sleep')\n\
+             local _, e2 = c.system:act('power_off')\n\
+             c:log(ev.type .. ' ' .. ev.phase .. ' ' .. tostring(e1) .. ' ' .. tostring(e2))\n\
+           end\n\
+           return true\n\
+         end\n",
+    );
+    core.hold(100, 100, 700).unwrap();
+    core.drag(&[(100, 100), (200, 100)], 100).unwrap();
+    core.key("ok").unwrap();
+    for ev in ["pointer down", "pointer hold", "pointer move", "key down"] {
+        assert!(
+            logged(&core, &format!("{ev} inactive inactive")).is_some(),
+            "{ev}: {:?}",
+            core.log().to_vec()
+        );
+    }
+    assert!(!core.locked());
+}
+
+#[test]
+fn act_sleep_from_an_unhandled_back_locks_without_the_leave_dialog() {
+    let mut core = app_with(
+        "function on_input(c, ev)\n\
+           if ev.key == 'back' and ev.phase == 'up' then c.system:act('sleep') end\n\
+           return ev.phase == 'down'\n\
+         end\n",
+    );
+    core.key("back").unwrap();
+    assert!(core.locked(), "{:?}", core.log().to_vec());
+    assert!(core.status().pending.is_none());
+}
+
+#[test]
+fn act_sleep_does_not_lock_when_the_callback_fails() {
+    let mut core = app_with(
+        "function on_input(c, ev)\n\
+           if ev.phase == 'up' then c.system:act('sleep') error('boom') end\n\
+           return true\n\
+         end\n",
+    );
+    core.tap(10, 10).unwrap();
+    assert!(!core.locked());
+    assert_eq!(core.errors().len(), 1);
+}
+
+#[test]
+fn act_power_off_from_an_up_event_returns_nothing_and_stays() {
+    let mut core = app_with(
+        "function on_input(c, ev)\n\
+           if ev.phase == 'up' then c:log('act ' .. select('#', c.system:act('power_off'))) end\n\
+           return true\n\
+         end\n",
+    );
+    core.tap(10, 10).unwrap();
+    assert!(logged(&core, "act 0").is_some());
+    assert!(logged(&core, "power_off: the confirmation dialog is not emulated").is_some());
+    let st = core.status();
+    assert!(st.running && !st.locked && st.pending.is_none());
+}
+
+#[test]
+fn act_sleep_and_power_off_are_inactive_in_the_on_leave_of_a_quit() {
+    let mut core = app_with(
+        "function on_input(c, ev)\n\
+           if ev.phase == 'up' then c:quit() end\n\
+           return true\n\
+         end\n\
+         function on_leave(c)\n\
+           local _, e1 = c.system:act('sleep')\n\
+           local _, e2 = c.system:act('power_off')\n\
+           c:log('leave ' .. tostring(e1) .. ' ' .. tostring(e2))\n\
+         end\n",
+    );
+    core.tap(10, 10).unwrap();
+    assert!(
+        logged(&core, "leave inactive inactive").is_some(),
+        "{:?}",
+        core.log().to_vec()
+    );
+    assert!(!core.locked());
+}
+
+#[test]
+fn act_sleep_followed_by_quit_does_not_lock() {
+    let mut core = app_with(
+        "function on_input(c, ev)\n\
+           if ev.phase == 'up' then c.system:act('sleep') c:quit() end\n\
+           return true\n\
+         end\n\
+         function on_leave(c) c:log('on_leave ran') end\n",
+    );
+    core.tap(10, 10).unwrap();
+    assert!(logged(&core, "on_leave ran").is_some());
+    assert!(!core.locked() && !core.status().running);
+}
+
+#[test]
+fn the_on_leave_of_act_sleep_is_outside_the_up_event_window() {
+    let mut core = app_with(
+        "function on_input(c, ev)\n\
+           if ev.phase == 'up' then c.system:act('sleep') end\n\
+           return true\n\
+         end\n\
+         function on_leave(c)\n\
+           local _, e = c.system:act('power_off')\n\
+           c:log('leave ' .. tostring(e))\n\
+         end\n",
+    );
+    core.tap(10, 10).unwrap();
+    assert!(
+        logged(&core, "leave inactive").is_some(),
+        "{:?}",
+        core.log().to_vec()
+    );
+    assert!(core.locked());
 }

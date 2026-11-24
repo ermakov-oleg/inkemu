@@ -8,15 +8,15 @@ use std::cell::Cell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use mlua::{Function, IntoLuaMulti, Lua, Table, Value};
+use mlua::{Function, IntoLuaMulti, Lua, MultiValue, Table, Value};
 
+use super::files::{store_capped, Dir, Mode};
 use super::object::{method, new_object};
-use super::{arg, check_arg, int_value, nil, round_ms, soft_fail};
+use super::{arg, check_arg, int_value, raw, soft_fail, whole};
 use crate::clock::TimerId;
-use crate::config::NetMode;
+use crate::config::{NetMode, APP_FILE_SAVE_MAX, STORAGE_WRITE_MAX};
 use crate::emu::{with, Host, Shared, State};
 use crate::fixtures::{FixtureSet, Redactor};
-use crate::log::widen;
 
 pub const DEFAULT_DELAY_MS: i64 = 300;
 const BLOCKED: &str =
@@ -65,6 +65,36 @@ pub struct Fetched {
 /// Performs a `record`/`live` request synchronously. It must not call back into the core.
 pub type Fetcher = Box<dyn FnMut(&OutRequest) -> Fetched>;
 
+/// The 13 methods of §14, compared byte for byte.
+const METHODS: [&str; 13] = [
+    "GET",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "HEAD",
+    "OPTIONS",
+    "PROPFIND",
+    "PROPPATCH",
+    "MKCOL",
+    "COPY",
+    "MOVE",
+    "REPORT",
+];
+const URL_MAX: usize = 1024;
+const BODY_MAX: usize = 65_536;
+const HEADERS_MAX: usize = 16;
+const HEADER_NAME_MAX: usize = 64;
+const HEADERS_TOTAL_MAX: usize = 65_536;
+/// At most this much of an answer's body reaches `res.body`.
+const KEPT_BODY_MAX: usize = 131_072;
+
+/// Where `save` puts a 2xx body.
+struct Save {
+    dir: Dir,
+    name: Vec<u8>,
+}
+
 /// A request the app is waiting for.
 struct Job {
     f: Function,
@@ -72,6 +102,8 @@ struct Job {
     t0: i64,
     active: Cell<bool>,
     timer: Cell<Option<TimerId>>,
+    head: bool,
+    save: Option<Save>,
 }
 
 #[derive(Default)]
@@ -80,7 +112,8 @@ pub(crate) struct NetState {
     /// Outgoing requests by id until the host answers them.
     waiting: HashMap<u64, Rc<Job>>,
     next_id: u64,
-    /// Requests the app still waits for (0.1 `net_inflight`), for the lock screen.
+    /// Requests the app still waits for (0.1 `net_inflight`): the lock screen waits for them, and a new
+    /// request is `busy` while one is unfinished.
     pub(crate) inflight: u32,
     pub(crate) fixtures: Rc<FixtureSet>,
     pub(crate) redactor: Rc<Redactor>,
@@ -96,9 +129,11 @@ impl NetState {
         }
     }
 
-    /// The app stopped: answers still on their way are dropped (0.1 cancelled their timers).
+    /// The app stopped: answers still on their way are dropped (0.1 cancelled their timers), and requests an async
+    /// host (the page) has not taken yet are never sent.
     pub(crate) fn stop(&mut self) {
         self.waiting.clear();
+        self.outbox.clear();
     }
 
     pub(crate) fn take_outgoing(&mut self) -> Vec<OutRequest> {
@@ -112,13 +147,74 @@ fn done(s: &mut State, job: &Job) {
     }
 }
 
-/// Calls the app's callback with the response and counts the request as finished.
+/// The result table's fields.
+#[derive(Default)]
+struct Answer {
+    ok: bool,
+    status: Option<i64>,
+    headers: Vec<(String, String)>,
+    body: Option<Vec<u8>>,
+    bytes: Option<usize>,
+    saved: Option<bool>,
+    err: Option<String>,
+}
+
+/// What the app gets for `resp`; a 2xx body with `save` is stored here, before the callback.
+fn answer(s: &mut State, job: &Job, resp: &NetResult) -> Answer {
+    let (status, headers, body) = match resp {
+        NetResult::Response {
+            status,
+            headers,
+            body,
+            ..
+        } => (*status, headers, body.as_slice()),
+        NetResult::Error(err) => {
+            return Answer {
+                saved: job.save.as_ref().map(|_| false),
+                err: Some(err.clone()),
+                ..Answer::default()
+            }
+        }
+    };
+    let body = if job.head { &[][..] } else { body };
+    let mut a = Answer {
+        ok: true,
+        status: Some(status),
+        headers: headers.clone(),
+        bytes: Some(body.len()),
+        ..Answer::default()
+    };
+    if let Some(save) = &job.save {
+        if (200..300).contains(&status) {
+            let max = match save.dir {
+                Dir::Storage => STORAGE_WRITE_MAX,
+                Dir::App => APP_FILE_SAVE_MAX,
+            };
+            let stored = store_capped(s, save.dir, &save.name, body, Mode::Write, max);
+            a.saved = Some(stored.is_ok());
+            a.err = stored.err().map(String::from);
+            a.body = Some(Vec::new());
+            return a;
+        }
+        a.saved = Some(false);
+    }
+    a.body = Some(body[..body.len().min(KEPT_BODY_MAX)].to_vec());
+    if body.len() > KEPT_BODY_MAX {
+        a.err = Some("limit_exceeded".into());
+    }
+    a
+}
+
+/// Frees the request's slot, then calls the app's callback with the answer.
 fn fire(h: &Host, job: &Job, resp: &NetResult) {
     job.timer.set(None);
-    if let Ok(t) = response_table(h.lua, resp) {
+    let a = with(h.st, |s| {
+        done(s, job);
+        answer(s, job, resp)
+    });
+    if let Ok(t) = response_table(h.lua, &a) {
         h.protected(&job.f, (h.ctx(), t), "ctx.net:request callback");
     }
-    with(h.st, |s| done(s, job));
 }
 
 fn schedule(s: &mut State, job: Rc<Job>, resp: NetResult, delay_ms: i64) {
@@ -153,32 +249,29 @@ pub(crate) fn deliver(h: &Host, id: u64, resp: NetResult) {
     }
 }
 
-fn response_table(lua: &Lua, resp: &NetResult) -> mlua::Result<Table> {
+fn response_table(lua: &Lua, a: &Answer) -> mlua::Result<Table> {
     let t = lua.create_table()?;
+    t.raw_set("ok", a.ok)?;
+    if let Some(status) = a.status {
+        t.raw_set("status", int_value(status))?;
+    }
     let headers = lua.create_table()?;
-    match resp {
-        NetResult::Response {
-            status,
-            headers: h,
-            body,
-            ..
-        } => {
-            t.raw_set("status", int_value(*status))?;
-            t.raw_set("code", int_value(*status))?;
-            for (k, v) in h {
-                headers.raw_set(k.as_str(), v.as_str())?;
-            }
-            t.raw_set("body", lua.create_string(body)?)?;
-            t.raw_set("bytes", int_value(body.len() as i64))?;
-        }
-        NetResult::Error(err) => {
-            t.raw_set("status", 0)?;
-            t.raw_set("code", 0)?;
-            t.raw_set("err", err.as_str())?;
-            t.raw_set("error", err.as_str())?;
-        }
+    for (k, v) in &a.headers {
+        headers.raw_set(k.as_str(), v.as_str())?;
     }
     t.raw_set("headers", headers)?;
+    if let Some(body) = &a.body {
+        t.raw_set("body", lua.create_string(body)?)?;
+    }
+    if let Some(bytes) = a.bytes {
+        t.raw_set("bytes", int_value(bytes as i64))?;
+    }
+    if let Some(saved) = a.saved {
+        t.raw_set("saved", saved)?;
+    }
+    if let Some(err) = &a.err {
+        t.raw_set("err", err.as_str())?;
+    }
     Ok(t)
 }
 
@@ -197,55 +290,139 @@ fn url_ok(url: &str) -> bool {
     })
 }
 
-/// Python `f"{x:g}"`.
-fn py_g(x: f64) -> String {
-    if !x.is_finite() {
-        return if x.is_nan() {
-            "nan"
-        } else if x > 0.0 {
-            "inf"
-        } else {
-            "-inf"
-        }
-        .into();
-    }
-    let sci = format!("{x:.5e}");
-    let (mant, exp) = sci.split_once('e').unwrap_or((&sci, "0"));
-    let exp: i32 = exp.parse().unwrap_or(0);
-    let strip = |s: &str| -> String {
-        if s.contains('.') {
-            s.trim_end_matches('0').trim_end_matches('.').to_string()
-        } else {
-            s.to_string()
-        }
-    };
-    if (-4..6).contains(&exp) {
-        strip(&format!("{x:.*}", (5 - exp) as usize))
-    } else {
-        let sign = if exp < 0 { '-' } else { '+' };
-        format!("{}e{sign}{:02}", strip(mant), exp.abs())
-    }
+/// A checked option, or the soft failure the call returns.
+type Checked<T> = mlua::Result<Result<T, &'static str>>;
+
+/// A request as the app asked for it, checked.
+struct Parsed {
+    method: String,
+    url: String,
+    headers: Vec<(String, String)>,
+    body: Vec<u8>,
+    timeout_ms: i64,
+    save: Option<Save>,
 }
 
-fn header_pairs(lua: &Lua, v: &Value) -> mlua::Result<Vec<(Vec<u8>, Vec<u8>)>> {
-    let Value::Table(t) = v else {
-        return Ok(Vec::new());
+/// The `headers` option: strings (or numbers, as Lua turns them into strings) within the §14 limits.
+fn header_pairs(lua: &Lua, v: &Value) -> Checked<Vec<(Vec<u8>, Vec<u8>)>> {
+    let t = match v {
+        Value::Nil => return Ok(Ok(Vec::new())),
+        Value::Table(t) => t,
+        _ => return Ok(Err("invalid_argument")),
     };
     let mut out = Vec::new();
     for pair in t.pairs::<Value, Value>() {
         let (k, v) = pair?;
-        let Value::String(k) = k else { continue };
+        let Value::String(k) = k else {
+            return Ok(Err("invalid_argument"));
+        };
         let v = match v {
             Value::String(s) => s.as_bytes().to_vec(),
             n @ (Value::Integer(_) | Value::Number(_)) => match lua.coerce_string(n)? {
                 Some(s) => s.as_bytes().to_vec(),
-                None => continue,
+                None => return Ok(Err("invalid_argument")),
             },
-            _ => continue,
+            _ => return Ok(Err("invalid_argument")),
         };
         out.push((k.as_bytes().to_vec(), v));
     }
-    Ok(out)
+    let bad = |b: &[u8]| b.iter().any(|c| matches!(c, b'\r' | b'\n' | b'\0'));
+    let total: usize = out.iter().map(|(k, v)| k.len() + v.len()).sum();
+    if out.len() > HEADERS_MAX
+        || total > HEADERS_TOTAL_MAX
+        || out
+            .iter()
+            .any(|(k, v)| k.len() > HEADER_NAME_MAX || bad(k) || bad(v))
+    {
+        return Ok(Err("invalid_argument"));
+    }
+    Ok(Ok(out))
+}
+
+/// The `save` option: a table with `to` = "files" or "storage" and a name valid in that directory.
+fn save_target(v: &Value) -> Checked<Option<Save>> {
+    let t = match v {
+        Value::Nil => return Ok(Ok(None)),
+        Value::Table(t) => t,
+        _ => return Ok(Err("invalid_argument")),
+    };
+    let dir = match t.get::<Value>("to")? {
+        Value::String(s) if s.as_bytes().as_ref() == b"files" => Dir::App,
+        Value::String(s) if s.as_bytes().as_ref() == b"storage" => Dir::Storage,
+        _ => return Ok(Err("invalid_argument")),
+    };
+    match raw(&t.get::<Value>("name")?).filter(|n| dir.name_ok(n)) {
+        Some(name) => Ok(Ok(Some(Save { dir, name }))),
+        None => Ok(Err("invalid_argument")),
+    }
+}
+
+/// The options table of `request`; a field of the wrong type is `invalid_argument`, like a bad value.
+fn parse(lua: &Lua, st: &Shared, o: &Table) -> Checked<Parsed> {
+    let url = match o.get::<Value>("url")? {
+        Value::String(s) => String::from_utf8(s.as_bytes().to_vec()).ok(),
+        _ => None,
+    };
+    let Some(url) = url.filter(|u| url_ok(u)) else {
+        return Ok(Err("invalid_argument"));
+    };
+    let method = match o.get::<Value>("method")? {
+        Value::Nil => "GET",
+        Value::String(s) => match METHODS
+            .iter()
+            .find(|m| m.as_bytes() == s.as_bytes().as_ref())
+        {
+            Some(m) => m,
+            None => return Ok(Err("invalid_argument")),
+        },
+        _ => return Ok(Err("invalid_argument")),
+    };
+    let body = match o.get::<Value>("body")? {
+        Value::Nil => None,
+        Value::String(s) => Some(s.as_bytes().to_vec()),
+        _ => return Ok(Err("invalid_argument")),
+    };
+    if body.is_some() && (method == "GET" || method == "HEAD") {
+        return Ok(Err("invalid_argument"));
+    }
+    let headers = match header_pairs(lua, &o.get::<Value>("headers")?)? {
+        Ok(h) => h,
+        Err(code) => return Ok(Err(code)),
+    };
+    let timeout_ms = match o.get::<Value>("timeout_ms")? {
+        // 0: the host's default
+        Value::Nil => 0,
+        v => match whole(&v).filter(|ms| (1000..=60_000).contains(ms)) {
+            Some(ms) => ms,
+            None => return Ok(Err("invalid_argument")),
+        },
+    };
+    let save = match save_target(&o.get::<Value>("save")?)? {
+        Ok(s) => s,
+        Err(code) => return Ok(Err(code)),
+    };
+    // §14 names no code for these sizes; §18's general rule gives limit_exceeded
+    let body = body.unwrap_or_default();
+    if url.len() > URL_MAX || body.len() > BODY_MAX {
+        return Ok(Err("limit_exceeded"));
+    }
+    let mut hdrs = Vec::new();
+    for (k, v) in headers {
+        match (String::from_utf8(k), String::from_utf8(v)) {
+            (Ok(k), Ok(v)) => hdrs.push((k, v)),
+            _ => with(st, |s| {
+                s.warn("net: a header that is not valid UTF-8 was dropped")
+            }),
+        }
+    }
+    Ok(Ok(Parsed {
+        method: method.to_string(),
+        url,
+        headers: hdrs,
+        body,
+        timeout_ms,
+        save,
+    }))
 }
 
 pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
@@ -269,79 +446,52 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
             else {
                 unreachable!()
             };
-            // read like 0.1's Lua shim: plain indexing, strings only
-            let text = |k: &str| -> mlua::Result<Option<Vec<u8>>> {
-                Ok(match o.get::<Value>(k)? {
-                    Value::String(s) => Some(s.as_bytes().to_vec()),
-                    _ => None,
-                })
+            let p = match parse(lua, &st, &o)? {
+                Ok(p) => p,
+                Err(code) => return soft_fail(lua, code),
             };
-            let (url, method_b, body) = (text("url")?, text("method")?, text("body")?);
-            let timeout = o.get::<Value>("timeout_ms")?;
-            let headers = header_pairs(lua, &o.get::<Value>("headers")?)?;
-            let Some(url) = url else {
-                return Err(mlua::Error::runtime("bad extra argument (string expected)"));
-            };
-            let method_b = method_b.unwrap_or_else(|| b"GET".to_vec());
-            let (Ok(url), true) = (String::from_utf8(url), method_b.is_ascii()) else {
-                return soft_fail(lua, "invalid_argument");
-            };
-            let verb = String::from_utf8(method_b).unwrap_or_default();
-            if !url_ok(&url) || verb.is_empty() {
-                return soft_fail(lua, "invalid_argument");
+            if with(&st, |s| s.net.inflight > 0) {
+                return soft_fail(lua, "busy");
             }
-            let mut hdrs = Vec::new();
-            for (k, v) in headers {
-                match (String::from_utf8(k), String::from_utf8(v)) {
-                    (Ok(k), Ok(v)) => hdrs.push((k, v)),
-                    _ => with(&st, |s| {
-                        s.warn("net: a header that is not valid UTF-8 was dropped")
-                    }),
-                }
-            }
-            let timeout_ms = match timeout {
-                v @ (Value::Integer(_) | Value::Number(_)) => round_ms(&v)?,
-                _ => 0,
-            };
-            let body = body.unwrap_or_default();
-            let verb = verb.to_ascii_uppercase();
-            let job = request(&st, f, verb, url, hdrs, body, timeout_ms);
+            let job = request(&st, f, p);
             let st = st.clone();
             let cancel = method(move |_, _| {
-                if let Some(job) = &job {
-                    with(&st, |s| {
-                        if let Some(t) = job.0.timer.take() {
-                            s.cancel_timer(t);
-                        }
-                        if let Some(id) = job.1 {
-                            s.net.waiting.remove(&id);
-                        }
-                        done(s, &job.0);
-                    });
-                }
-                Ok(nil())
+                with(&st, |s| {
+                    if let Some(t) = job.0.timer.take() {
+                        s.cancel_timer(t);
+                    }
+                    if let Some(id) = job.1 {
+                        s.net.waiting.remove(&id);
+                    }
+                    done(s, &job.0);
+                });
+                Ok(MultiValue::new())
             });
             new_object(lua, "job", &[("cancel", cancel)])?.into_lua_multi(lua)
         })
     };
     let keep_wifi = {
         let st = st.clone();
-        method(move |_, args| {
+        method(move |lua, args| {
             let a = args.into_vec();
             let v = arg(&a, 0);
             check_arg("keep_wifi", 1, v, "number")?;
-            let ms = match v {
-                Value::Integer(i) => f64::from(*i),
-                Value::Number(n) => widen(*n),
-                _ => 0.0,
+            let Some(ms) = whole(v).filter(|ms| (-1..=i64::from(i32::MAX)).contains(ms)) else {
+                return soft_fail(lua, "invalid_argument");
             };
-            with(&st, |s| {
-                s.log_line(&format!("net: keep_wifi {} ms", py_g(ms)))
-            });
-            Ok(nil())
+            with(&st, |s| s.log_line(&format!("net: keep_wifi {ms} ms")));
+            Ok(MultiValue::new())
         })
     };
-    let websocket = method(|_, _| Err(mlua::Error::runtime("ctx.net:websocket is not emulated")));
+    let websocket = {
+        let st = st.clone();
+        method(move |lua, _| {
+            if with(&st, |s| s.lock.ctx.is_some()) {
+                return soft_fail(lua, "inactive");
+            }
+            Err(mlua::Error::runtime("ctx.net:websocket is not emulated"))
+        })
+    };
     let net = new_object(
         lua,
         "net",
@@ -356,23 +506,14 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
 
 /// What [`request`] does after its first step.
 enum Next {
-    Done(Option<(Rc<Job>, Option<u64>)>),
+    Done(Rc<Job>, Option<u64>),
     Fetch(Rc<Job>, OutRequest, Fetcher),
 }
 
-/// 0.1 `Net.request` plus the timer: None when the request never gets an answer (an unsupported method), else
-/// the job and, for a request left in the outbox, its id.
-fn request(
-    st: &Shared,
-    f: Function,
-    method: String,
-    url: String,
-    headers: Vec<(String, String)>,
-    body: Vec<u8>,
-    timeout_ms: i64,
-) -> Option<(Rc<Job>, Option<u64>)> {
-    match first_step(st, f, method, url, headers, body, timeout_ms) {
-        Next::Done(r) => r,
+/// 0.1 `Net.request` plus the timer: the job and, for a request left in the outbox, its id.
+fn request(st: &Shared, f: Function, p: Parsed) -> (Rc<Job>, Option<u64>) {
+    match first_step(st, f, p) {
+        Next::Done(job, id) => (job, id),
         Next::Fetch(job, out, mut fetcher) => {
             // the fetcher is out of the state while it runs, so no borrow is held
             let fetched = fetcher(&out);
@@ -389,35 +530,30 @@ fn request(
                 let delay = delay_of(&fetched.result);
                 schedule(s, job.clone(), fetched.result, delay);
             });
-            Some((job, None))
+            (job, None)
         }
     }
 }
 
-fn first_step(
-    st: &Shared,
-    f: Function,
-    method: String,
-    url: String,
-    headers: Vec<(String, String)>,
-    body: Vec<u8>,
-    timeout_ms: i64,
-) -> Next {
+fn first_step(st: &Shared, f: Function, p: Parsed) -> Next {
+    let Parsed {
+        method,
+        url,
+        headers,
+        body,
+        timeout_ms,
+        save,
+    } = p;
     with(st, |s| {
         let red = s.net.redactor.clone();
         let shown = red.redact_str(&url);
-        if method != "GET" && method != "POST" {
-            s.warn(&format!(
-                "net: {method} {shown} never gets an answer on the reader (only GET and POST work); \
-                 send it as POST with an override header"
-            ));
-            return Next::Done(None);
-        }
         let job = Rc::new(Job {
             f,
             t0: s.sched.clock.ms,
             active: Cell::new(true),
             timer: Cell::new(None),
+            head: method == "HEAD",
+            save,
         });
         s.net.inflight += 1;
         let blocked = !s.cfg.secret_problems.is_empty() && s.cfg.net_mode == NetMode::Record;
@@ -428,9 +564,9 @@ fn first_step(
                 NetResult::Error("secrets_invalid".into()),
                 DEFAULT_DELAY_MS,
             );
-            return Next::Done(Some((job, None)));
+            return Next::Done(job, None);
         }
-        let sha = red.body_sha(&method, &body);
+        let sha = red.body_sha(&body);
         let mut warnings = Vec::new();
         let found = if s.cfg.net_mode == NetMode::Live || s.cfg.net_mode == NetMode::Record {
             None
@@ -464,7 +600,7 @@ fn first_step(
             }
             s.net.outbox.push(out);
             s.net.waiting.insert(id, job.clone());
-            return Next::Done(Some((job, Some(id))));
+            return Next::Done(job, Some(id));
         }
         let resp = match found {
             Some(r) => {
@@ -484,28 +620,13 @@ fn first_step(
         };
         let delay = delay_of(&resp);
         schedule(s, job.clone(), resp, delay);
-        Next::Done(Some((job, None)))
+        Next::Done(job, None)
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn g_format_as_python() {
-        for (x, want) in [
-            (300000.0, "300000"),
-            (1234567.0, "1.23457e+06"),
-            (0.5, "0.5"),
-            (1e-5, "1e-05"),
-            (0.0, "0"),
-            (-2.5, "-2.5"),
-            (100.0, "100"),
-        ] {
-            assert_eq!(py_g(x), want);
-        }
-    }
 
     #[test]
     fn url_check_as_0_1() {

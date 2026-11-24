@@ -121,13 +121,19 @@ syncTicking();
 
 // ---- screen ---------------------------------------------------------------------------------------
 
-function draw({ w, h, bits }) {
+function draw({ w, h, bits, gray }) {
   if (canvas.width !== w || canvas.height !== h) {
     canvas.width = w;
     canvas.height = h;
   }
   const img = g.createImageData(w, h);
   const px = new Uint32Array(img.data.buffer);
+  if (gray) {
+    // a gray frame: PIL mode "L", one byte per pixel; opaque gray in little-endian RGBA
+    for (let i = 0; i < w * h; i++) px[i] = 0xff000000 | (gray[i] * 0x010101);
+    g.putImageData(img, 0, 0);
+    return;
+  }
   const stride = (w + 7) >> 3;
   for (let y = 0; y < h; y++) {
     const row = y * stride;

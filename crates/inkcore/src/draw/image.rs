@@ -1,7 +1,8 @@
 //! Images for `g:image`: 8-bit gray as 0.1 kept them (Pillow mode "L"), scaled, dithered and pasted onto the 1-bit
-//! frame as Pillow did (`resize` NEAREST/LANCZOS, `convert("1")` Floyd–Steinberg, `paste`).
+//! frame as Pillow did (`resize` NEAREST/LANCZOS, `convert("1")` Floyd–Steinberg, `paste`). A gray frame takes the
+//! scaled pixels' own colours instead of dithering.
 use super::raster::in_rounded;
-use super::Frame;
+use super::{Depth, Frame};
 
 /// The largest `w`/`h` an image is drawn at: dithering needs whole rows of the scaled image.
 pub const MAX_DRAW_SIDE: i64 = 8192;
@@ -66,8 +67,8 @@ fn over_white(c: u8, a: u8) -> u8 {
 /// How `g:image` puts the dithered pixels down (§6).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Look {
-    /// Ink dots are drawn white: `color` below 8 on a black-and-white image.
-    pub white_ink: bool,
+    /// The colour of the ink dots of a black-and-white image (`color`); None for a grayscale one.
+    pub tint: Option<u8>,
     /// Black and white swap after dithering.
     pub invert: bool,
     /// Corners clipped as `g:rect{radius}` rounds them; 0 keeps the whole rectangle.
@@ -116,9 +117,16 @@ impl Gray {
     }
 }
 
-/// `g:image`: `img` scaled to `w`×`h` (1..=MAX_DRAW_SIDE), dithered, pasted with its top left at `x`, `y` as
-/// `look` says.
-pub fn paste(f: &mut Frame, img: &Gray, (x, y): (i64, i64), (w, h): (u32, u32), look: Look) {
+/// `g:image`: `img` scaled to `w`×`h` (1..=MAX_DRAW_SIDE), dithered (1 bit) or taken as colours (gray), pasted
+/// with its top left at `x`, `y` as `look` says.
+pub fn paste(
+    f: &mut Frame,
+    img: &Gray,
+    (x, y): (i64, i64),
+    (w, h): (u32, u32),
+    look: Look,
+    depth: Depth,
+) {
     let rows = (i64::from(f.h) - y).clamp(0, i64::from(h)) as usize;
     let visible_x = x < i64::from(f.w) && x + i64::from(w) > 0;
     if rows == 0 || y + i64::from(h) <= 0 || !visible_x {
@@ -131,12 +139,32 @@ pub fn paste(f: &mut Frame, img: &Gray, (x, y): (i64, i64), (w, h): (u32, u32), 
     } else {
         lanczos(img, w as usize, h as usize, rows)
     };
-    let bits = dither(&scaled, w as usize, rows);
+    let vals: Vec<u8> = match depth {
+        Depth::Bits => {
+            let white_ink = look.tint.is_some_and(|c| c < 8);
+            dither(&scaled, w as usize, rows)
+                .into_iter()
+                .map(|v| u8::from((v == 0 && !white_ink) != look.invert))
+                .collect()
+        }
+        Depth::Gray => scaled
+            .into_iter()
+            .map(|v| {
+                // §6: an ink dot of a black-and-white image is `color`, a paper dot 0; a grayscale pixel its own
+                let c = match look.tint {
+                    Some(tint) if v <= 128 => tint,
+                    Some(_) => 0,
+                    None => ((u32::from(255 - v) * 15 + 127) / 255) as u8,
+                };
+                depth.of(if look.invert { 15 - c } else { c })
+            })
+            .collect(),
+    };
     let (fw, fh) = (f64::from(w), f64::from(h));
     let shown = |c: usize, r: usize| {
         look.radius <= 0.0 || in_rounded(c as f64 + 0.5, r as f64 + 0.5, fw, fh, look.radius)
     };
-    for (r, row) in bits.chunks(w as usize).enumerate() {
+    for (r, row) in vals.chunks(w as usize).enumerate() {
         let py = y + r as i64;
         if py < 0 {
             continue;
@@ -144,8 +172,7 @@ pub fn paste(f: &mut Frame, img: &Gray, (x, y): (i64, i64), (w, h): (u32, u32), 
         for (c, &v) in row.iter().enumerate() {
             let px = x + c as i64;
             if (0..i64::from(f.w)).contains(&px) && shown(c, r) {
-                let ink = v == 0 && !look.white_ink;
-                f.px[(py as usize) * f.w as usize + px as usize] = u8::from(ink != look.invert);
+                f.px[(py as usize) * f.w as usize + px as usize] = v;
             }
         }
     }
@@ -343,12 +370,19 @@ mod tests {
     fn invert_is_the_complement_of_the_dithered_pixels() {
         let img = gray(16, 8, |x, y| ((x * 13 + y * 7 + 60) % 256) as u8);
         let (mut plain, mut inverted) = (Frame::new(20, 10), Frame::new(20, 10));
-        paste(&mut plain, &img, (2, 1), (16, 8), Look::default());
+        paste(
+            &mut plain,
+            &img,
+            (2, 1),
+            (16, 8),
+            Look::default(),
+            Depth::Bits,
+        );
         let look = Look {
             invert: true,
             ..Look::default()
         };
-        paste(&mut inverted, &img, (2, 1), (16, 8), look);
+        paste(&mut inverted, &img, (2, 1), (16, 8), look, Depth::Bits);
         let dithered = dither(&img.px, 16, 8);
         for y in 0..10 {
             for x in 0..20 {
@@ -373,7 +407,14 @@ mod tests {
     fn huge_sizes_only_compute_the_rows_on_screen() {
         let img = gray(2, 2, |x, _| if x == 0 { 0 } else { 255 });
         let mut f = Frame::new(10, 10);
-        paste(&mut f, &img, (-4, -4), (8192, 8192), Look::default());
+        paste(
+            &mut f,
+            &img,
+            (-4, -4),
+            (8192, 8192),
+            Look::default(),
+            Depth::Bits,
+        );
         assert!(f.px.iter().all(|&v| v == 1));
     }
 }

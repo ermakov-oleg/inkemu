@@ -58,7 +58,8 @@ export function createSession({ post, load, fetchFn = globalThis.fetch, now = ()
     if (st.frame_seq !== lastSeq) {
       lastSeq = st.frame_seq;
       const f = core.frame(true);
-      post({ type: 'frame', w: f.w, h: f.h, bits: f.bits, seq: st.frame_seq }, [f.bits.buffer]);
+      const transfer = f.gray ? [f.bits.buffer, f.gray.buffer] : [f.bits.buffer];
+      post({ type: 'frame', w: f.w, h: f.h, bits: f.bits, gray: f.gray, seq: st.frame_seq }, transfer);
     }
     const log = extra.length ? [...st.log, ...extra] : st.log;
     extra = [];

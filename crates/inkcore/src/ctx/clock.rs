@@ -21,8 +21,8 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
             });
             let (y, mo, d, h, mi, sec, _) = civil(local);
             let days = local.div_euclid(DAY_MS);
-            // 1970-01-01 was a Thursday; 0.1's wday counted from Sunday = 1
-            let iso_weekday = (days + 3).rem_euclid(7) + 1;
+            // 1970-01-01 was a Thursday; 0 is Sunday
+            let weekday = (days + 4).rem_euclid(7);
             let epoch = local.div_euclid(1000) - offset;
             let t = lua.create_table()?;
             t.raw_set("year", y)?;
@@ -31,7 +31,7 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
             t.raw_set("hour", h)?;
             t.raw_set("minute", mi)?;
             t.raw_set("second", sec)?;
-            t.raw_set("weekday", iso_weekday % 7 + 1)?;
+            t.raw_set("weekday", weekday)?;
             t.raw_set("epoch_sec", int_value(epoch))?;
             t.raw_set("local_sec", int_value(epoch + offset))?;
             t.raw_set("offset_minutes", int_value(offset.div_euclid(60)))?;

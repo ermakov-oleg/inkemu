@@ -52,9 +52,10 @@ def test_storage_missing_is_not_found(make_app, emu_factory):
         emu_factory,
         "local a, e = ctx.storage:read('nope')\nlocal b, e2 = ctx.storage:size('nope')\n"
         "local c3, e3 = ctx.storage:remove('nope')\n"
-        "msg = tostring(a) .. e .. tostring(b) .. e2 .. e3 .. tostring(ctx.storage:exists('nope'))",
+        "msg = tostring(a) .. e .. tostring(b) .. e2 .. tostring(c3) .. tostring(ctx.storage:exists('nope'))",
     )
-    assert emu.has_text("msg nilnot_foundnilnot_foundnot_foundfalse")
+    # API 2.33.1 §9 (09/storage_remove_missing): remove of an absent file is true
+    assert emu.has_text("msg nilnot_foundnilnot_foundtruefalse")
 
 
 def test_storage_list_usage_remove(make_app, emu_factory):

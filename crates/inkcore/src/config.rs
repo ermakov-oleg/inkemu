@@ -1,7 +1,11 @@
 use std::collections::BTreeMap;
 
-/// Quota of `ctx.storage` and, separately, of `ctx.files`: total bytes and number of files.
+/// Quota of `ctx.storage`: total bytes and number of files. `ctx.files` has only the file count.
 pub const STORAGE_QUOTA: (u64, usize) = (134_217_728, 512);
+/// Bytes one `write` or `append` may carry, in both directories.
+pub const STORAGE_WRITE_MAX: usize = 262_144;
+/// Bytes one `net` request may save into the app folder (the file itself is capped at i32::MAX).
+pub const APP_FILE_SAVE_MAX: usize = 8_388_608;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NetMode {

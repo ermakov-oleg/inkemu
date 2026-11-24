@@ -15,7 +15,7 @@ use crate::dialog::Handler;
 use crate::draw::image::Gray;
 use crate::draw::plates::{self, Overlays, Plate};
 use crate::draw::text::Fonts;
-use crate::draw::{Canvas, Frame, Target, TextItem};
+use crate::draw::{Canvas, Depth, Frame, Target, TextItem};
 use crate::fixtures::{FixtureSet, Redactor};
 use crate::lockscreen::{self, Lock};
 use crate::log::{py_repr, Log};
@@ -33,6 +33,8 @@ const KEPT_REFRESHES: usize = 64;
 pub(crate) enum Refresh {
     Partial,
     Full,
+    /// A full refresh with the grayscale waveform (§3).
+    Gray,
 }
 
 impl Refresh {
@@ -40,6 +42,7 @@ impl Refresh {
         match self {
             Refresh::Partial => "partial",
             Refresh::Full => "full",
+            Refresh::Gray => "gray",
         }
     }
 }
@@ -103,6 +106,10 @@ pub(crate) struct State {
     pub(crate) quit: bool,
     pub(crate) leaving: bool,
     pub(crate) depth: u32,
+    /// The callback depth of an `on_input` delivering a key or pointer up: §25 `act("sleep"/"power_off")` works there.
+    pub(crate) up_input: Option<u32>,
+    /// `act("sleep")` was called: the device locks once that `on_input` returns.
+    pub(crate) sleep_asked: bool,
     pub(crate) overlay: Option<(String, String)>,
     pub(crate) pending: Option<Pending>,
     /// What answering or typing into `pending` does; set and cleared with it.
@@ -146,6 +153,8 @@ pub(crate) struct State {
     /// Clock ms up to which `defer_full_refresh` holds back the automatic full refresh.
     pub(crate) defer_until: i64,
     pub(crate) refreshes: VecDeque<Refresh>,
+    /// The panel shows a gray frame: the next normal frame is a full refresh. Kept across sessions (§15).
+    pub(crate) gray_shown: bool,
     pub(crate) perf: Perf,
 }
 
@@ -178,11 +187,16 @@ impl State {
         let deferred = self.sched.clock.ms < self.defer_until;
         // a deferral cannot hold the automatic full past twice the interval (2.28.1)
         let auto = next >= AUTO_FULL_EVERY && (!deferred || next >= 2 * AUTO_FULL_EVERY);
-        let kind = if forced_full || auto {
+        // a gray frame under a host screen is still a full refresh, in black and white (§3)
+        let gray = self.canvas.gray() && !self.covered();
+        let kind = if gray {
+            Refresh::Gray
+        } else if forced_full || auto || self.gray_shown || self.canvas.gray() {
             Refresh::Full
         } else {
             Refresh::Partial
         };
+        self.gray_shown = gray;
         self.partials = if kind == Refresh::Partial { next } else { 0 };
         if self.refreshes.len() == KEPT_REFRESHES {
             self.refreshes.pop_front();
@@ -194,6 +208,21 @@ impl State {
             image_count,
             draw_frame: self.perf.draw_frame + 1,
         };
+    }
+
+    /// A host screen (error, dialog, toast) covers the app: its frame is a normal one, gray or not (§3).
+    fn covered(&self) -> bool {
+        let toast = self
+            .toast
+            .as_ref()
+            .is_some_and(|t| self.sched.clock.ms < t.1);
+        self.overlay.is_some() || self.pending.is_some() || toast
+    }
+
+    /// The app frame as the panel shows it, in ink steps, when it is a gray frame.
+    fn gray_frame(&self) -> Option<Frame> {
+        (self.gray_shown && self.canvas.gray() && !self.covered())
+            .then(|| self.canvas.render_in(Depth::Gray))
     }
 
     pub(crate) fn clear_pending(&mut self) {
@@ -408,8 +437,10 @@ impl Host<'_> {
     }
 
     pub fn settle(&self) {
+        // a lock-screen session draws only when the host says so (§15)
         if let Some(ready) = with(self.st, |s| {
-            s.lock.waiting.then(|| s.lock.ready(s.net.inflight))
+            let c = s.lock.ctx.as_ref()?;
+            Some(c.phase == lockscreen::Phase::Prep && lockscreen::ready(s))
         }) {
             if ready {
                 lockscreen::present(self);
@@ -422,7 +453,7 @@ impl Host<'_> {
         }
     }
 
-    fn draw(&self) {
+    pub(crate) fn draw(&self) {
         // taken before on_draw: a full request made while drawing is for the next frame
         let (ctx, g, full, was) = with(self.st, |s| {
             s.canvas.begin_frame();
@@ -449,6 +480,8 @@ impl Host<'_> {
                 }
                 None => {
                     s.frame_commands = n;
+                    // in a lock-screen session a full request from on_draw is for this frame (§5)
+                    let full = full || (s.lock.ctx.is_some() && std::mem::take(&mut s.full_next));
                     if s.running {
                         s.presented(full);
                     }
@@ -460,7 +493,7 @@ impl Host<'_> {
 
 /// One emulated InkApp.
 pub struct Core {
-    st: Shared,
+    pub(crate) st: Shared,
 }
 
 impl Drop for Core {
@@ -489,11 +522,17 @@ pub(crate) fn boot(st: &Shared, mode: BootMode) {
         (s.overlay, s.ctx, s.g, s.quit, s.toast) = (None, None, None, false, None);
         (s.images, s.next_image) = (HashMap::new(), 0);
         s.net.inflight = 0;
-        s.lock.waiting = false;
-        (s.full_next, s.partials, s.defer_until, s.perf) = (true, 0, 0, Perf::default());
         if mode != BootMode::Lock {
             s.lock.ctx = None;
         }
+        // a timer wake presents a partial refresh, and the partial count survives sleep (§15)
+        let wake = s.lock.ctx.as_ref().is_some_and(|c| c.reason == "timer");
+        s.full_next = !wake;
+        if !wake {
+            s.partials = 0;
+        }
+        (s.defer_until, s.perf) = (0, Perf::default());
+        s.clock_revision = 1;
         (
             s.cfg.firmware_api,
             s.cfg.app_dir_label.clone(),
@@ -663,6 +702,8 @@ impl Core {
             quit: false,
             leaving: false,
             depth: 0,
+            up_input: None,
+            sleep_asked: false,
             overlay: None,
             pending: None,
             pending_h: None,
@@ -682,7 +723,7 @@ impl Core {
             lock_wakes: 0,
             lock: Lock::default(),
             frontlight: 0,
-            clock_revision: 0,
+            clock_revision: 1,
             rng,
             persisted,
             persist_changed: false,
@@ -693,6 +734,7 @@ impl Core {
             partials: 0,
             defer_until: 0,
             refreshes: VecDeque::new(),
+            gray_shown: false,
             perf: Perf::default(),
         }));
         if let Some(p) = font_problem {
@@ -888,12 +930,22 @@ impl Core {
         self.st.borrow().texts()
     }
 
-    /// The screen with the error, toast and (if `dialog`) dialog plates.
+    /// The screen with the error, toast and (if `dialog`) dialog plates; a gray frame as the threshold of its
+    /// steps ([`Core::frame_gray`]).
     pub fn frame(&self, dialog: bool) -> Frame {
         let s = self.st.borrow();
+        if let Some(g) = s.gray_frame() {
+            return g.threshold();
+        }
         let mut f = s.canvas.render();
         plates::draw(&s.canvas, &mut f, &s.plates(dialog));
         f
+    }
+
+    /// The screen of a gray frame in ink steps 0..=3 (§3); None for a normal frame. No plate is up on a gray
+    /// frame: a host screen over it makes it a normal one.
+    pub fn frame_gray(&self) -> Option<Frame> {
+        self.st.borrow().gray_frame()
     }
 
     /// Changes whenever the next `frame` would differ: an app frame was drawn or the plates changed.
@@ -913,9 +965,14 @@ impl Core {
         s.frame_seq
     }
 
-    /// The app's own frame, without plates.
+    /// The app's own frame, without plates; a gray frame (covered or not) as the threshold of its steps.
     pub fn raw_frame(&self) -> Frame {
-        self.st.borrow().canvas.render()
+        let c = &self.st.borrow().canvas;
+        if c.gray() {
+            c.render_in(Depth::Gray).threshold()
+        } else {
+            c.render()
+        }
     }
 
     pub fn log(&self) -> Ref<'_, [String]> {

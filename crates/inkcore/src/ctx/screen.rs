@@ -20,7 +20,7 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
     screen.raw_set("height", h)?;
     screen.raw_set("orientation", orientation(w, h))?;
     screen.raw_set("gray_levels", 2)?;
-    screen.raw_set("gray_still", 4)?;
+    screen.raw_set("gray_still", crate::draw::GRAY_STILL)?;
     let set_orientation = {
         let (st, screen) = (st.clone(), screen.clone());
         method(move |lua, args| {
@@ -29,6 +29,9 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
                 Some(Value::String(s)) if s.as_bytes() == b"landscape" => ("landscape", (800, 480)),
                 _ => return soft_fail(lua, "invalid_argument"),
             };
+            if with(&st, |s| s.lock.ctx.is_some()) {
+                return soft_fail(lua, "inactive");
+            }
             let changed = with(&st, |s| {
                 let changed = name != orientation(s.canvas.w, s.canvas.h);
                 if changed {

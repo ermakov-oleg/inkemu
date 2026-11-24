@@ -101,21 +101,20 @@ impl Redactor {
         String::from_utf8_lossy(&self.redact(text.as_bytes())).into_owned()
     }
 
-    /// 0.1 `Net.fixture_key`: method, redacted URL and, for a POST with a body, the redacted body's SHA-256.
+    /// 0.1 `Net.fixture_key`: method, redacted URL and, for a request with a body, the redacted body's SHA-256.
     pub fn fixture_key(&self, method: &str, url: &str, body: &[u8]) -> String {
         let method = method.to_ascii_uppercase();
         let mut key = format!("{method} {}", self.redact_str(url));
-        if let Some(sha) = self.body_sha(&method, body) {
+        if let Some(sha) = self.body_sha(body) {
             key.push(' ');
             key.push_str(&sha);
         }
         key
     }
 
-    /// The SHA-256 a POST body is matched by; None for other methods and an empty body.
-    pub fn body_sha(&self, method: &str, body: &[u8]) -> Option<String> {
-        (method.eq_ignore_ascii_case("POST") && !body.is_empty())
-            .then(|| sha256_hex(&self.redact(body)))
+    /// The SHA-256 a request body is matched by, whatever the method (0.1: POST only); None for an empty body.
+    pub fn body_sha(&self, body: &[u8]) -> Option<String> {
+        (!body.is_empty()).then(|| sha256_hex(&self.redact(body)))
     }
 }
 
@@ -561,6 +560,28 @@ mod tests {
         ] {
             assert_eq!(red.redact_str(text), text);
         }
+    }
+
+    #[test]
+    fn keys_carry_the_body_of_any_method() {
+        let red = Redactor::default();
+        let sha = sha256_hex(b"<a/>");
+        assert_eq!(
+            red.fixture_key("POST", "http://h.test/c", b"<a/>"),
+            format!("POST http://h.test/c {sha}")
+        );
+        assert_eq!(
+            red.fixture_key("REPORT", "http://h.test/c", b"<a/>"),
+            format!("REPORT http://h.test/c {sha}")
+        );
+        assert_ne!(
+            red.fixture_key("PUT", "http://h.test/c", b"<a/>"),
+            red.fixture_key("PUT", "http://h.test/c", b"<b/>")
+        );
+        assert_eq!(
+            red.fixture_key("POST", "http://h.test/c", b""),
+            "POST http://h.test/c"
+        );
     }
 
     #[test]

@@ -68,10 +68,26 @@ pub(crate) fn new_ctx(
             let Value::Function(f) = arg(&a, 1).clone() else {
                 unreachable!()
             };
+            // only a networked lock screen waits for timers; any other lock session ignores them (§15)
+            if with(&st, |s| s.lock.ctx.as_ref().is_some_and(|c| !c.declared)) {
+                with(&st, |s| {
+                    s.log_line(
+                        "ctx:after has no effect in a lock-screen session without lockscreen.net",
+                    )
+                });
+                let cancel = method(|_, _| Ok(MultiValue::new()));
+                return new_object(lua, "timer", &[("cancel", cancel)])?.into_lua_multi(lua);
+            }
             let fire = Rc::new(move |h: &Host| {
                 h.protected(&f, h.ctx(), "ctx:after callback");
             });
-            let id = with(&st, |s| s.add_timer(ms, fire, 0));
+            let id = with(&st, |s| {
+                let id = s.add_timer(ms, fire, 0);
+                if let Some(c) = &mut s.lock.ctx {
+                    c.afters.push(id);
+                }
+                id
+            });
             let st = st.clone();
             let cancel = method(move |_, _| {
                 with(&st, |s| s.cancel_timer(id));
@@ -87,6 +103,10 @@ pub(crate) fn new_ctx(
             check_arg("set_tick", 1, arg(&a, 0), "number")?;
             let ms = round_ms(arg(&a, 0))?;
             with(&st, |s| {
+                if s.lock.ctx.is_some() {
+                    s.log_line("ctx:set_tick has no effect in a lock-screen session");
+                    return;
+                }
                 if let Some(t) = s.tick.take() {
                     s.cancel_timer(t);
                 }
@@ -148,9 +168,10 @@ pub(crate) fn new_ctx(
     Ok(ctx)
 }
 
-/// `ctx:invalidate`: one frame after the current callback; a full request also makes it a full refresh.
+/// `ctx:invalidate`: one frame after the current callback; a full request also makes it a full refresh. A
+/// lock-screen session draws no extra frame: only the full request counts (§15).
 pub(crate) fn request_frame(s: &mut State, full: bool) {
-    s.invalid = true;
+    s.invalid |= s.lock.ctx.is_none();
     s.full_next |= full;
 }
 
@@ -159,10 +180,12 @@ const LOG_CALL: &str = "local log = ... return function(_, ...) return log(...) 
 
 /// `ctx.log` is a table of levels on firmware 2.33; calling it as 2.26's `ctx:log(...)` still logs.
 fn install_log(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
-    let level = |prefix: &'static str| {
+    let level = |name: &'static str, prefix: &'static str| {
         let st = st.clone();
         method(move |_, args| {
-            let parts: Vec<String> = args.iter().map(fmt).collect();
+            let a = args.into_vec();
+            check_arg(name, 1, arg(&a, 0), "string")?;
+            let parts: Vec<String> = a.iter().map(fmt).collect();
             with(&st, |s| {
                 s.log_line(&format!("[app] {prefix} {}", parts.join(" ")))
             });
@@ -173,9 +196,9 @@ fn install_log(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
         lua,
         "log",
         &[
-            ("error", level("ERROR")),
-            ("info", level("INFO")),
-            ("warn", level("WARN")),
+            ("error", level("error", "ERROR")),
+            ("info", level("info", "INFO")),
+            ("warn", level("warn", "WARN")),
         ],
     )?;
     let call: Function = lua
@@ -243,6 +266,15 @@ fn py_integral(v: &Value, f: fn(f64) -> f64) -> mlua::Result<i64> {
         ));
     }
     Ok(f(n) as i64)
+}
+
+/// A §0 integer: an integer, or a float equal to one.
+fn whole(v: &Value) -> Option<i64> {
+    match v {
+        Value::Integer(i) => Some(i64::from(*i)),
+        Value::Number(n) if n.is_finite() && n.fract() == 0.0 => Some(*n as i64),
+        _ => None,
+    }
 }
 
 /// A Lua integer when it fits the device's 32 bits, else a float.

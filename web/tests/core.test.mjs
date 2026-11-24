@@ -176,6 +176,29 @@ test('frame(false) is the app frame alone, frame(true) adds the plates', () => {
   }
 });
 
+test('a gray frame comes with its PIL mode "L" bytes, a normal frame without', () => {
+  const app = files({
+    'manifest.json': '{"app_id": "testapp", "entry": "index.lua", "api": "2.11"}',
+    'index.lua':
+      'local gray = false\n' +
+      'function on_load(c) l = c.layers:create(4, 4) l:draw(function(g) g:rect(0, 0, 4, 4, {fill = true}) end) end\n' +
+      'function on_draw(c, g) g:rect(10, 0, 4, 4, {fill = true, color = 4}) g:image(l, 0, 0, {gray = gray}) end\n' +
+      "function on_input(c, ev) if ev.phase == 'up' then gray = true c:invalidate() end return true end\n",
+  });
+  const core = factory.create({ files: app, fixtures: new Map(), fonts: null, config: config() });
+  try {
+    assert.equal(core.frame(true).gray, null);
+    const st = core.cmd({ cmd: 'tap', x: 100, y: 100, with_state: true });
+    assert.equal(st.status.refresh, 'gray');
+    const f = core.frame(true);
+    assert.equal(f.gray.length, 480 * 800);
+    assert.deepEqual([f.gray[0], f.gray[10], f.gray[20]], [0, 170, 255]);
+    assert.deepEqual(core.frame(false).gray, f.gray);
+  } finally {
+    core.destroy();
+  }
+});
+
 test('an app file with NUL and 0xff reaches Lua byte-exact through create and reload', () => {
   const app = (bin) =>
     files({

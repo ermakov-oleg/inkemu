@@ -11,12 +11,16 @@ use sha2::{Digest, Sha256};
 
 use super::convert::{big_int_warning, dump, json_to_lua, lua_to_json};
 use super::object::{method, new_object, Method};
-use super::{arg, bytes_arg, check_arg, py_int, soft_fail};
+use super::{arg, bytes_arg, check_arg, raw, soft_fail, whole};
 use crate::emu::{with, Shared};
 use crate::lua::first_in_callback;
 
-/// `random:bytes` refuses more than this; the device's limit is unknown.
-const MAX_RANDOM_BYTES: i64 = 1 << 20;
+/// Largest `n` for `random:bytes` (API 2.33.1 §26).
+const MAX_RANDOM_BYTES: i64 = 1024;
+/// Input limit of the hashes and encoders (§26).
+const MAX_INPUT: usize = 1 << 20;
+/// Most items `url:query` takes (§26).
+const MAX_QUERY_ITEMS: usize = 64;
 
 const NULL: &str =
     "return setmetatable({}, {__tostring = function() return 'null' end, __metatable = false})";
@@ -24,9 +28,12 @@ const NULL: &str =
 /// What a codec returns: a Lua string, or `(nil, "invalid_argument")` on Err.
 type Codec = fn(&[u8]) -> Result<Vec<u8>, ()>;
 
-fn codec(name: &'static str, f: Codec) -> (&'static str, Method) {
+fn codec(name: &'static str, limited: bool, f: Codec) -> (&'static str, Method) {
     let m = method(move |lua, args| {
         let b = bytes_arg(name, 1, args.iter().next().unwrap_or(&Value::Nil))?;
+        if limited && b.len() > MAX_INPUT {
+            return soft_fail(lua, "limit_exceeded");
+        }
         match f(&b) {
             Ok(out) => lua.create_string(out)?.into_lua_multi(lua),
             Err(()) => soft_fail(lua, "invalid_argument"),
@@ -78,6 +85,9 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
 
     let crc32 = method(|lua, args| {
         let b = bytes_arg("crc32", 1, args.iter().next().unwrap_or(&Value::Nil))?;
+        if b.len() > MAX_INPUT {
+            return soft_fail(lua, "limit_exceeded");
+        }
         // signed 32-bit integer on the device, values from 2^31 wrap to negative (verified on 26112001)
         Value::Integer(crc32fast::hash(&b) as i32).into_lua_multi(lua)
     });
@@ -85,6 +95,9 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
         let a = args.into_vec();
         let key = bytes_arg("hmac_sha256", 1, a.first().unwrap_or(&Value::Nil))?;
         let msg = bytes_arg("hmac_sha256", 2, a.get(1).unwrap_or(&Value::Nil))?;
+        if key.len() > MAX_INPUT || msg.len() > MAX_INPUT {
+            return soft_fail(lua, "limit_exceeded");
+        }
         let mut mac = Hmac::<Sha256>::new_from_slice(&key).expect("HMAC takes a key of any length");
         mac.update(&msg);
         lua.create_string(mac.finalize().into_bytes())?
@@ -93,24 +106,21 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
     let objects: [(&str, Vec<(&str, Method)>); 5] = [
         (
             "base64",
-            vec![
-                codec("encode", |b| Ok(base64_encode(b).into_bytes())),
-                codec("decode", base64_decode),
-            ],
+            vec![base64_encode_method(), codec("decode", true, base64_decode)],
         ),
         (
             "hex",
             vec![
-                codec("encode", |b| Ok(hex(b).into_bytes())),
-                codec("decode", unhex),
+                codec("encode", true, |b| Ok(hex(b).into_bytes())),
+                codec("decode", true, unhex),
             ],
         ),
         (
             "hash",
             vec![
-                codec("sha1", |b| Ok(Sha1::digest(b).to_vec())),
-                codec("sha256", |b| Ok(Sha256::digest(b).to_vec())),
-                codec("md5", |b| Ok(Md5::digest(b).to_vec())),
+                codec("sha1", true, |b| Ok(Sha1::digest(b).to_vec())),
+                codec("sha256", true, |b| Ok(Sha256::digest(b).to_vec())),
+                codec("md5", true, |b| Ok(Md5::digest(b).to_vec())),
                 ("crc32", crc32),
                 ("hmac_sha256", hmac_sha256),
             ],
@@ -118,11 +128,12 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
         (
             "url",
             vec![
-                codec("encode", |b| Ok(url_encode(b).into_bytes())),
-                codec("decode", |b| Ok(url_decode(b))),
+                codec("encode", true, |b| Ok(url_encode(b).into_bytes())),
+                codec("decode", true, url_decode),
+                ("query", url_query()),
             ],
         ),
-        ("zlib", vec![codec("decompress", decompress)]),
+        ("zlib", vec![codec("decompress", false, decompress)]),
     ];
     for (name, methods) in objects {
         ctx.raw_set(name, new_object(lua, name, &methods)?)?;
@@ -141,9 +152,10 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
         method(move |lua, args| {
             let a = args.into_vec();
             check_arg("bytes", 1, arg(&a, 0), "number")?;
-            // made outside the Lua budget and memory: a huge count must not stall or abort the emulator
-            let n = py_int(arg(&a, 0))?;
-            if !(0..=MAX_RANDOM_BYTES).contains(&n) {
+            let Some(n) = whole(arg(&a, 0)) else {
+                return soft_fail(lua, "invalid_argument");
+            };
+            if !(1..=MAX_RANDOM_BYTES).contains(&n) {
                 return soft_fail(lua, "invalid_argument");
             }
             let mut b = vec![0u8; n as usize];
@@ -155,6 +167,70 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
         "random",
         new_object(lua, "random", &[("bytes", bytes), ("uuid", uuid)])?,
     )
+}
+
+/// `base64:encode(s, opts)`: `opts.url = true` selects the `-_` alphabet without padding.
+fn base64_encode_method() -> (&'static str, Method) {
+    let m = method(|lua, args| {
+        let a = args.into_vec();
+        let b = bytes_arg("encode", 1, arg(&a, 0))?;
+        if !matches!(arg(&a, 1), Value::Nil) {
+            check_arg("encode", 2, arg(&a, 1), "table")?;
+        }
+        let url = match arg(&a, 1) {
+            Value::Table(t) => match t.get::<Value>("url")? {
+                Value::Nil => false,
+                Value::Boolean(b) => b,
+                _ => return soft_fail(lua, "invalid_argument"),
+            },
+            _ => false,
+        };
+        if b.len() > MAX_INPUT {
+            return soft_fail(lua, "limit_exceeded");
+        }
+        let mut out = base64_encode(&b);
+        if url {
+            out = out.replace('+', "-").replace('/', "_").replace('=', "");
+        }
+        lua.create_string(out)?.into_lua_multi(lua)
+    });
+    ("encode", m)
+}
+
+/// `url:query(t)`: `key=value` items in byte order of the keys, both percent-encoded.
+fn url_query() -> Method {
+    method(|lua, args| {
+        let a = args.into_vec();
+        check_arg("query", 1, arg(&a, 0), "table")?;
+        let Value::Table(t) = arg(&a, 0) else {
+            unreachable!("checked above")
+        };
+        let mut items = vec![];
+        for pair in t.pairs::<Value, Value>() {
+            if items.len() == MAX_QUERY_ITEMS {
+                return soft_fail(lua, "limit_exceeded");
+            }
+            let (k, v) = pair?;
+            let (Value::String(k), Some(v)) = (&k, query_value(&v)) else {
+                return soft_fail(lua, "invalid_argument");
+            };
+            items.push((k.as_bytes().to_vec(), v));
+        }
+        items.sort();
+        let out: Vec<String> = items
+            .iter()
+            .map(|(k, v)| format!("{}={}", url_encode(k), url_encode(v)))
+            .collect();
+        lua.create_string(out.join("&"))?.into_lua_multi(lua)
+    })
+}
+
+fn query_value(v: &Value) -> Option<Vec<u8>> {
+    match v {
+        Value::Boolean(b) => Some(b.to_string().into_bytes()),
+        Value::String(_) | Value::Integer(_) | Value::Number(_) => raw(v),
+        _ => None,
+    }
 }
 
 /// Python `str(uuid.UUID(int=..., version=4))`.
@@ -208,7 +284,7 @@ fn base64_encode(b: &[u8]) -> String {
     out
 }
 
-/// Python `base64.b64decode(b, validate=True)`: only the alphabet, then exactly the `=` that complete the last group.
+/// Both alphabets (`+/` and `-_`); `=` padding is optional but, when present, must complete the last group.
 fn base64_decode(b: &[u8]) -> Result<Vec<u8>, ()> {
     let data_len = b.iter().position(|&c| c == b'=').unwrap_or(b.len());
     let (data, pads) = b.split_at(data_len);
@@ -217,7 +293,12 @@ fn base64_decode(b: &[u8]) -> Result<Vec<u8>, ()> {
     }
     let mut vals = Vec::with_capacity(data.len());
     for &c in data {
-        vals.push(B64.iter().position(|&a| a == c).ok_or(())? as u32);
+        let v = match c {
+            b'-' => 62,
+            b'_' => 63,
+            _ => B64.iter().position(|&a| a == c).ok_or(())?,
+        };
+        vals.push(v as u32);
     }
     let want_pads = match data.len() % 4 {
         0 => 0,
@@ -225,7 +306,7 @@ fn base64_decode(b: &[u8]) -> Result<Vec<u8>, ()> {
         3 => 1,
         _ => return Err(()),
     };
-    if pads.len() != want_pads {
+    if !pads.is_empty() && pads.len() != want_pads {
         return Err(());
     }
     let mut out = Vec::with_capacity(data.len() / 4 * 3 + 2);
@@ -252,29 +333,25 @@ fn url_encode(b: &[u8]) -> String {
     out
 }
 
-/// Python `urllib.parse.unquote_to_bytes`: `%xx` decoded, a malformed `%` kept, `+` left alone.
-fn url_decode(b: &[u8]) -> Vec<u8> {
+/// Only `%XX` is decoded (`+` stays); a malformed escape is an error.
+fn url_decode(b: &[u8]) -> Result<Vec<u8>, ()> {
     let mut out = Vec::with_capacity(b.len());
     let mut i = 0;
     while i < b.len() {
-        let pair = b.get(i + 1..i + 3).and_then(|p| {
-            let s = std::str::from_utf8(p).ok()?;
-            u8::from_str_radix(s, 16)
-                .ok()
-                .filter(|_| p.iter().all(u8::is_ascii_hexdigit))
-        });
-        match (b[i], pair) {
-            (b'%', Some(c)) => {
-                out.push(c);
-                i += 3;
+        if b[i] == b'%' {
+            let p = b.get(i + 1..i + 3).ok_or(())?;
+            if !p.iter().all(u8::is_ascii_hexdigit) {
+                return Err(());
             }
-            (c, _) => {
-                out.push(c);
-                i += 1;
-            }
+            let s = std::str::from_utf8(p).map_err(|_| ())?;
+            out.push(u8::from_str_radix(s, 16).map_err(|_| ())?);
+            i += 3;
+        } else {
+            out.push(b[i]);
+            i += 1;
         }
     }
-    out
+    Ok(out)
 }
 
 /// Python `zlib.decompress(b, 47)` (zlib or gzip header), falling back to raw deflate.
@@ -308,11 +385,12 @@ mod tests {
         assert_eq!(base64_decode(b"QUI=").unwrap(), b"AB");
         assert_eq!(base64_decode(b"QUJD").unwrap(), b"ABC");
         assert_eq!(base64_decode(b"QR==").unwrap(), b"A");
+        assert_eq!(base64_decode(b"QQ").unwrap(), b"A");
+        assert_eq!(base64_decode(b"QUI").unwrap(), b"AB");
+        assert_eq!(base64_decode(b"-_-_").unwrap(), b"\xfb\xff\xbf");
         assert_eq!(base64_decode(b"").unwrap(), b"");
         for bad in [
-            &b"QQ"[..],
-            b"QQ=",
-            b"QUI",
+            &b"QQ="[..],
             b"QUI==",
             b"Q",
             b"Q===",
@@ -332,7 +410,10 @@ mod tests {
     #[test]
     fn url_and_hex_as_python() {
         assert_eq!(url_encode("a b/я?~".as_bytes()), "a%20b%2F%D1%8F%3F~");
-        assert_eq!(url_decode(b"a%20b%2f%zz%4+%"), b"a b/%zz%4+%");
+        assert_eq!(url_decode(b"a%20b%2f+").unwrap(), b"a b/+");
+        assert!(
+            url_decode(b"%zz").is_err() && url_decode(b"%4").is_err() && url_decode(b"%").is_err()
+        );
         assert_eq!(unhex(b"00Ff61").unwrap(), b"\0\xffa");
         assert!(unhex(b"abc").is_err() && unhex(b"zz").is_err() && unhex(b"+1").is_err());
     }
