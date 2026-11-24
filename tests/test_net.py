@@ -97,6 +97,31 @@ def test_record_then_replay(make_app, emu_factory, tmp_path, server):
     assert emu2.has_text("msg 200:5")
 
 
+def test_record_keys_each_report_body(make_app, emu_factory, tmp_path, server):
+    """Two REPORTs to one URL with different bodies get a fixture each and replay their own answers."""
+    lua = (
+        DRAW
+        + "local function report(c, body, k)\n"
+        + "  c.net:request({url = '%s/cal', method = 'REPORT', body = body}, k)\n"
+        + "end\n"
+        + "function on_load(c)\n"
+        + "  report(c, '<a/>', function(c, r1)\n"
+        + "    report(c, '<b/>', function(c, r2) msg = r1.body .. ',' .. r2.body; c:invalidate() end)\n"
+        + "  end)\n"
+        + "end\n"
+    ) % server.base
+    emu = emu_factory(make_app(lua, manifest=NET), net="record")
+    emu.wait(600)
+    assert emu.has_text("msg re:<a/>,re:<b/>")
+    docs = [json.loads(p.read_text()) for p in sorted((tmp_path / "fixtures" / "net").glob("*.json"))]
+    shas = sorted(d["request"]["body_sha256"] for d in docs)
+    assert shas == sorted(hashlib.sha256(b).hexdigest() for b in (b"<a/>", b"<b/>"))
+    server.shutdown()
+    emu2 = emu_factory(make_app(lua, manifest=NET), state_dir=tmp_path / "s2")
+    emu2.wait(600)
+    assert emu2.has_text("msg re:<a/>,re:<b/>")
+
+
 def test_binary_body_reaches_lua(make_app, emu_factory, tmp_path, server):
     emu = emu_factory(
         app_with(
@@ -183,7 +208,9 @@ def test_unknown_secret_warns(make_app, emu_factory, server):
 
 
 def test_patch_gets_its_answer(make_app, emu_factory, tmp_path):
-    write_fixture(tmp_path, "p", {"method": "PATCH", "url": "http://x.test/p"}, {"status": 200})
+    # a body is matched by its hash for every method, not only POST
+    sha = hashlib.sha256(b"x").hexdigest()
+    write_fixture(tmp_path, "p", {"method": "PATCH", "url": "http://x.test/p", "body_sha256": sha}, {"status": 200})
     emu = emu_factory(app_with(make_app, "{url = 'http://x.test/p', method = 'PATCH', body = 'x'}"))
     emu.wait(300)
     assert emu.has_text("msg 200:ok"), "PATCH reaches its callback (§14, 14/net_methods_accepted)"

@@ -211,7 +211,7 @@ impl Net {
     ) -> io::Result<String> {
         let red = &self.redactor;
         let stem = self.stem(r);
-        let sha = red.body_sha(&r.method, &r.body);
+        let sha = red.body_sha(&r.body);
         let safe = |h: &[(String, String)], lower: bool| -> Vec<(String, String)> {
             h.iter()
                 .filter(|(k, _)| !sensitive(k))

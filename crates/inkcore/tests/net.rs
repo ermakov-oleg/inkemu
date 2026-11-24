@@ -99,6 +99,53 @@ fn post_matches_by_body_hash() {
 }
 
 #[test]
+fn every_method_with_a_body_matches_by_body_hash() {
+    let report = |name: &'static str, body: &[u8], answer: &str| {
+        (
+            name,
+            fixture(
+                json!({"method": "REPORT", "url": "http://x.test/cal", "body_sha256": sha(body)}),
+                json!({"status": 207, "body": answer}),
+            ),
+        )
+    };
+    let cfg = with_fixtures(&[
+        report("r1.json", b"<a/>", "first"),
+        report("r2.json", b"<b/>", "second"),
+        (
+            "post.json",
+            fixture(
+                json!({"method": "POST", "url": "http://x.test/cal", "body_sha256": sha(b"<a/>")}),
+                json!({"status": 200, "body": "post"}),
+            ),
+        ),
+        (
+            "get.json",
+            fixture(
+                json!({"method": "GET", "url": "http://x.test/cal", "body_sha256": null}),
+                json!({"status": 200, "body": "get"}),
+            ),
+        ),
+    ]);
+    for (method, body, want) in [
+        ("REPORT", "<a/>", "207:first"),
+        ("REPORT", "<b/>", "207:second"),
+        ("POST", "<a/>", "200:post"),
+        ("GET", "", "200:get"),
+    ] {
+        let body = if body.is_empty() {
+            String::new()
+        } else {
+            format!(", body = '{body}'")
+        };
+        let req = format!("{{url = 'http://x.test/cal', method = '{method}'{body}}}");
+        let mut core = boot(app(&req, STATUS_BODY), cfg.clone());
+        core.wait(300).unwrap();
+        assert_eq!(msg(&mut core), want, "{method}{body}");
+    }
+}
+
+#[test]
 fn no_fixture_names_method_url_and_record() {
     let mut core = boot(
         app(

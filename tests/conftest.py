@@ -91,6 +91,14 @@ def server():
 
         do_PUT = do_HEAD = do_PROPFIND = other
 
+        def do_REPORT(self):
+            body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            calls.append((self.command, body))
+            self.send_response(207)
+            self.send_header("Content-Length", str(len(body) + 3))
+            self.end_headers()
+            self.wfile.write(b"re:" + body)
+
         def log_message(self, *a):
             pass
 

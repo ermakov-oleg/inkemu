@@ -564,7 +564,7 @@ fn first_step(st: &Shared, f: Function, p: Parsed) -> Next {
             );
             return Next::Done(job, None);
         }
-        let sha = red.body_sha(&method, &body);
+        let sha = red.body_sha(&body);
         let mut warnings = Vec::new();
         let found = if s.cfg.net_mode == NetMode::Live || s.cfg.net_mode == NetMode::Record {
             None

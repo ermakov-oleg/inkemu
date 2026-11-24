@@ -161,7 +161,8 @@ non-JSON content type.
 
 Fixtures live in `<fixtures dir>/net/` (default `tests/fixtures/<app_id>/net/`, relative to the working directory),
 one `METHOD_host_hash.json` (request key, response status/headers/`body_file`/`delay_ms`) plus a `.body` file.
-POST bodies are matched by SHA-256. A fixture can be written by hand; a malformed one is ignored with a warning.
+A request body is matched by its SHA-256 (`request.body_sha256`), whatever the method. A fixture can be written by
+hand; a malformed one is ignored with a warning.
 
 `<state root>/secrets.json` (default `.emu/secrets.json`) is a flat `{"name": "value"}` object. Values are replaced by
 `{{name}}` in recorded URLs, bodies and headers, and `{{name}}` in app files seeded from the project is replaced
@@ -242,6 +243,9 @@ included, then seeds `files/` from `<fixtures dir>/files/`.
   more than 16 headers, a header name over 64 bytes, headers over 65536 bytes in all, CR, LF or NUL in a header
   (0.1 dropped a header value that was not a string or number; now the call fails). A `url` over 1024 bytes or a
   `body` over 65536 bytes returns `nil, "limit_exceeded"`.
+- Fixtures key on the body of every method that sends one, not only `POST`: a `PUT`, `PATCH`, `REPORT`, ... fixture
+  needs the body's `body_sha256`, so such fixtures recorded before (with `null`) or written by hand without it no
+  longer match; record them again or add the hash. `GET` fixtures and `POST` fixtures stay valid.
 - `ctx.net:keep_wifi(ms)` returns nothing (0.1: one nil) and returns `nil, "invalid_argument"` for a number that is
   not an integer from -1 to 2147483647.
 - Lock screen (§15): the first session's `ctx.lock.reason` is `"first"` (0.1: `"lock"`); wakes are aligned to
