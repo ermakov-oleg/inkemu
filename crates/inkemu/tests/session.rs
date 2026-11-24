@@ -443,3 +443,69 @@ fn fixtures_written_or_edited_during_a_run_answer_the_next_request() {
         "edited during the run"
     );
 }
+
+#[test]
+fn files_changed_on_disk_during_a_run_are_seen_and_kept() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = write_app(tmp.path(), "");
+    let mut s = Session::open(&app, opts(tmp.path())).unwrap();
+    let (storage, appfiles) = (
+        tmp.path().join("state/files"),
+        tmp.path().join("state/appfiles"),
+    );
+    fs::create_dir_all(&storage).unwrap();
+    fs::create_dir_all(&appfiles).unwrap();
+    let read = |s: &mut Session, code: &str| s.lua_eval(code).unwrap();
+
+    fs::write(storage.join("late.txt"), "hi").unwrap();
+    fs::write(appfiles.join("Note.txt"), "app").unwrap();
+    assert_eq!(
+        read(&mut s, "return ctx.storage:read('late.txt')"),
+        json!("hi"),
+        "added after the start"
+    );
+    assert_eq!(
+        read(&mut s, "return ctx.files:read('note.txt')"),
+        json!("app")
+    );
+
+    fs::write(storage.join("late.txt"), "edited").unwrap();
+    assert_eq!(
+        read(&mut s, "return ctx.storage:read('late.txt')"),
+        json!("edited")
+    );
+
+    s.lua_exec("ctx.storage:write('own.txt', 'mine')").unwrap();
+    fs::write(storage.join("late.txt"), "edited again").unwrap();
+    s.lua_exec("ctx.storage:write('own.txt', 'mine 2')")
+        .unwrap();
+    assert_eq!(
+        fs::read_to_string(storage.join("late.txt")).unwrap(),
+        "edited again",
+        "not overwritten by a save"
+    );
+    assert_eq!(
+        fs::read_to_string(storage.join("own.txt")).unwrap(),
+        "mine 2"
+    );
+
+    fs::remove_file(storage.join("late.txt")).unwrap();
+    fs::remove_file(appfiles.join("Note.txt")).unwrap();
+    assert_eq!(
+        read(&mut s, "return ctx.storage:exists('late.txt')"),
+        json!(false),
+        "removed"
+    );
+    assert_eq!(
+        read(&mut s, "return ctx.files:exists('Note.txt')"),
+        json!(false)
+    );
+
+    fs::write(storage.join("after.txt"), "restart").unwrap();
+    s.restart();
+    assert_eq!(
+        read(&mut s, "return ctx.storage:read('after.txt')"),
+        json!("restart")
+    );
+    assert!(s.core().errors().is_empty(), "{:?}", &*s.core().errors());
+}

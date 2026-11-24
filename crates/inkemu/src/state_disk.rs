@@ -94,24 +94,56 @@ pub fn load(state_dir: &Path) -> (Persisted, Option<String>, Vec<String>) {
         Ok(data) => (data, None),
         Err(e) => (None, Some(e)),
     };
-    let mut warnings = Vec::new();
+    let (files, app_files, warnings) = load_files(state_dir);
     let persisted = Persisted {
         state_json,
         lock_json: read_opt(&state_dir.join("lock.json")).unwrap_or_default(),
-        files: read_dir(
-            &state_dir.join(STORAGE_DIR),
-            storage_name,
-            false,
-            &mut warnings,
-        ),
-        app_files: read_dir(
-            &state_dir.join(APP_FILES_DIR),
-            app_file_name_ok,
-            true,
-            &mut warnings,
-        ),
+        files,
+        app_files,
     };
     (persisted, state_error, warnings)
+}
+
+type Files = BTreeMap<String, Vec<u8>>;
+
+/// `files/` and `appfiles/` as the app sees them, and warnings about files left out.
+pub fn load_files(state_dir: &Path) -> (Files, Files, Vec<String>) {
+    let mut warnings = Vec::new();
+    let files = read_dir(
+        &state_dir.join(STORAGE_DIR),
+        storage_name,
+        false,
+        &mut warnings,
+    );
+    let app_files = read_dir(
+        &state_dir.join(APP_FILES_DIR),
+        app_file_name_ok,
+        true,
+        &mut warnings,
+    );
+    (files, app_files, warnings)
+}
+
+/// Name, size and modification time of each file in `files/` and `appfiles/`, to see when they change on disk.
+pub type FilesSeen = BTreeMap<(&'static str, String), (u64, Option<std::time::SystemTime>)>;
+
+pub fn files_seen(state_dir: &Path) -> FilesSeen {
+    let mut seen = FilesSeen::new();
+    for dir in [STORAGE_DIR, APP_FILES_DIR] {
+        let Ok(rd) = fs::read_dir(state_dir.join(dir)) else {
+            continue;
+        };
+        for e in rd.flatten() {
+            let Ok(meta) = fs::metadata(e.path()) else {
+                continue;
+            };
+            if meta.is_file() {
+                let name = e.file_name().to_string_lossy().into_owned();
+                seen.insert((dir, name), (meta.len(), meta.modified().ok()));
+            }
+        }
+    }
+    seen
 }
 
 fn write_atomic(path: &Path, tmp: &Path, data: &[u8]) -> io::Result<()> {

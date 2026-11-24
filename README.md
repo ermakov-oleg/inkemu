@@ -183,7 +183,8 @@ back for `live` and `record` requests, including their percent-encoded forms. A 
 and `/AppFiles/<app_id>/`); inkemu keeps the §9 quota (128 MiB, 512 files) on `files/` and the 512-file limit on
 `appfiles/`. The state root is
 `.emu/` in the working directory, or `$INKEMU_STATE_ROOT`. `--fresh` wipes the app state first, both file directories
-included, then seeds `files/` from `<fixtures dir>/files/`.
+included, then seeds `files/` from `<fixtures dir>/files/`. A file added, edited or removed in `files/` or
+`appfiles/` while an `Emu` runs is what the app sees from its next call on, and the app's own saves leave it alone.
 
 ## Breaking changes in 0.2
 

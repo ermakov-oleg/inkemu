@@ -86,6 +86,22 @@ def test_files_path_and_own_dir(make_app, emu_factory, tmp_path):
     assert (tmp_path / "state" / "appfiles" / "x.txt").read_text() == "own"
 
 
+def test_storage_file_written_after_start_is_read(make_app, emu_factory, tmp_path):
+    lua = (
+        "function on_draw(c, g) g:clear(0); g:text(0, 0, 'late=' .. tostring(ctx.storage:read('late.txt'))) end\n"
+        "function on_input(c, ev) c:invalidate() end\n"
+    )
+    emu = emu_factory(make_app(lua))
+    files = tmp_path / "state" / "files"
+    files.mkdir(parents=True, exist_ok=True)
+    (files / "late.txt").write_text("hi")
+    emu.tap(10, 10)
+    assert emu.has_text("late=hi"), "0.1 read ctx.storage from disk on every call"
+    (files / "late.txt").write_text("edited")
+    emu.restart()
+    assert emu.has_text("late=edited")
+
+
 def test_storage_read_offset_warns(make_app, emu_factory):
     emu = run(make_app, emu_factory, "ctx.storage:write('n.txt', 'abcdef')\nmsg = ctx.storage:read('n.txt', 0, 2)")
     assert emu.has_text("msg abcdef")

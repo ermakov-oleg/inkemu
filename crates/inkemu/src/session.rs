@@ -67,6 +67,8 @@ pub struct Session {
     net_mode: NetMode,
     /// The `net/` files the core's fixtures were read from, to see when the folder changes.
     fixtures_seen: FixturesSeen,
+    /// `files/` and `appfiles/` as last read or written, to see when something else changes them.
+    files_seen: state_disk::FilesSeen,
 }
 
 /// Runs a mutating `Core` method, then writes the app data it changed. While locked, the secrets are read first:
@@ -74,7 +76,7 @@ pub struct Session {
 macro_rules! mutating {
     ($($(#[$doc:meta])* fn $name:ident(&mut self $(, $arg:ident: $ty:ty)*) $(-> $ret:ty)?;)*) => {
         $($(#[$doc])* pub fn $name(&mut self $(, $arg: $ty)*) $(-> $ret)? {
-            self.refresh_fixtures();
+            self.refresh_from_disk();
             if self.core.locked() {
                 self.read_secrets();
             }
@@ -131,6 +133,7 @@ impl Session {
             state_disk::seed_files(&fixtures_dir, &state_dir);
         }
         let (on_disk, state_read_error, load_warnings) = state_disk::load(&state_dir);
+        let files_seen = state_disk::files_seen(&state_dir);
         let secrets = secrets::load(&secrets_file);
         let net_dir = fixtures_dir.join("net");
         let fixtures_seen = fixtures_seen(&net_dir);
@@ -148,7 +151,7 @@ impl Session {
             state_label: state_dir.join("state.json").display().to_string(),
             state_read_error,
             reader_json: fs::read(fixtures_dir.join("reader.json")).ok(),
-            fixtures: fixtures.clone(),
+            fixtures,
             net_fixtures_label: net_dir.display().to_string(),
             secrets: secrets.values.clone(),
             secret_problems: secrets.problems,
@@ -172,6 +175,7 @@ impl Session {
             on_disk,
             net_mode,
             fixtures_seen,
+            files_seen,
         };
         session.flush();
         Ok(session)
@@ -202,7 +206,9 @@ impl Session {
         let Some(new) = self.core.take_persist() else {
             return;
         };
-        match state_disk::save(&self.state_dir, &new, &self.on_disk) {
+        let saved = state_disk::save(&self.state_dir, &new, &self.on_disk);
+        self.files_seen = state_disk::files_seen(&self.state_dir);
+        match saved {
             Ok(()) => self.on_disk = new,
             Err(e) => {
                 let msg = format!(
@@ -216,7 +222,7 @@ impl Session {
 
     /// Leaves and starts the app again with the secrets file read anew.
     pub fn restart(&mut self) {
-        self.refresh_fixtures();
+        self.refresh_from_disk();
         self.read_secrets();
         self.core.restart();
         self.flush();
@@ -224,7 +230,7 @@ impl Session {
 
     /// Leaves the app and runs its lock screen, with the secrets file read anew.
     pub fn lock(&mut self) {
-        self.refresh_fixtures();
+        self.refresh_from_disk();
         self.read_secrets();
         self.core.lock();
         self.flush();
@@ -232,7 +238,7 @@ impl Session {
 
     /// Starts the app again after the lock screen, with the secrets file read anew.
     pub fn unlock(&mut self) {
-        self.refresh_fixtures();
+        self.refresh_from_disk();
         self.read_secrets();
         self.core.unlock();
         self.flush();
@@ -246,6 +252,29 @@ impl Session {
         let fetcher = fetcher(self.net_mode, secrets.values.clone(), net_dir);
         self.core.set_fetcher(fetcher);
         self.core.set_secrets(secrets.values, secrets.problems);
+    }
+
+    /// Picks up what changed on disk outside the app since the last call: net fixtures and the app's files.
+    fn refresh_from_disk(&mut self) {
+        self.refresh_fixtures();
+        self.refresh_files();
+    }
+
+    /// Gives the core `files/` and `appfiles/` again when something else changed them, as 0.1 read `ctx.storage`
+    /// from disk on every call; they also become the base the next save compares with, so they are not overwritten.
+    fn refresh_files(&mut self) {
+        let seen = state_disk::files_seen(&self.state_dir);
+        if seen == self.files_seen {
+            return;
+        }
+        self.files_seen = seen;
+        let (files, app_files, warnings) = state_disk::load_files(&self.state_dir);
+        for w in &warnings {
+            self.core.warn(w);
+        }
+        self.on_disk.files = files.clone();
+        self.on_disk.app_files = app_files.clone();
+        self.core.set_files(files, app_files);
     }
 
     /// Gives the core the `net/` files again when the folder changed since they were read, so a fixture written or
@@ -264,6 +293,7 @@ impl Session {
 
     /// Re-reads the app folder, the fixtures and the secrets, then reloads: edited code takes effect.
     pub fn reload(&mut self) {
+        self.refresh_files();
         self.core.set_app(read_app_files(&self.app_dir));
         let net_dir = self.fixtures_dir.join("net");
         self.fixtures_seen = fixtures_seen(&net_dir);
