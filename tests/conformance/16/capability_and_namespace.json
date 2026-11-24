@@ -1,0 +1,16 @@
+{
+  "spec": "§16",
+  "about": "with capabilities.ui true, ctx.ui is a table with create, which works with no options, an empty or unknown-field table, gives a new object each time, and refuses a non-table with invalid_argument",
+  "expect": {
+    "capabilities.ui": {"value": true, "spec": "§17"},
+    "ui": {"value": "table", "spec": "§17"},
+    "ui.create": {"value": "function", "spec": "§16"},
+    "create.no_opts": {"value": "table", "spec": "§16"},
+    "create.empty": {"value": "table", "spec": "§16"},
+    "create.independent": {"value": true, "spec": "§16"},
+    "create.unknown_fields": {"value": "table", "spec": "§16"},
+    "create.number": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "create.string": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"}
+  },
+  "errors": []
+}

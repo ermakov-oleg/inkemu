@@ -1,0 +1,17 @@
+{
+  "spec": "§16",
+  "about": "ui:layout of the column in the §16 example gives the boxes the contract lists, and b[3][2] and b.b are one table; ids are keys of the returned table only (probe-confirmed)",
+  "expect": {
+    "returns": {"value": 1, "spec": "§16"},
+    "root": {"value": [0, 0, 480, 800], "spec": "§16"},
+    "head": {"value": [24, 24, 432, 64], "spec": "§16"},
+    "body": {"value": [24, 100, 432, 600], "spec": "§16"},
+    "row": {"value": [24, 712, 432, 64], "spec": "§16"},
+    "a": {"value": [24, 712, 210, 64], "spec": "§16"},
+    "b": {"value": [246, 712, 210, 64], "spec": "§16"},
+    "b_is_the_numbered_table": {"value": true, "spec": "§16"},
+    "nested_has_no_id_keys": {"value": true, "spec": "§16"},
+    "no_overflow": {"value": true, "spec": "§16"}
+  },
+  "errors": []
+}

@@ -1,0 +1,22 @@
+{
+ "expect_mismatches":[],
+ "file":"s13_today_setup.api26.json",
+ "scenario":"s13_today_setup",
+ "title":"Today-like setup screen: wrapped small label with h = fit",
+ "input":{"api":"2.26","canvas":[480,800],"touch":true,"steps":[
+  {"op":"create","opts":{"focus_style":"outline"}},
+  {"font_calls":true,"op":"layout","rect":{"h":800,"w":480,"x":0,"y":0},"spec":{"children":[{"align_items":"center","children":[{"draw":"@rec","h":44,"id":"back","kind":"region","w":44},{"bold":true,"font":"@font:large","grow":1,"id":"title","kind":"label","text":"Setup"}],"gap":8,"kind":"row"},{"font":"@font:small","h":"fit","id":"body","kind":"label","text":"Open the companion page on your phone, sign in, and enter the code shown below. The reader fetches new data once an hour."},{"align":"center","font":"@font:large","h":"fit","id":"code","kind":"label","tabular":true,"text":"AB12-CD34"},{"kind":"spacer"}],"gap":16,"h":800,"kind":"column","padding":16,"w":480,"x":0,"y":0}},
+  {"calls":[{"id":"page","m":"column","o":{"children":[{"align_items":"center","children":[{"draw":"@rec","h":44,"id":"back","kind":"region","w":44},{"bold":true,"font":"@font:large","grow":1,"id":"title","kind":"label","text":"Setup"}],"gap":8,"kind":"row"},{"font":"@font:small","h":"fit","id":"body","kind":"label","text":"Open the companion page on your phone, sign in, and enter the code shown below. The reader fetches new data once an hour."},{"align":"center","font":"@font:large","h":"fit","id":"code","kind":"label","tabular":true,"text":"AB12-CD34"},{"kind":"spacer"}],"gap":16,"h":800,"padding":16,"w":480,"x":0,"y":0}}],"font_calls":true,"op":"frame"},
+  {"ev":{"key":"down","phase":"down","time_ms":0,"type":"key"},"note":"only one focusable control","op":"event"},
+  {"ev":{"key":"up","phase":"down","time_ms":0,"type":"key"},"op":"event"},
+  {"calls":[{"id":"page","m":"column","o":{"children":[{"align_items":"center","children":[{"draw":"@rec","h":44,"id":"back","kind":"region","w":44},{"bold":true,"font":"@font:large","grow":1,"id":"title","kind":"label","text":"Setup"}],"gap":8,"kind":"row"},{"font":"@font:small","h":"fit","id":"body","kind":"label","text":"Open the companion page on your phone, sign in, and enter the code shown below. The reader fetches new data once an hour."},{"align":"center","font":"@font:large","h":"fit","id":"code","kind":"label","tabular":true,"text":"AB12-CD34"},{"kind":"spacer"}],"gap":16,"h":800,"padding":16,"w":480,"x":0,"y":0}}],"op":"frame"}
+ ]},
+ "output":[
+  {"i":1,"op":"create","ret":"ui object"},
+  {"i":2,"op":"layout","result":{"box":{"c":[{"c":[{"h":44,"w":44,"x":16,"y":16},{"h":30,"w":396,"x":68,"y":23}],"h":44,"w":448,"x":16,"y":16},{"h":60,"w":448,"x":16,"y":76},{"h":30,"w":448,"x":16,"y":152},{"h":586,"w":448,"x":16,"y":198}],"h":800,"keys":["back","body","code","title"],"w":480,"x":0,"y":0},"ids":{"back":".1.1","body":".2","code":".3","title":".1.2"},"n_returns":1}},
+  {"begin":[],"calls":[{"id":"page","m":"column","ret":[]}],"end":[],"focused_after":["back"],"i":3,"op":"frame","op_counts":{"@draw":1,"text_box":3},"stream":[{"g_is_frame_canvas":true,"id":"back","op":"@draw","r":{"h":44,"w":44,"x":16,"y":16},"st":{"enabled":true,"focused":false,"selected":false}},{"a":[68,23,396,30,"Setup",{"bold":true,"font":"@font:large","overflow":"ellipsis"}],"op":"text_box"},{"a":[16,76,448,60,"Open the companion page on your phone, sign in, and enter the code shown below. The reader fetches new data once an hour.",{"font":"@font:small","overflow":"ellipsis"}],"op":"text_box"},{"a":[16,152,448,30,"AB12-CD34",{"align":"center","font":"@font:large","overflow":"ellipsis","tabular":true}],"op":"text_box"}]},
+  {"focused":["back"],"i":4,"note":"only one focusable control","op":"event","ret":[null,null]},
+  {"focused":["back"],"i":5,"op":"event","ret":[null,null]},
+  {"begin":[],"calls":[{"id":"page","m":"column","ret":[]}],"end":[],"focused_after":["back"],"i":6,"op":"frame","op_counts":{"@draw":1,"text_box":3},"stream":[{"g_is_frame_canvas":true,"id":"back","op":"@draw","r":{"h":44,"w":44,"x":16,"y":16},"st":{"enabled":true,"focused":true,"selected":false}},{"a":[68,23,396,30,"Setup",{"bold":true,"font":"@font:large","overflow":"ellipsis"}],"op":"text_box"},{"a":[16,76,448,60,"Open the companion page on your phone, sign in, and enter the code shown below. The reader fetches new data once an hour.",{"font":"@font:small","overflow":"ellipsis"}],"op":"text_box"},{"a":[16,152,448,30,"AB12-CD34",{"align":"center","font":"@font:large","overflow":"ellipsis","tabular":true}],"op":"text_box"}]}
+ ]
+}

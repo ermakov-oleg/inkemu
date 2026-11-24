@@ -1,0 +1,12 @@
+{
+  "spec": "§16",
+  "about": "a badge is line height + 4 of the small font tall, at least as wide as tall and its text + 8, 4 px in from the control's top and right edges: a paper ring, an ink capsule and the text in 0, after the button's text or the region's draw; an empty badge draws nothing, and a button with empty text only its box (probe-confirmed)",
+  "expect": {
+    "badge.after_text": {"value": true, "spec": "§16"},
+    "empty_badge.none": {"value": true, "spec": "§16"},
+    "region.after_draw": {"value": true, "spec": "§16"}
+  },
+  "files": {"canvas_log.lua": "canvas_log.util.lua"},
+  "pixels": [[400, 200, 1], [401, 200, 0], [402, 200, 0], [403, 200, 0], [404, 200, 1]],
+  "errors": []
+}

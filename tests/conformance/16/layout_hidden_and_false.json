@@ -1,0 +1,17 @@
+{
+  "spec": "§16",
+  "about": "a false child or a hidden one occupies nothing, not even a gap, and is false in the ui:layout result, with its fields still checked; a child laid out to zero height keeps its box in the result but is neither drawn nor focusable nor hit in a frame",
+  "expect": {
+    "skipped": {"value": "0,0,100,100 [0,0,100,10 | false | false | 0,15,100,10]", "spec": "§16"},
+    "ids": {"value": [true, true, true], "spec": "§16"},
+    "hidden_bad_field": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "hidden_not_boolean": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "zero_height": {"value": "0,0,100,20 [0,0,100,20 | 0,20,100,0]", "spec": "§16"},
+    "frame": {"value": {"ok": true, "ret": []}, "spec": "§16"},
+    "focus": {"value": "keep", "spec": "§16"},
+    "tap_zero": {"value": ["keep", "activate"], "spec": "§16"}
+  },
+  "files": {"layout_box.lua": "layout_box.util.lua"},
+  "pixels": [[0, 50, 1], [199, 50, 1]],
+  "errors": []
+}

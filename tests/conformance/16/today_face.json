@@ -1,0 +1,26 @@
+{
+  "spec": "§16",
+  "about": "a page shaped like the Today app's clock-face screen (back region and title, an empty bordered container whose box comes from ui:layout, a three-item radio, a hint): the boxes, the border, cells and focus ring the frame draws, focus entering on the value item, ok giving change, the arrow walk through the items to the back region and back, and a tap on an item (probe-confirmed; the pixels come from the last frame alone)",
+  "manifest": {"api": "2.26"},
+  "files": {"layout_box.lua": "layout_box.util.lua", "canvas_log.lua": "canvas_log.util.lua"},
+  "expect": {
+    "back": {"value": [16, 16, 44, 44], "spec": "§16"},
+    "pv": {"value": [16, 76, 448, 196], "spec": "§16"},
+    "pv_has_no_children": {"value": true, "spec": "§16"},
+    "face": {"value": [16, 288, 448, 184], "spec": "§16"},
+    "title": {"value": true, "spec": "§16"},
+    "hint": {"value": true, "spec": "§16"},
+    "spacer_takes_the_rest": {"value": true, "spec": "§16"},
+    "enter_focus": {"value": "face 2", "spec": "§16"},
+    "down": {"value": "face focus 3", "spec": "§16"},
+    "border_cells_and_ring": {"value": true, "spec": "§16"},
+    "ok_down": {"value": "face press 3", "spec": "§16"},
+    "ok_up": {"value": "face change 3", "spec": "§16"},
+    "walk": {"value": ["down:nil nil", "up:face focus 2", "up:face focus 1", "up:back focus", "down:face focus 1",
+      "right:nil nil"], "spec": "§16"},
+    "tap_item_2": {"value": "face change 2", "spec": "§16"},
+    "focus_after_tap": {"value": "face 2", "spec": "§16"}
+  },
+  "pixels": [[16, 170, 1], [17, 170, 0], [32, 380, 1], [32, 316, 0], [17, 316, 1]],
+  "errors": []
+}

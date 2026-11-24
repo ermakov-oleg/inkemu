@@ -1,0 +1,22 @@
+{
+ "expect_mismatches":[],
+ "file":"s04b_events_no_touch.api26.json",
+ "scenario":"s04b_events_no_touch",
+ "title":"device without a touchscreen: focus is always drawn",
+ "input":{"api":"2.26","canvas":[480,800],"touch":false,"steps":[
+  {"op":"create"},
+  {"calls":[{"id":"b1","m":"button","o":{"h":60,"text":"b1","w":200,"x":20,"y":20}},{"id":"b2","m":"button","o":{"h":60,"text":"b2","w":200,"x":260,"y":20}}],"note":"first frame, no events yet","op":"frame"},
+  {"ev":{"down_x":300,"down_y":30,"gesture":"tap","phase":"up","time_ms":0,"type":"pointer","x":300,"y":30},"op":"event"},
+  {"calls":[{"id":"b1","m":"button","o":{"h":60,"text":"b1","w":200,"x":20,"y":20}},{"id":"b2","m":"button","o":{"h":60,"text":"b2","w":200,"x":260,"y":20}}],"note":"after a pointer event","op":"frame"},
+  {"name":"uo","op":"create","opts":{"focus_style":"outline"}},
+  {"calls":[{"id":"b1","m":"button","o":{"h":60,"text":"b1","w":200,"x":20,"y":20}},{"id":"b2","m":"button","o":{"h":60,"text":"b2","w":200,"x":260,"y":20}}],"note":"outline style, first frame","op":"frame","ui":"uo"}
+ ]},
+ "output":[
+  {"i":1,"op":"create","ret":"ui object"},
+  {"begin":[],"calls":[{"id":"b1","m":"button","ret":[]},{"id":"b2","m":"button","ret":[]}],"end":[],"focused_after":["b1"],"i":2,"note":"first frame, no events yet","op":"frame","op_counts":{"rect":2,"text_box":2},"stream":[{"a":[20,20,200,60,{"fill":true,"radius":0}],"op":"rect"},{"a":[20,20,200,60,"b1",{"align":"center","color":0,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[260,20,200,60,{"fill":false,"radius":0}],"op":"rect"},{"a":[260,20,200,60,"b2",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"}]},
+  {"focused":["b2"],"i":3,"op":"event","ret":["b2","activate"]},
+  {"begin":[],"calls":[{"id":"b1","m":"button","ret":[]},{"id":"b2","m":"button","ret":[]}],"end":[],"focused_after":["b2"],"i":4,"note":"after a pointer event","op":"frame","op_counts":{"rect":2,"text_box":2},"stream":[{"a":[20,20,200,60,{"fill":false,"radius":0}],"op":"rect"},{"a":[20,20,200,60,"b1",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[260,20,200,60,{"fill":false,"radius":0}],"op":"rect"},{"a":[260,20,200,60,"b2",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"}]},
+  {"i":5,"op":"create","ret":"ui object"},
+  {"begin":[],"calls":[{"id":"b1","m":"button","ret":[]},{"id":"b2","m":"button","ret":[]}],"end":[],"focused_after":["b1"],"i":6,"note":"outline style, first frame","op":"frame","op_counts":{"rect":3,"text_box":2},"stream":[{"a":[20,20,200,60,{"fill":false,"radius":0}],"op":"rect"},{"a":[17,17,206,66,{"line_width":2,"radius":0}],"op":"rect"},{"a":[20,20,200,60,"b1",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"},{"a":[260,20,200,60,{"fill":false,"radius":0}],"op":"rect"},{"a":[260,20,200,60,"b2",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"}]}
+ ]
+}
