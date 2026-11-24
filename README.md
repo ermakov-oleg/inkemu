@@ -167,7 +167,8 @@ non-JSON content type.
 Fixtures live in `<fixtures dir>/net/` (default `tests/fixtures/<app_id>/net/`, relative to the working directory),
 one `METHOD_host_hash.json` (request key, response status/headers/`body_file`/`delay_ms`) plus a `.body` file.
 A request body is matched by its SHA-256 (`request.body_sha256`), whatever the method. A fixture can be written by
-hand; a malformed one is ignored with a warning.
+hand; a malformed one is ignored with a warning. A fixture written or edited while an `Emu` runs answers its next
+request.
 
 `<state root>/secrets.json` (default `.emu/secrets.json`) is a flat `{"name": "value"}` object. Values are replaced by
 `{{name}}` in recorded URLs, bodies and headers, and `{{name}}` in app files seeded from the project is replaced

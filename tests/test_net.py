@@ -75,6 +75,21 @@ def test_replay_without_fixture(make_app, emu_factory):
     assert "GET http://x.test/b" in line and "--net record" in line
 
 
+def test_fixture_written_after_start_answers_the_next_request(make_app, emu_factory, tmp_path):
+    lua = (
+        DRAW
+        + "function on_input(c, ev)\n  if ev.type == 'pointer' and ev.phase == 'up' then\n"
+        + "    c.net:request({url = 'http://x.test/late'}, function(c, resp)\n"
+        + "      msg = tostring(resp.status) .. ':' .. tostring(resp.body or resp.err); c:invalidate()\n"
+        + "    end)\n  end\nend\n"
+    )
+    emu = emu_factory(make_app(lua, manifest=NET))
+    write_fixture(tmp_path, "late", {"method": "GET", "url": "http://x.test/late"}, {"status": 200})
+    emu.tap(100, 100)
+    emu.wait("1s")
+    assert emu.has_text("msg 200:ok"), "0.1 read the fixtures folder for every request"
+
+
 def test_record_then_replay(make_app, emu_factory, tmp_path, server):
     url = server.base + "/data"
     emu = emu_factory(

@@ -399,3 +399,47 @@ fn app_files_on_disk_keep_the_creation_spelling_and_one_file_per_name() {
     assert_eq!(names, ["BOOK.txt"]);
     assert_eq!(fs::read(dir.join("BOOK.txt")).unwrap(), b"3");
 }
+
+#[test]
+fn fixtures_written_or_edited_during_a_run_answer_the_next_request() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = tmp.path().join("net-app");
+    fs::create_dir_all(&app).unwrap();
+    fs::write(
+        app.join("manifest.json"),
+        r#"{"app_id": "netapp", "entry": "index.lua", "api": "2.26", "permissions": ["net"]}"#,
+    )
+    .unwrap();
+    fs::write(
+        app.join("index.lua"),
+        "got = 'idle'\nfunction ask() ctx.net:request({url = 'https://x.test/a', method = 'GET'}, \
+         function(_, r) got = tostring(r.status) .. ':' .. tostring(r.body or r.err) end) end\n",
+    )
+    .unwrap();
+    let mut s = Session::open(&app, opts(tmp.path())).unwrap();
+    let fixture = |body: &str| {
+        let net = tmp.path().join("fixtures/net");
+        fs::create_dir_all(&net).unwrap();
+        let doc = json!({"request": {"method": "GET", "url": "https://x.test/a"},
+                         "response": {"status": 200, "body": body}});
+        fs::write(net.join("a.json"), doc.to_string()).unwrap();
+    };
+    let ask = |s: &mut Session| {
+        s.lua_exec("ask()").unwrap();
+        s.wait(1000).unwrap();
+        s.lua_eval("return got").unwrap()
+    };
+    assert_eq!(ask(&mut s), json!("nil:no_fixture"));
+    fixture("first");
+    assert_eq!(
+        ask(&mut s),
+        json!("200:first"),
+        "written after the start, as 0.1 read net/ per request"
+    );
+    fixture("second answer");
+    assert_eq!(
+        ask(&mut s),
+        json!("200:second answer"),
+        "edited during the run"
+    );
+}
