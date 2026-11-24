@@ -29,15 +29,15 @@ local function band(g, x, y, w, h, color, radius)
     return
   end
   g:rect(x, y, w, h, { color = 0, fill = true, radius = radius })
-  local dots = { color = 15, density = color <= 7 and 38 or 69, kind = "dot" }
+  local halftone = { color = 15, density = color <= 7 and 38 or 69, kind = "dot" }
   local r = math.min(radius or 0, w // 2, h // 2)
   for dy = 0, r - 1 do
     local inset = r - corner(r, dy)
-    g:pattern(x + inset, y + dy, w - 2 * inset, 1, dots)
-    g:pattern(x + inset, y + h - 1 - dy, w - 2 * inset, 1, dots)
+    g:pattern(x + inset, y + dy, w - 2 * inset, 1, halftone)
+    g:pattern(x + inset, y + h - 1 - dy, w - 2 * inset, 1, halftone)
   end
   if h - 2 * r > 0 then
-    g:pattern(x, y + r, w, h - 2 * r, dots)
+    g:pattern(x, y + r, w, h - 2 * r, halftone)
   end
 end
 
@@ -170,7 +170,7 @@ local function declare_container(st, kind, id, o, level)
     return nil, INVALID
   end
   local w, h = outer_side(o.w), outer_side(o.h)
-  if not (is_integral(o.x) and is_integral(o.y) and w and h) then
+  if not (is_coord(o.x) and is_coord(o.y) and w and h) then
     return nil, INVALID
   end
   local x, y = math.tointeger(o.x), math.tointeger(o.y)
@@ -235,7 +235,7 @@ methods.layout = function(self, rect, spec)
     return nil, INVALID
   end
   local w, h = outer_side(rect.w), outer_side(rect.h)
-  if not (is_integral(rect.x) and is_integral(rect.y) and w and h) then
+  if not (is_coord(rect.x) and is_coord(rect.y) and w and h) then
     return nil, INVALID
   end
   local root, err, unsupported = layout_tree(st, nil, nil, spec.kind, spec)

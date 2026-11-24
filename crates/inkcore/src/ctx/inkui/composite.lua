@@ -61,18 +61,6 @@ local function check_bold(c, o)
   return true
 end
 
--- A composite's `skin`: nil, or a registered name, which inkemu does not draw yet. False when invalid, plus the
--- message for a registered one.
-local function check_skin(st, skin, name)
-  if skin == nil then
-    return true
-  end
-  if type(skin) ~= "string" or st.skins[skin] == nil then
-    return false
-  end
-  return false, "ui:" .. name .. " skin is not implemented in inkemu yet"
-end
-
 local ALIGN = { left = true, center = true, right = true }
 
 kinds.radio = composite({
@@ -86,7 +74,7 @@ kinds.radio = composite({
       and (o.align == nil or ALIGN[o.align]) and check_font_min(c, o) and check_bold(c, o)) then
       return false
     end
-    local ok, unsupported = check_skin(st, o.skin, "radio")
+    local ok, unsupported = check_skin(st, o.skin, "ui:radio")
     if not ok then
       return false, unsupported
     end

@@ -1,6 +1,6 @@
 {
   "spec": "§16",
-  "about": "a page shaped like the Today app's clock-face screen (back region and title, an empty bordered container whose box comes from ui:layout, a three-item radio, a hint): the boxes, the border, cells and focus ring the frame draws, focus entering on the value item, ok giving change, the arrow walk through the items to the back region and back, and a tap on an item (probe-confirmed on the reader; the real app matched pixel for pixel in the acceptance run outside its own clock drawing)",
+  "about": "a page shaped like the Today app's clock-face screen (back region and title, an empty bordered container whose box comes from ui:layout, a three-item radio, a hint): the boxes, the border, cells and focus ring the frame draws, focus entering on the value item, ok giving change, the arrow walk through the items to the back region and back, and a tap on an item (probe-confirmed; the pixels come from the last frame alone)",
   "manifest": {"api": "2.26"},
   "files": {"layout_box.lua": "layout_box.util.lua", "canvas_log.lua": "canvas_log.util.lua"},
   "expect": {

@@ -68,6 +68,13 @@ local SPECS = {
   unknown_kind = col({ { kind = "slider", h = 10 } }),
   w_0 = col({ { w = 0, h = 10 } }),
   w_float = col({ { w = 10.5, h = 10 } }),
+  -- whole floats that a 32-bit Lua cannot hold as integers
+  w_past_32_bits = row({ { w = 3e9 } }),
+  min_w_past_32_bits = row({ { grow = 1, min_w = 1e10 } }),
+  min_h_past_32_bits = row({ { grow = 1, min_h = 1e10 } }),
+  max_h_past_32_bits = row({ { grow = 1, max_h = 3e9 } }),
+  gap_past_32_bits = row({ { w = 10 } }, { gap = 1e10 }),
+  image_width_past_32_bits = row({ { kind = "image", source = { width = 1e10, height = 5 } } }),
 }
 
 local RECTS = {
@@ -75,6 +82,9 @@ local RECTS = {
   rect_w_percent = { x = 0, y = 0, w = "50%", h = 10 },
   rect_x_float = { x = 0.5, y = 0, w = 10, h = 10 },
   rect_no_h = { x = 0, y = 0, w = 10 },
+  rect_x_past_32_bits = { x = 3e9, y = 0, w = 10, h = 10 },
+  rect_y_past_32_bits = { x = 0, y = -3e9, w = 10, h = 10 },
+  rect_w_past_32_bits = { x = 0, y = 0, w = 1e10, h = 10 },
 }
 
 function on_load(ctx)
@@ -107,4 +117,8 @@ function on_load(ctx)
   T.value("rect_w_32767", kind_of({ x = 0, y = 0, w = 32767, h = 10 }, row({ { w = 10 } })))
   T.value("rect_w_32768", kind_of({ x = 0, y = 0, w = 32768, h = 10 }, row({ { w = 10 } })))
   T.value("rect_h_32768", kind_of({ x = 0, y = 0, w = 10, h = 32768 }, row({ { w = 10 } })))
+  -- the rect's x and y within -32768..32767
+  T.value("rect_x_32767", kind_of({ x = 32767, y = -32768, w = 10, h = 10 }, row({ { w = 10 } })))
+  T.value("rect_x_32768", kind_of({ x = 32768, y = 0, w = 10, h = 10 }, row({ { w = 10 } })))
+  T.value("rect_y_minus_32769", kind_of({ x = 0, y = -32769, w = 10, h = 10 }, row({ { w = 10 } })))
 end

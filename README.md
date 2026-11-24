@@ -319,14 +319,18 @@ package manifest's `api` decides which rules apply.
   position from API 2.13, in declaration order before it), `row`/`column` (the 2.15 flex layout with `wrap`,
   `baseline`, `aspect_ratio`, percentages, background, border, radius and dividers; the earlier rules for packages
   before 2.15) and `ui:layout`.
-- Raises "not implemented in inkemu yet": `grid`, `stack`, `switch`, `tabs`, `stepper`, `pager`, `list`,
-  `progress`, `field`, image and skin buttons, a radio skin and container skins in a frame.
+- Raises "not implemented in inkemu yet": the methods `switch`, `tabs`, `image`, `field`, `stepper`, `pager`,
+  `list`, `progress`, `grid`, `stack` (before 2.15 these two give `invalid_argument`), `skin`, `editing` and
+  `stop_edit`; the same kinds as children in a frame (`ui:layout` places children of every control kind);
+  `grid` and `stack` children; a button `image`; a registered skin on a button, a radio, a `switch` or `tabs`
+  child, and a container in a frame. An unregistered skin is `invalid_argument`. `create` takes `skins` without checking
+  their entries, which the contract refuses when malformed.
 - Where the reader measurably differs from the contract, inkemu follows the reader; `spec/deviations.md` lists
   each case (D3–D15).
 - The recorded firmware outputs are replayed in `tests/test_inkui_oracle.py`. A "Today" app built on `ctx.ui`
-  draws its main, clock-face and setup screens in inkemu with the reader's BDF fonts pixel for pixel as in
-  x4pro-emu, except where the app draws its own shapes. The `ui:layout` boxes, focus and event results matched
-  exactly.
+  draws its main, clock-face and setup screens in inkemu pixel for pixel as in x4pro-emu, except where the app
+  draws its own shapes; its `ui:layout` boxes, focus and event results matched exactly. That comparison was a local
+  run with the reader's BDF fonts, which are not in this repository, so it cannot be reproduced from it.
 
 ## Fonts
 

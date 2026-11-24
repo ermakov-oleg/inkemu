@@ -540,21 +540,40 @@ fn font_min_takes_the_largest_system_font_that_fits() {
 }
 
 #[test]
-fn button_image_and_skin_raise_at_the_app_line() {
-    let lua = fixed_library("2.26");
-    for field in ["image = {}", "skin = 'iron'"] {
-        let code = format!(
-            "local ui = make() ui:begin_frame(recorder({{}}))\n\
-             ui:button('a', {{x = 0, y = 0, w = 10, h = 10, {field}}})"
-        );
-        let err = run(&lua, &code).unwrap_err();
-        assert!(
-            err.starts_with(
-                "index.lua:2: ui:button image and skin are not implemented in inkemu yet"
-            ),
-            "{err}"
-        );
+fn button_image_and_registered_skin_raise_at_the_app_line() {
+    for (field, want) in [
+        (
+            "image = {}",
+            "index.lua:3: ui:button image is not implemented in inkemu yet",
+        ),
+        (
+            "skin = 'iron'",
+            "index.lua:3: ui:button skin is not implemented in inkemu yet",
+        ),
+    ] {
+        let code =
+            format!("ui:begin_frame(g)\nui:button('a', {{x = 0, y = 0, w = 10, h = 10, {field}}})");
+        let err = layout_run("2.26", &code);
+        assert!(err.starts_with(want), "{err}");
     }
+}
+
+#[test]
+fn a_skin_that_is_not_registered_is_invalid_on_every_control() {
+    let out = layout_run(
+        "2.26",
+        "local function try(f) ui:begin_frame(g) local a, b = f() ui:end_frame() return tostring(a) .. ':' .. tostring(b) end\n\
+         local function with(k, v) local o = {x = 0, y = 0, w = 10, h = 10, items = {'a'}} o[k] = v return o end\n\
+         return try(function() return ui:button('a', with('skin', 'nope')) end),\n\
+           try(function() return ui:button('a', with('skin', 5)) end),\n\
+           try(function() return ui:button('a', {x = 0, y = 0, w = 10, h = 10, skin = 'iron', image = {}}) end),\n\
+           try(function() return ui:radio('r', with('skin', 'nope')) end),\n\
+           try(function() return ui:row('c', {x = 0, y = 0, w = 10, h = 10, children = {\n\
+             {kind = 'button', id = 'b', grow = 1, skin = 'nope'}}}) end),\n\
+           try(function() return ui:row('c', {x = 0, y = 0, w = 10, h = 10, children = {\n\
+             {kind = 'button', id = 'b', grow = 1, skin = 'iron', image = {}}}}) end)",
+    );
+    assert_eq!(out, ["nil:invalid_argument"; 6].join(","));
 }
 
 #[test]
@@ -1248,4 +1267,96 @@ fn a_frame_checks_each_child_as_it_registers_it() {
         out,
         "invalid_argument:a,invalid_argument:a,invalid_argument:a,invalid_argument:nil,ok:a"
     );
+}
+
+#[test]
+fn a_row_child_with_only_max_h_keeps_its_width() {
+    let out = layout_run(
+        "2.26",
+        "local R = {x = 0, y = 0, w = 300, h = 100}\n\
+         local function w(child) return ui:layout(R, {kind = 'row', children = {child}})[1].w end\n\
+         local function h(child)\n\
+           return ui:layout(R, {kind = 'column', align_items = 'start', children = {child}})[1].h\n\
+         end\n\
+         return w({grow = 1, max_h = 20}), w({w = 200, max_h = 20}),\n\
+           w({kind = 'button', text = 'ok', w = 'fit', max_h = 30}), h({grow = 1, max_w = 20}),\n\
+           h({h = 50, max_w = 20})",
+    );
+    // a fitted button is its text (2 x 12 px) plus 24
+    assert_eq!(out, "300,200,48,100,50");
+}
+
+/// Lua that sets `add(name, f)` and `check()`: `f(v)` declares something with one integer field set to `v`;
+/// `check()` tries every case with whole floats past 32 bits and lists the ones not refused with invalid_argument.
+const SWEEP: &str = r#"
+local cases = {}
+local function add(name, f) cases[#cases + 1] = { name, f } end
+local function with(t, k, v) local c = {} for key, val in pairs(t) do c[key] = val end c[k] = v return c end
+local function framed(kind, id, o)
+  local ui = make() ui:begin_frame(g) local a, b = ui[kind](ui, id, o) ui:end_frame() return a, b
+end
+local function layout(rect, spec) return make():layout(rect, spec) end
+local function check()
+  local bad = {}
+  for _, v in ipairs({ 3e9, -3e9, 1e10 }) do
+    for _, c in ipairs(cases) do
+      local r = table.pack(pcall(c[2], v))
+      if not (r[1] and r.n == 3 and r[2] == nil and r[3] == "invalid_argument") then
+        bad[#bad + 1] = c[1] .. "=" .. tostring(v) .. ": " .. tostring(r[2]) .. "," .. tostring(r[3])
+      end
+    end
+  end
+  return table.concat(bad, "\n")
+end
+"#;
+
+#[test]
+fn whole_floats_past_32_bits_are_invalid_arguments() {
+    let new_rules = "local R = {x = 0, y = 0, w = 100, h = 100}\n\
+        local ROW = {x = 0, y = 0, w = 100, h = 100, children = {{kind = 'button', id = 'b', grow = 1}}}\n\
+        for _, k in ipairs({'x', 'y', 'w', 'h'}) do\n\
+          add('rect.' .. k, function(v) return layout(with(R, k, v), {kind = 'row', children = {{grow = 1}}}) end)\n\
+          add('row.' .. k, function(v) return framed('row', 'r', with(ROW, k, v)) end)\n\
+          add('button.' .. k, function(v) return framed('button', 'b', with(R, k, v)) end)\n\
+          add('radio.' .. k, function(v) return framed('radio', 'r', with(with(R, 'items', {'a'}), k, v)) end)\n\
+        end\n\
+        for _, k in ipairs({'w', 'h', 'min_w', 'max_w', 'min_h', 'max_h', 'grow', 'shrink'}) do\n\
+          add('child.' .. k, function(v) return layout(R, {kind = 'row', children = {with({grow = 1}, k, v)}}) end)\n\
+          add('frame_child.' .. k, function(v)\n\
+            return framed('row', 'r', with(ROW, 'children', {with({kind = 'button', id = 'b', grow = 1}, k, v)}))\n\
+          end)\n\
+        end\n\
+        for _, k in ipairs({'padding', 'gap', 'row_gap', 'column_gap', 'line_width', 'border_color', 'background',\n\
+            'radius'}) do\n\
+          add('row.' .. k, function(v) return layout(R, with({kind = 'row', children = {{grow = 1}}}, k, v)) end)\n\
+        end\n\
+        add('row.padding_list', function(v) return layout(R, {kind = 'row', padding = {v, 1}, children = {}}) end)\n\
+        for _, k in ipairs({'line_width', 'color', 'inset'}) do\n\
+          add('divider.' .. k, function(v)\n\
+            return layout(R, {kind = 'column', divider = {[k] = v}, children = {{grow = 1}, {grow = 1}}})\n\
+          end)\n\
+        end\n\
+        for _, k in ipairs({'width', 'height'}) do\n\
+          add('source.' .. k, function(v)\n\
+            return layout(R, {kind = 'row', children = {{kind = 'image', source = with({width = 5, height = 5}, k, v)}}})\n\
+          end)\n\
+        end\n\
+        for _, k in ipairs({'gap', 'value', 'columns'}) do\n\
+          add('radio.' .. k, function(v) return framed('radio', 'r', with(with(R, 'items', {'a', 'b'}), k, v)) end)\n\
+        end\n\
+        add('button.font_min', function(v) return framed('button', 'b', with(R, 'font_min', v)) end)\n\
+        add('focus.part', function(v) return make():focus('a', v) end)\n\
+        return check()";
+    assert_eq!(layout_run("2.26", &format!("{SWEEP}{new_rules}")), "");
+    let old_rules = "local ROW = {x = 0, y = 0, w = 100, h = 100, children = {{kind = 'button', id = 'b', w = 10, h = 10}}}\n\
+        for _, k in ipairs({'x', 'y', 'w', 'h', 'gap'}) do\n\
+          add('row.' .. k, function(v) return framed('row', 'r', with(ROW, k, v)) end)\n\
+        end\n\
+        for _, k in ipairs({'w', 'h'}) do\n\
+          add('child.' .. k, function(v)\n\
+            return framed('row', 'r', with(ROW, 'children', {with({kind = 'button', id = 'b', w = 10, h = 10}, k, v)}))\n\
+          end)\n\
+        end\n\
+        return check()";
+    assert_eq!(layout_run("2.14", &format!("{SWEEP}{old_rules}")), "");
 }

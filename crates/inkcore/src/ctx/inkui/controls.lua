@@ -31,15 +31,19 @@ kinds.label = {
 
 kinds.button = {
   focusable = true,
-  check = function(c, o)
+  check = function(c, o, st)
     if not (check_focusable(c, o) and optional(o.emphasis, "boolean") and optional(o.border, "boolean")) then
       return false
     end
-    if not (check_font_min(c, o) and check_text_level(c, o)) then
+    if not (check_font_min(c, o) and check_text_level(c, o)) or (o.image ~= nil and o.skin ~= nil) then
       return false
     end
-    if o.image ~= nil or o.skin ~= nil then
-      return false, "ui:button image and skin are not implemented in inkemu yet"
+    local ok, unsupported = check_skin(st, o.skin, "ui:button")
+    if not ok then
+      return false, unsupported
+    end
+    if o.image ~= nil then
+      return false, "ui:button image is not implemented in inkemu yet"
     end
     c.emphasis = o.emphasis == true
     c.border = o.border ~= false

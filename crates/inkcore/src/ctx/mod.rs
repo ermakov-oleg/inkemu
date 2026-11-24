@@ -6,7 +6,6 @@ mod device;
 pub(crate) mod files;
 mod fonts;
 mod image;
-// ctx.ui stays off until the library lands, so non-test builds never call into it
 mod inkui;
 mod layers;
 mod lock;

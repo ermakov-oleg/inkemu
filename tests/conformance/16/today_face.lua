@@ -108,6 +108,8 @@ function on_draw(ctx, g)
   T.value("walk", walk)
   T.value("tap_item_2", show(ui:handle_event({ type = "pointer", phase = "up", x = 100, y = 362, down_x = 100,
     down_y = 362, gesture = "tap", time_ms = 0 })))
+  -- the pixels are read from this frame alone, not from the ink of the frames above
+  g:clear(0)
   frame(g, 2)
   T.value("focus_after_tap", show(ui:focused()))
 end

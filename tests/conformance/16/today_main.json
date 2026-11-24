@@ -1,6 +1,6 @@
 {
   "spec": "§16",
-  "about": "a page shaped like the Today app's main screen (title row with a refresh region, captioned groups of 56 px region rows with dividers, a disabled row, an emphasis button, a wrapped note, a spacer): ui:layout boxes from the line heights and the note's layout, the frame drawing the same boxes, and the oracle's key walk, ok and taps (probe-confirmed on the reader; the real app matched pixel for pixel in the acceptance run)",
+  "about": "a page shaped like the Today app's main screen (title row with a refresh region, captioned groups of 56 px region rows with dividers, a disabled row, an emphasis button, a wrapped note, a spacer): ui:layout boxes from the line heights and the note's layout, the frame drawing the same boxes, and the oracle's key walk, ok and taps (probe-confirmed)",
   "manifest": {"api": "2.26"},
   "files": {"layout_box.lua": "layout_box.util.lua", "canvas_log.lua": "canvas_log.util.lua"},
   "expect": {

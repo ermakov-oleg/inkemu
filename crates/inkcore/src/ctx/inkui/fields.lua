@@ -2,8 +2,9 @@
 
 INVALID = "invalid_argument"
 
+-- a whole number this Lua holds as an integer: a whole float past 32 bits is not one, as math.tointeger says
 function is_integral(v)
-  return type(v) == "number" and v == v and v - v == 0 and math.floor(v) == v
+  return type(v) == "number" and math.tointeger(v) ~= nil
 end
 
 function is_side(v)
@@ -21,6 +22,11 @@ end
 
 function int_in(v, lo, hi)
   return is_integral(v) and v >= lo and v <= hi
+end
+
+-- the `x` or `y` of an outermost container or a ui:layout rect, held to the bounds of a control's (D15)
+function is_coord(v)
+  return int_in(v, -MAX_COORD - 1, MAX_COORD)
 end
 
 -- the `items` of tabs and radio: an array of 1..64 strings
@@ -60,6 +66,23 @@ function check_nav(nav)
     end
   end
   return true
+end
+
+-- `skin` is a name registered in `create`
+function skin_known(st, skin)
+  return type(skin) == "string" and st.skins[skin] ~= nil
+end
+
+-- A control's `skin` in a frame: true when unset, false when it is not registered, and false with the message for a
+-- registered one, which inkemu does not draw yet.
+function check_skin(st, skin, what)
+  if skin == nil then
+    return true
+  end
+  if not skin_known(st, skin) then
+    return false
+  end
+  return false, what .. " skin is not implemented in inkemu yet"
 end
 
 -- the fields every focusable control takes; false when one has the wrong type

@@ -32,5 +32,18 @@ function on_draw(ctx, g)
   T.call("draw_not_function", function() return ui:region("rg", { x = 20, y = 320, w = 100, h = 40, draw = 5 }) end)
   button("x_whole_float", "x2", { x = 2.0, y = 400, w = 10, h = 40 })
   button("negative_xy", "neg", { x = -30, y = -10, w = 50, h = 40 })
+  -- whole floats that a 32-bit Lua cannot hold as integers
+  button("x_past_32_bits", "x3", { x = 3e9, y = 400, w = 10, h = 40 })
+  button("w_past_32_bits", "w3", { x = 20, y = 400, w = 1e10, h = 40 })
+  local function row(name, o, children)
+    o.h, o.children = 40, children or { { kind = "button", id = name .. "_b", text = "r", grow = 1 } }
+    T.call(name, function() return ui:row(name, o) end)
+  end
+  row("row_x_past_32_bits", { x = 3e9, y = 460, w = 100 })
+  row("row_w_past_32_bits", { x = 20, y = 460, w = 1e10 })
+  -- an outermost container's x and y within -32768..32767, as a control's; no children, so only its own box counts
+  row("row_x_32768", { x = 32768, y = 460, w = 100 }, {})
+  row("row_y_minus_32769", { x = 20, y = -32769, w = 100 }, {})
+  row("row_x_minus_32768", { x = -32768, y = 460, w = 100 }, {})
   ui:end_frame()
 end

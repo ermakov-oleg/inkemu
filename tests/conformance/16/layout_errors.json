@@ -1,15 +1,18 @@
 {
   "spec": "§16",
-  "about": "ui:layout gives nil, invalid_argument for a bad rect, or a spec against the 2.15 rules: min over max, fields of another container kind, divider with wrap, reserved or repeated ids, non-table children, values out of range, fit or a percentage where not allowed, a size that cannot be found, a spec that is not a container, unknown kinds, skins, and a text that is not a string where it must be measured (a label without a numeric h, a fitted button), while such a text is fine elsewhere; a rect over 32767 (probe-confirmed for the oracle's 35 cases and s17)",
+  "about": "ui:layout gives nil, invalid_argument for a bad rect, or a spec against the 2.15 rules: min over max, fields of another container kind, divider with wrap, reserved or repeated ids, non-table children, values out of range, fit or a percentage where not allowed, a size that cannot be found, a spec that is not a container, unknown kinds, skins, and a text that is not a string where it must be measured (a label without a numeric h, a fitted button), while such a text is fine elsewhere; whole floats a 32-bit Lua cannot hold as integers; a rect over 32767, or with x or y outside -32768..32767 (probe-confirmed for the oracle's 35 cases and the s17 rect sizes; the 32-bit cases are not measured, nor are the rect's x and y bounds, D15)",
   "expect": {
-    "cases": {"value": 58, "spec": "§16"},
+    "cases": {"value": 67, "spec": "§16"},
     "not_refused": {"value": [], "spec": "§16"},
     "valid": {"value": {"ok": true, "ret": ["table"]}, "spec": "§16"},
     "label_text_number_with_h": {"value": "table", "spec": "§16"},
     "button_text_table_stretched": {"value": "table", "spec": "§16"},
     "rect_w_32767": {"value": "table", "spec": "§16"},
     "rect_w_32768": {"value": "invalid_argument", "deviation": "D15", "spec_value": "table"},
-    "rect_h_32768": {"value": "invalid_argument", "deviation": "D15", "spec_value": "table"}
+    "rect_h_32768": {"value": "invalid_argument", "deviation": "D15", "spec_value": "table"},
+    "rect_x_32767": {"value": "table", "spec": "§16"},
+    "rect_x_32768": {"value": "invalid_argument", "deviation": "D15", "spec_value": "table"},
+    "rect_y_minus_32769": {"value": "invalid_argument", "deviation": "D15", "spec_value": "table"}
   },
   "errors": []
 }

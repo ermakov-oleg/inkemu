@@ -1,6 +1,6 @@
 {
   "spec": "§16",
-  "about": "a page shaped like the Today app's setup screen (back region and title, a small label wrapped by the library with h = fit, one broken into lines by the app, a large tabular centred code, a spacer): boxes from the font's layout and line heights, the label text boxes the frame draws, and the arrows doing nothing with one focusable control (probe-confirmed on the reader; the real app matched pixel for pixel in the acceptance run)",
+  "about": "a page shaped like the Today app's setup screen (back region and title, a small label wrapped by the library with h = fit, one broken into lines by the app, a large tabular centred code, a spacer): boxes from the font's layout and line heights, the label text boxes the frame draws, and the arrows doing nothing with one focusable control (probe-confirmed)",
   "manifest": {"api": "2.26"},
   "files": {"layout_box.lua": "layout_box.util.lua", "canvas_log.lua": "canvas_log.util.lua"},
   "expect": {

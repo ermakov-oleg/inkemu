@@ -379,8 +379,12 @@ arrange = function(n, M, L)
         it.cross_size, it.stretch = column_child_w(n, c, L, M)
       end
       it.base = base_of(n, c, M, L, it.cross_size)
-      it.lo = main == "w" and c.lo_w or c.lo_h
-      it.hi = main == "w" and c.hi_w or c.hi_h
+      -- not `and/or`: an unset bound is nil and would fall through to the other axis
+      if main == "w" then
+        it.lo, it.hi = c.lo_w, c.hi_w
+      else
+        it.lo, it.hi = c.lo_h, c.hi_h
+      end
       it.hyp = clamp(it.base, it.lo, it.hi)
       it.inner = it.base - pad(c, main)
       items[#items + 1] = it

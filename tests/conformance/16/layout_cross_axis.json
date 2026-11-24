@@ -1,6 +1,6 @@
 {
   "spec": "§16",
-  "about": "cross axis of row and column: align_items and align_self place a child in its line, a child with no height and no content is stretched (clamped by max_h), wrap breaks lines and align_content places them, aspect_ratio derives the other side, baseline aligns the first text lines (align_items, align_self, stretch_to_max_h, wrap_stretch and the baseline rule probe-confirmed; wrap_center and the aspect_ratio records follow the contract text)",
+  "about": "cross axis of row and column: align_items and align_self place a child in its line, a child with no height and no content is stretched (clamped by max_h), a max_h in a row or a max_w in a column bounds only the cross size, wrap breaks lines and align_content places them, aspect_ratio derives the other side, baseline aligns the first text lines (align_items, align_self, stretch_to_max_h, wrap_stretch and the baseline rule probe-confirmed; wrap_center, the max_h_*/max_w_* records and the aspect_ratio records follow the contract text)",
   "expect": {
     "align_items.start": {"value": "0,0,200,101 [0,0,50,40 | 50,0,50,101]", "spec": "§16"},
     "align_items.center": {"value": "0,0,200,101 [0,30,50,40 | 50,0,50,101]", "spec": "§16"},
@@ -8,6 +8,9 @@
     "align_items.stretch": {"value": "0,0,200,101 [0,0,50,40 | 50,0,50,101]", "spec": "§16"},
     "align_self": {"value": "0,0,200,101 [0,61,50,40 | 50,30,50,40]", "spec": "§16"},
     "stretch_to_max_h": {"value": "0,0,200,101 [0,0,50,60]", "spec": "§16"},
+    "max_h_grown": {"value": "0,0,200,101 [0,0,200,60]", "spec": "§16"},
+    "max_h_sized": {"value": "0,0,200,101 [0,0,150,20]", "spec": "§16"},
+    "max_w_grown": {"value": "0,0,200,101 [0,0,60,101]", "spec": "§16"},
     "wrap_stretch": {"value": "0,0,100,100 [0,0,40,20 | 50,0,40,20 | 0,55,40,20]", "spec": "§16"},
     "wrap_center": {"value": "0,0,300,200 [0,70,200,20 | 0,100,200,30]", "spec": "§16"},
     "aspect_row": {"value": "0,0,300,200 [0,0,100,50 | 100,0,100,25 | 200,0,100,200]", "spec": "§16"},

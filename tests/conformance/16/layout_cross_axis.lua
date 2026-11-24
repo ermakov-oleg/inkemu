@@ -12,6 +12,10 @@ function on_load(ctx)
   T.value("align_self", B.run(ui, R, { kind = "row", align_items = "center",
     children = { { w = 50, h = 40, align_self = "end" }, { w = 50, h = 40 } } }))
   T.value("stretch_to_max_h", B.run(ui, R, { kind = "row", children = { { w = 50, max_h = 60 } } }))
+  -- a cross-axis bound leaves the main size alone
+  T.value("max_h_grown", B.run(ui, R, { kind = "row", children = { { grow = 1, max_h = 60 } } }))
+  T.value("max_h_sized", B.run(ui, R, { kind = "row", children = { { w = 150, max_h = 20 } } }))
+  T.value("max_w_grown", B.run(ui, R, { kind = "column", children = { { grow = 1, max_w = 60 } } }))
   -- three 40 px children in 100 px with gap 10 make two lines; align_content stretch shares the rest
   T.value("wrap_stretch", B.run(ui, { x = 0, y = 0, w = 100, h = 100 }, { kind = "row", wrap = true, gap = 10,
     children = { { w = 40, h = 20 }, { w = 40, h = 20 }, { w = 40, h = 20 } } }))

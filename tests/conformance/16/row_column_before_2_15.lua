@@ -31,6 +31,12 @@ function on_draw(ctx, g)
   refused("spacer", "column", { x = 0, y = 500, w = 200, h = 300, children = {
     { kind = "button", id = "d1", text = "one", w = 200, h = 40 }, { kind = "spacer", w = 1, h = 1 } } })
   refused("fit", "column", { x = 0, y = 500, w = "fit", h = 100, children = {} })
+  -- whole floats that a 32-bit Lua cannot hold as integers, and an x past 32767
+  local one = { { kind = "button", id = "f1", text = "one", w = 50, h = 40 } }
+  refused("x_past_32_bits", "row", { x = 3e9, y = 500, w = 300, h = 50, children = one })
+  refused("x_32768", "row", { x = 32768, y = 500, w = 300, h = 50, children = {} })
+  refused("child_w_past_32_bits", "row", { x = 0, y = 500, w = 300, h = 50, children = {
+    { kind = "button", id = "f2", text = "one", w = 1e10, h = 40 } } })
   local log = L.start(g)
   ui:end_frame()
   local function button(x, y, w, h, text, fill)

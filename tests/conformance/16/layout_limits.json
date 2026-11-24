@@ -1,6 +1,6 @@
 {
   "spec": "§16",
-  "about": "limits of containers: ui:layout allows 16 nested containers and 1024 children over the whole tree; in a frame the control inside the 16th container already exceeds the nesting limit (a spacer does not), and a container whose children reach 128 controls keeps the ones declared before; ui:layout counts all children before it checks any field; in a frame each child is checked as it is registered, so a bad field or a child placed past 32767 ends the call and keeps the children before it (probe-confirmed)",
+  "about": "limits of containers: ui:layout allows 16 nested containers and 1024 children over the whole tree; in a frame the control inside the 16th container already exceeds the nesting limit (a spacer does not), and a container whose children reach 128 controls keeps the ones declared before; ui:layout counts all children before it checks any field; in a frame each child is checked as it is registered, so a bad field or a child placed past 32767 ends the call and keeps the children before it (probe-confirmed for a bad field on the first child, on the last child after the limit, and for children past 32767; bad_child.before, a bad field in the middle after valid children, is inferred from those, see D14)",
   "expect": {
     "layout.16_levels_and_a_control": {"value": "table", "spec": "§16"},
     "layout.17_levels": {"value": "limit_exceeded", "spec": "§16"},
