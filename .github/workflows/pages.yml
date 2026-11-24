@@ -2,7 +2,7 @@ name: Pages
 
 on:
   push:
-    branches: [rust-core, main]
+    branches: [main]
   workflow_dispatch:
 
 permissions:

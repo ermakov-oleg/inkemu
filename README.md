@@ -16,8 +16,10 @@ network responses.
   <img src="https://raw.githubusercontent.com/ermakov-oleg/inkemu/main/docs/images/lockscreen.png" width="300" alt="The lock screen of the hello example">
 </p>
 
-The device API is not publicly documented. Everything here is built from community reverse-engineering notes, so
-treat inkemu as a development aid, not as a reference of the firmware.
+inkemu follows the official InkApp API contract 2.33.1. Where firmware 26112001 was measured on a reader and differs
+from the contract, inkemu follows the reader (`spec/deviations.md`). Some behaviour is still unverified on the device
+(see "Differences from the device"), so treat inkemu as a development aid, not as a reference of the firmware. What
+changed between releases is in [CHANGELOG.md](https://github.com/ermakov-oleg/inkemu/blob/main/CHANGELOG.md).
 
 ## In the browser
 
@@ -54,6 +56,9 @@ or as a dev dependency of your app project: `uv add --dev inkemu` (then prefix t
 Python 3.11+, macOS or Linux. Everything is headless except the window, which needs Tk (`python3-tk` on
 Debian/Ubuntu). CI runs on uv-managed Pythons (Tk 9); with the python.org builds (Tk 8.6) the window has been seen to
 crash on macOS 26.
+
+The emulator core (Lua, drawing, text, network replay, lock screen) is Rust, the same one the page runs. The CLI, the
+daemon, the MCP server and the window are still Python on top of it, and the window is still Tk.
 
 ## Quick start
 
@@ -180,6 +185,9 @@ and `/AppFiles/<app_id>/`); inkemu keeps the §9 quota (128 MiB, 512 files) on `
 included, then seeds `files/` from `<fixtures dir>/files/`.
 
 ## Breaking changes in 0.2
+
+Apps and tests written for 0.1 meet these changes; [CHANGELOG.md](https://github.com/ermakov-oleg/inkemu/blob/main/CHANGELOG.md)
+has the rest of 0.2.
 
 - `g:round_rect`, `g:measure`, `g:measure_text`, `g:fill_pattern` and `g:pattern_rect` are removed because firmware
   26112001 has none of them. Use `g:rect(x, y, w, h, {radius = r})`, `font:measure(text)` (for example
@@ -403,6 +411,43 @@ Grey, as measured on 26112001: the canvas of a normal frame is 1-bit, and grey i
 - `g:rect(x, y, w, h, {radius = r})` rounds the corners; this is how the firmware's own UI draws rounded boxes.
 - A grey PNG or JPEG from `ctx.image` is dithered by `g:image` after scaling (in a gray frame it keeps 4 steps).
 
+`ctx`:
+
+- `invalidate` (nothing or `"full"`; another argument is `nil, "invalid_argument"`), `after`/timers, `set_tick`,
+  `defer_full_refresh` (whole ms from 1 to 60000, else `nil, "invalid_argument"`), `quit`, `save_state`, `state`,
+  `api`.
+- `log`: a table with `error`, `info` and `warn`, each logging with its level (`[app] WARN ...`).
+- `capabilities`, `clock` (`now`, `millis`), `device` (`battery`, `firmware`, `model`, `name`, `id_for_app`,
+  `lock_timer`), `fonts`.
+- `storage` (`read`, `write`, `exists`, `size`, `remove`, `list`, `usage` = `{bytes, files, max_bytes, max_files}`;
+  names `[a-z0-9._-]` up to 64 bytes; 262144 bytes per `write`, 512 files, 128 MiB in all, over that is
+  `limit_exceeded`; `remove` of an absent file is true).
+- `files` (`read(name, offset, len)`, `write`, `append`, `exists`, `size`, `remove`, `list` = `{name, size}` items;
+  `path` = `/AppFiles/<app_id>`; names as §29, case-insensitive with the creation spelling kept; 262144 bytes per
+  call, 512 files, no total limit).
+- `package` (`read`, `open_text`, `image`, `exists`, `size`, `cache_stats` = `{}`).
+- `net`: `request` with the 13 methods of §14 (a `HEAD` answer has `body = ""` and `bytes = 0`), one at a time,
+  and `save = {to = "files" | "storage", name}` (a 2xx body replaces the file before the callback, up to 8388608
+  bytes in the app folder and 262144 in storage, within their quotas); `keep_wifi` checks its argument and only
+  logs. `dialog` (`confirm`, `toast`), `input` (`text`, `edit`, `keyboard_h` = 436,
+  `pointer` = true). `input:edit` checks its options as §4 (`rect`, `text`, `placeholder`, `max_chars`, `kind`,
+  `multiline`, `enter`, else `nil, "invalid_argument"`) and returns `ed` with `set_text`, `text` and `close`;
+  `on_end` gets `how` = `"enter"` or `"back"` (the Back key or `answer no`). While it is open, another `edit`,
+  `input:text` and `dialog:confirm` return `nil, "busy"`; `edit` and `input:text` are also busy while a text input
+  or a confirm is open.
+- `image`, `qr`, `json`, `base64` (`encode` with `{url = true}`, `decode`), `hex`, `url` (`encode`, `decode`, `query`), `zlib`, `random` (`uuid`, `bytes` of 1 to 1024).
+- `hash`: `sha256`, `md5` and `hmac_sha256` return the raw digest bytes (use `ctx.hex:encode` for text); `sha1` returns the
+  20 raw bytes too; `crc32` returns a signed 32-bit integer (values from 2^31 wrap to negative); all verified in QEMU on firmware 26112001.
+- `screen` (`width`, `height`, `orientation`, `set_orientation`, `gray_levels` = 2, `gray_still` = 4),
+  `frontlight` (`get`, `set`, `reset`), `system` (`can_open`, `open`, `act`: `refresh`, `sleep`), `i18n`
+  (`locale`), `perf` (`info` = `{tick_us, draw_us, cmd_count, image_count, asset_hit, asset_miss, draw_frame}`:
+  `cmd_count` and `image_count` are the commands and `g:image` calls accepted in the last frame, `draw_frame` the
+  frames of this session), `gc`, `budget`, `reader` (answers from `<fixtures dir>/reader.json`), `lockscreen`, `lock`.
+- `ui` (§16), in part: see [`ctx.ui`](#ctxui) below.
+
+`clock:now()` has `year month day hour minute second weekday hour12 date_order date_sep epoch_sec local_sec
+offset_minutes revision valid`.
+
 ### `ctx.ui`
 
 `ctx.ui` (§16) is the reader's control library written again in Lua from the contract and from black-box
@@ -450,43 +495,6 @@ the start with an error. From each file inkemu takes:
 `measure` is the sum of the advances. The same fonts draw the host's dialogs and toasts. The reader's setting InkApp
 → "Fonts" does not change `ctx.fonts`.
 
-`ctx`:
-
-- `invalidate` (nothing or `"full"`; another argument is `nil, "invalid_argument"`), `after`/timers, `set_tick`,
-  `defer_full_refresh` (whole ms from 1 to 60000, else `nil, "invalid_argument"`), `quit`, `save_state`, `state`,
-  `api`.
-- `log`: a table with `error`, `info` and `warn`, each logging with its level (`[app] WARN ...`).
-- `capabilities`, `clock` (`now`, `millis`), `device` (`battery`, `firmware`, `model`, `name`, `id_for_app`,
-  `lock_timer`), `fonts`.
-- `storage` (`read`, `write`, `exists`, `size`, `remove`, `list`, `usage` = `{bytes, files, max_bytes, max_files}`;
-  names `[a-z0-9._-]` up to 64 bytes; 262144 bytes per `write`, 512 files, 128 MiB in all, over that is
-  `limit_exceeded`; `remove` of an absent file is true).
-- `files` (`read(name, offset, len)`, `write`, `append`, `exists`, `size`, `remove`, `list` = `{name, size}` items;
-  `path` = `/AppFiles/<app_id>`; names as §29, case-insensitive with the creation spelling kept; 262144 bytes per
-  call, 512 files, no total limit).
-- `package` (`read`, `open_text`, `image`, `exists`, `size`, `cache_stats` = `{}`).
-- `net`: `request` with the 13 methods of §14 (a `HEAD` answer has `body = ""` and `bytes = 0`), one at a time,
-  and `save = {to = "files" | "storage", name}` (a 2xx body replaces the file before the callback, up to 8388608
-  bytes in the app folder and 262144 in storage, within their quotas); `keep_wifi` checks its argument and only
-  logs. `dialog` (`confirm`, `toast`), `input` (`text`, `edit`, `keyboard_h` = 436,
-  `pointer` = true). `input:edit` checks its options as §4 (`rect`, `text`, `placeholder`, `max_chars`, `kind`,
-  `multiline`, `enter`, else `nil, "invalid_argument"`) and returns `ed` with `set_text`, `text` and `close`;
-  `on_end` gets `how` = `"enter"` or `"back"` (the Back key or `answer no`). While it is open, another `edit`,
-  `input:text` and `dialog:confirm` return `nil, "busy"`; `edit` and `input:text` are also busy while a text input
-  or a confirm is open.
-- `image`, `qr`, `json`, `base64` (`encode` with `{url = true}`, `decode`), `hex`, `url` (`encode`, `decode`, `query`), `zlib`, `random` (`uuid`, `bytes` of 1 to 1024).
-- `hash`: `sha256`, `md5` and `hmac_sha256` return the raw digest bytes (use `ctx.hex:encode` for text); `sha1` returns the
-  20 raw bytes too; `crc32` returns a signed 32-bit integer (values from 2^31 wrap to negative); all verified in QEMU on firmware 26112001.
-- `screen` (`width`, `height`, `orientation`, `set_orientation`, `gray_levels` = 2, `gray_still` = 4),
-  `frontlight` (`get`, `set`, `reset`), `system` (`can_open`, `open`, `act`: `refresh`, `sleep`), `i18n`
-  (`locale`), `perf` (`info` = `{tick_us, draw_us, cmd_count, image_count, asset_hit, asset_miss, draw_frame}`:
-  `cmd_count` and `image_count` are the commands and `g:image` calls accepted in the last frame, `draw_frame` the
-  frames of this session), `gc`, `budget`, `reader` (answers from `<fixtures dir>/reader.json`), `lockscreen`, `lock`.
-- `ui` (§16), in progress: see [`ctx.ui`](#ctxui) above.
-
-`clock:now()` has `year month day hour minute second weekday hour12 date_order date_sep epoch_sec local_sec
-offset_minutes revision valid`.
-
 ## Differences from the device
 
 - Without BDF files (see Fonts) text is DejaVu Sans, so text widths differ from the device (line heights and
@@ -501,6 +509,8 @@ offset_minutes revision valid`.
 - Not emulated, so nil: `ctx.crypto`, `ctx.nn`, `ctx.widget`, `dialog:choose`, `i18n:t`,
   `input.keys`, `input.listen`, `input.gamepad`, `device.display`, `device.keep_awake`, `device.radios`,
   `screen.occlusion`. No BLE, no WebSocket.
+- `ctx.ui` is only part of §16: `switch`, `tabs`, `image`, `field`, `stepper`, `pager`, `list`, `progress`, `grid`,
+  `stack`, skins and editing raise "not implemented in inkemu yet" (see [`ctx.ui`](#ctxui)).
 - `ctx.capabilities` reports what inkemu emulates, except that `image_transform` is true as on the device: `dialog frontlight image_decode image_transform pattern reader ui`
   are true, `ble identity nn ttf` false. The device reports `ble dialog frontlight identity image_decode
   image_transform nn pattern reader ui` as true and `ttf` as false.
@@ -587,8 +597,9 @@ offset_minutes revision valid`.
 
 `tests/conformance/` holds one small Lua app plus JSON expectations per rule of the official API contract.
 `uv run python tools/conformance.py [SECTION ...]` runs them and `uv run pytest -q tests/test_conformance.py` does the
-same under pytest. Known core gaps are listed in `tests/conformance/GAPS.md`; places where inkemu follows a measured
-reader instead of the contract are in `spec/deviations.md`. `uv run python tools/spec_sync.py` compares the contract
+same under pytest. Every check passes; `tests/conformance/GAPS.md` lists the rules each section pins and what no check
+covers yet, and `tests/conformance/pending.json` (empty) would hold a check that is known to fail. Places where inkemu
+follows a measured reader instead of the contract are in `spec/deviations.md`. `uv run python tools/spec_sync.py` compares the contract
 with the lock in `spec/contract.lock` (the lock keeps only hashes, no contract text).
 
 ## Development
