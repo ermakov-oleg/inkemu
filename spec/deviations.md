@@ -31,6 +31,141 @@ no radio and is not the device, so panel timing and network completion were not 
 - Status: measured on 26112001.
 - Checks: `06/poly_over_128`.
 
+### D3 - emphasis button below API 2.14
+
+- Contract says: before 2.14 an `emphasis` button is drawn with a 3 px stroke and filled only when focus is drawn;
+  2.14 changed it to a filled box with text in 0 (§16).
+- Reader does: the filled look for every package, 2.12 and 2.13 included (the reader's UI library from 26112001, run
+  as a black box with our scenarios).
+- inkemu does: the filled look for every package.
+- Status: measured on 26112001.
+- Checks: `16/button_emphasis_before_2_14`.
+
+### D4 - a repeat key in ui:handle_event
+
+- Contract says: keys with phase `repeat` are events since 2.10 (§4); `handle_event` lists results only for `down`
+  and `up`, and an event with no matching action gives `nil, nil` (§16).
+- Reader does: a key event with phase `repeat` returns `nil, "invalid_argument"`, at every package minor (the
+  reader's UI library run as a black box with our scenarios, and the probe).
+- inkemu does: `nil, "invalid_argument"`. Whether such a key turns focus drawing on was not measured; inkemu leaves
+  it as it was.
+- Status: measured on 26112001.
+- Checks: `16/events_keys`.
+
+### D5 - ok up needs its ok down
+
+- Contract says: the `up` of `ok` activates the focused control when focus did not move (§16).
+- Reader does: it activates only after an `ok` down with focus unchanged since; an `ok` up with no `ok` down before
+  it, or a second `ok` up after one down, returns `nil, nil`. A frame drawn in between does not break the pair.
+- inkemu does: the same.
+- Status: measured on 26112001.
+- Checks: `16/events_keys`.
+
+### D6 - pointer hits at the press point
+
+- Contract says: a `tap`, `double_tap` or `hold` acts on the control hit (§16); it does not name the point, and an
+  event's `x, y` is where that event happened (§4).
+- Reader does: hits at `down_x, down_y`, and at `x, y` only when the event has no press point.
+- inkemu does: the same.
+- Status: measured on 26112001.
+- Checks: `16/events_pointer`.
+
+### D7 - the ends of order navigation
+
+- Contract says: before 2.13 an arrow moves focus to the previous or next control (§16); it does not say what
+  happens at the first or last control.
+- Reader does: returns the same control's id with `focus` there, rather than `nil, nil`.
+- inkemu does: the same.
+- Status: measured on 26112001 (the reader's UI library and the probe).
+- Checks: `16/nav_order_before_2_13`.
+
+### D8 - a pointer event on a device with no touch input
+
+- Contract says: with no touch input, focus is drawn at all times (§16).
+- Reader does: a pointer event passed to `handle_event` turns focus drawing off there too, until the next key
+  event. Such a device produces no pointer events of its own, so only an app that builds one sees this.
+- inkemu does: the same.
+- Status: measured on 26112001 (the reader's UI library run as a black box).
+- Checks: `16/focus_drawn_only_after_key` (`keyless.after_pointer`).
+
+### D9 - a container that runs into the 128 controls of a frame
+
+- Contract says: the call that goes past 128 controls returns `nil, "limit_exceeded"` and its control is not drawn
+  (§16).
+- Reader does: a `row` or `column` whose children go past the limit returns `limit_exceeded`, but the container and
+  the children registered before the limit stay: they are drawn, hit and take focus.
+- inkemu does: the same.
+- Status: measured on 26112001 (the reader's UI library run as a black box).
+- Checks: `16/layout_limits` (`container_at_limit.k2`).
+
+### D10 - nesting levels in a frame
+
+- Contract says: more than 16 nested levels of containers gives `nil, "limit_exceeded"`, in a frame and in
+  `ui:layout` alike (§16).
+- Reader does: in a frame the control inside the innermost container counts as a level, so 16 containers with a
+  control in the last one already give `limit_exceeded` from the outermost call and nothing is drawn; a spacer there
+  does not count. `ui:layout` takes 16 containers with a control inside and refuses 17.
+- inkemu does: the same.
+- Status: measured on 26112001 (the reader's UI library run as a black box).
+- Checks: `16/layout_limits` (`frame_16_levels_and_a_control`).
+
+### D11 - row and column before 2.15 are not clipped
+
+- Contract says: for packages before 2.15, a `row` or `column` clips its children to its box (§16).
+- Reader does: no clipping; a child larger than its container is drawn whole.
+- inkemu does: the same.
+- Status: measured on 26112001 (the reader's UI library run as a black box).
+- Checks: `16/row_column_before_2_15` (`not_clipped`).
+
+### D12 - fit widths of switch and tabs from 2.16
+
+- Contract says: the content width of a `switch` uses its text width, that of `tabs` its widest item (§16).
+- Reader does: from 2.16 both are measured bold, as the 2.16 defaults draw them: the switch text unless `bold =
+  false`, and every tab item unless `bold = false`, even with no selected cell.
+- inkemu does: the same.
+- Status: measured on 26112001 (the reader's UI library run as a black box).
+- Checks: `16/layout_content_sizes` (`switch_bold`, `tabs_bold`).
+
+### D13 - reserve without w = "fit"
+
+- Contract says: from 2.16 `reserve` sets the width of a `label` or `button` only when its `w` is `"fit"`, and does
+  nothing otherwise (§16).
+- Reader does: the reserved text widens the content width wherever the width comes from the content, such as a
+  child with no `w` left at its content width by `align_items = "start"`, or a row child with no `w` and no `grow`.
+- inkemu does: the same.
+- Status: measured on 26112001 (the reader's UI library run as a black box).
+- Checks: `16/layout_content_sizes` (`reserve_without_fit`).
+
+### D14 - container children checked one by one in a frame
+
+- Contract says: a control whose values break the rules returns `nil, "invalid_argument"` and is not drawn (§16).
+- Reader does: a `row` or `column` in a frame checks and registers its children in declaration order. When a child is
+  refused (a bad field of its own, or a box placed past 32767, see D15), the call returns `invalid_argument` there,
+  and the container and the children registered before stay: they are drawn, hit and take focus. When the 128 controls
+  run out first, the call returns `limit_exceeded` (D9), even if a later child is bad.
+- inkemu does: the same, for a control's own fields and its placed box. Sizing fields are checked for the whole tree
+  before anything is registered.
+- Status: measured on 26112001 (the reader's UI library run as a black box) for a bad field on the first child,
+  a bad field on the last child after the limit, and children placed past 32767; a bad field of its own on a child
+  in the middle, after valid ones, was not measured and is inferred from those cases.
+- Checks: `16/layout_limits` (`bad_child.before`, `child_past_32767.before`).
+
+### D15 - coordinates up to 32767
+
+- Contract says: `x`, `y` are integers and `w`, `h` integers of at least 1, with no upper bound; a `ui:layout` rect
+  the same (§16).
+- Reader does: a `ui:layout` rect wider or taller than 32767 is `invalid_argument`; a container child placed at an
+  `x` past 32767 is refused when it is registered (D14).
+- inkemu does: the same; a control's `x` and `y` must lie in -32768..32767 and its `w` and `h` be at most 32767, at
+  top level as in a container; an outermost container's and a `ui:layout` rect's `w` and `h` at most 32767, and
+  their `x` and `y` in -32768..32767.
+- Status: measured on 26112001 for the rect's width and a child's `x` (the reader's UI library run as a black box);
+  the other bounds, the rect's and the outermost container's `x` and `y` among them, follow from 16-bit
+  coordinates and were not measured.
+- Checks: `16/layout_errors` (`rect_w_32768`, `rect_h_32768`, `rect_x_32768`, `rect_y_minus_32769`),
+  `16/layout_limits` (`child_past_32767`), `16/id_rules` (`row_x_32768`, `row_y_minus_32769`),
+  `16/row_column_before_2_15` (`x_32768`).
+
 ## Notes
 
 ### N1 - completion of PUT, PATCH and DELETE
@@ -60,11 +195,20 @@ Earlier notes got these wrong; do not reintroduce them.
 - Net methods are upper case only; `save` is accepted; a second request while one runs is `busy`; a bad method is
   refused before `busy` is considered.
 - Lua numbers are 32-bit integers and single-precision floats.
+- `ctx.ui` arrows follow the package manifest's `api`, not the firmware's: a 2.12 package moves in declaration order
+  (skipping disabled controls, ignoring `nav`), a 2.13 one by position. Checks: `16/nav_order_before_2_13`,
+  `16/nav_spatial`.
+- `ctx.ui` 2.15 layout: the §16 `ui:layout` example, the rounding of grow and shrink, the `justify_content` weights,
+  `overflow`, the halftone bands and rounded rows of a container's fill, and where a divider goes (1 px into
+  the earlier child when the gap is 0) come out as the contract gives them. A package for 2.15 gets the container
+  look in plain colours; halftone starts at 2.16. Checks: `16/layout_*`, `16/container_appearance*`,
+  `16/overflow_field`.
 
 ## Not emulated
 
-BLE (§31), home screen widgets (§33), native inference `ctx.nn` (§30), `ctx.crypto`, the UI library (§16), user TTF
-fonts, and the battery and Wi-Fi rules of the lock screen (§15). These are nil or ignored in inkemu.
+BLE (§31), home screen widgets (§33), native inference `ctx.nn` (§30), `ctx.crypto`, user TTF fonts, and the battery
+and Wi-Fi rules of the lock screen (§15). These are nil or ignored in inkemu. The UI library (§16) is in progress; see
+the README.
 
 ## inkemu choices where the contract is silent
 
@@ -74,3 +218,77 @@ fonts, and the battery and Wi-Fi rules of the lock screen (§15). These are nil 
   (see `tests/conformance/GAPS.md`).
 - Unfixtured replay requests answer `no_fixture`, which the contract does not know.
 - Time stands still for remote commands so that screenshots are stable.
+- `ctx.ui`, as measured with the reader's UI library run as a black box: a control declared with no open frame
+  returns `nil, "invalid_argument"`; `begin_frame` while a frame is open is `busy` whatever its argument; an error
+  raised by a region's `draw` still closes the frame. Checks: `16/frame_pairing`, `16/region_draw_args`.
+- `ctx.ui`, measured the same way: `handle_event` gives `nil, nil` for a key without `key`, `back`, unknown keys, arrow
+  ups, pointer `down`/`move`, other gestures and pointer events without a point, and `nil, "invalid_argument"` for a
+  key without `phase`; any key event turns focus drawing on and any pointer event turns it off, even when the result
+  is `nil, nil`; `hold` leaves focus where it was; `ui:focus(id, 2.0)` keeps part 2. Checks: `16/events_keys`,
+  `16/events_pointer`, `16/focus_drawn_only_after_key`, `16/focus_api`.
+- `ctx.ui`, not measured: `begin_frame` takes as a canvas any table with the canvas's `rect` and `text_box` methods,
+  since Lua cannot tell host objects apart. A control's box holds the points `x .. x + w - 1` for hits, and boxes that
+  only touch do not overlap for the arrows. A key whose `phase` is neither `down` nor `up` (any other value, not only
+  `repeat` or none) is `invalid_argument`, and a refused event leaves focus drawing as it was. A pointer event is
+  accepted whatever its `phase` (none or unknown gives `nil, nil` and turns focus drawing off). `ok`
+  on a kept id that is disabled in the last frame gives `nil, nil`. An arrow from a kept id that `ui:focus` set to a
+  disabled control starts from that control's place.
+- `ctx.ui` containers, as measured with the reader's UI library run as a black box: before 2.15 a `row` or `column`
+  needs an integer `w` and `h` on every child and places them one after another from its corner with `gap`, ignores
+  the 2.15 fields, and refuses `spacer` children; a hidden child's `id` is not checked against the keys of the
+  `ui:layout` result; a percentage in a fitted container resolves against the size found for it. Checks:
+  `16/row_column_before_2_15`, `16/layout_content_sizes`, `16/layout_hidden_and_false`.
+- `ctx.ui` containers, measured later (oracle scenario s17) and followed by inkemu:
+  - In a frame a control child without `id` or with `id = ""`, or a child without `kind`, makes the whole call
+    `invalid_argument`; `ui:layout` takes both and refuses only `id = ""`.
+  - `ui:layout` counts all the child tables of the tree against 1024 before it checks any field, and does not check
+    control fields that do not size the child, such as `enabled`.
+  - A `label`, `button` or `switch` child takes a `text` that is not a string and hands it to `g:text_box` as it is,
+    except where the text must be measured: a `button` or `switch` with `w = "fit"`, or a `label` without a numeric
+    `h`, is `invalid_argument`.
+  - See D13 (`reserve`), D14 (children checked one by one) and D15 (32767).
+  - The grow and shrink splits multiply in 32-bit integers and wrap with huge weights (six children of `w = 400`
+    and `shrink = 1000` in a 480 px row give one child 1869 px). inkemu gives the same sizes because it runs the
+    same cumulative formula in 32-bit integers; the s17 oracle steps in `tests/test_inkui_oracle.py` pin those
+    cases.
+- `ctx.ui` containers, not measured:
+  - A frame checks the structure and the sizing fields of the whole tree first (kinds, ids, sizes, the fields a
+    content size reads), so a bad one anywhere refuses the call before anything is registered; only a control's other
+    fields and its placed box are checked one by one (D14). A missing `id` or `kind` was measured only on the first
+    child.
+  - A part inkemu does not implement yet raises only when nothing in that first pass is invalid.
+  - The 1024 children are counted in frames too.
+  - A control declared at top level is held to the same 32767 limits as a child (D15).
+  - A whole float that a 32-bit Lua cannot hold as an integer (such as `3e9` or `1e10`) is not an integer: in any
+    integer field of a control, a container, a child or a `ui:layout` rect it gives `nil, "invalid_argument"`.
+  - A text that is not a string counts as 0 px wide where an unset `w` takes the content width.
+  - A hidden child's `id` is not reserved in the frame; a zero-size child is not registered, so its `id` is free too.
+  - `divider = false` is the same as no divider, and `children = nil` as no children.
+  - Dividers are drawn between neighbours that are not spacers even when one of them has zero size.
+  - Before 2.15, a nested container places its own children from its own corner, and `gap` must be a non-negative
+    integer.
+  - A rounded halftone block whose radius takes its whole height gets no middle row.
+  - The `gap` between `tabs` or `radio` cells is any integer from 0 (the contract gives no upper bound), and their
+    1 to 64 `items` are checked the same way in a frame and in `ui:layout`.
+- `ctx.ui` radio, as measured with the reader's UI library run as a black box: a radio works at every API minor (as
+  the other 2.13 and 2.14 controls do), a `nav` on it is accepted and ignored (the contract says composites take no
+  `nav`), a 3 px cell draws no dot, and the fallback to the first control lands on item 1 while `ui:focus(id)` without
+  an item, or with one the radio lacks, lands on the value item. Checks: `16/radio_cells`, `16/radio_focus_parts`,
+  `16/radio_change_activate`, `16/limits`, `16/nav_override`.
+- `ctx.ui` radio, not measured:
+  - A cell gets the value dot only when it is at least 11 px tall, so that the dot's diameter is at least 1.
+  - With `font_min`, each item's font shrinks until its text fits the width after the ring.
+  - A tap in the gap between two cells hits no part of the radio and goes to what lies below.
+  - An item that is `""` still gets its `text_box`.
+  - Until `end_frame` settles it, a focus that `ui:focus` set on a composite without an item, or with an item it
+    lacks, acts as its default part for the arrows and for `ok`; `ok` on a radio that is disabled in the last frame
+    gives `nil, nil`, as on a disabled plain control.
+  - A `nav` on a radio is checked as on the other controls (a non-table, or a value that is not a string, is
+    `invalid_argument`), then ignored.
+  - A cell `gap` wider than the box counts as the box, a cell never gets a negative size, and the text width after
+    the ring is at least 0.
+  - A `nav` entry naming a composite whose default part is unavailable falls back to the search by position.
+  - A registered `skin` on a radio raises "not implemented in inkemu yet"; an unregistered one is `invalid_argument`.
+- `ctx.ui` skins, not measured: on a button, a radio and a container child alike, a `skin` that is not a name
+  registered in `create` is `invalid_argument`, as is a button with both `skin` and `image` (the code §16 gives);
+  only a registered skin, which inkemu does not draw yet, raises "not implemented in inkemu yet".

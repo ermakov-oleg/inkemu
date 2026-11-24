@@ -1,0 +1,27 @@
+{
+  "spec": "§16",
+  "about": "focus on a radio keeps id and item: ui:focused() returns both, ui:focus(id) without an item or with one the radio lacks settles at end_frame on the value item (item 1 without a value), the item must be a positive integer, arrows step through items as separate controls, a nav entry naming the radio goes to its value item while a nav on the radio is ignored, the focus frame wraps the focused cell 3 px out, and a disabled radio hands focus to the nearest control (probe-confirmed)",
+  "expect": {
+    "first_frame": {"value": {"ok": true, "ret": ["top"]}, "spec": "§16"},
+    "focus_without_part": {"value": {"ok": true, "ret": []}, "spec": "§16"},
+    "before_end_frame": {"value": {"ok": true, "ret": ["r"]}, "spec": "§16"},
+    "default_is_value": {"value": {"ok": true, "ret": ["r", 4]}, "spec": "§16"},
+    "part_kept": {"value": {"ok": true, "ret": ["r", 1]}, "spec": "§16"},
+    "missing_part_to_default": {"value": {"ok": true, "ret": ["r", 4]}, "spec": "§16"},
+    "no_value_default_first": {"value": {"ok": true, "ret": ["r", 1]}, "spec": "§16"},
+    "part_zero": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "part_fraction": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "part_string": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "down_into_first_part": {"value": {"ok": true, "ret": ["r", "focus", 1]}, "spec": "§16"},
+    "down_part_2": {"value": {"ok": true, "ret": ["r", "focus", 2]}, "spec": "§16"},
+    "down_out_of_last_part": {"value": {"ok": true, "ret": ["bottom", "focus"]}, "spec": "§16"},
+    "up_into_last_part": {"value": {"ok": true, "ret": ["r", "focus", 5]}, "spec": "§16"},
+    "right_from_part": {"value": {"ok": true, "ret": [null, null]}, "spec": "§16"},
+    "nav_to_radio": {"value": {"ok": true, "ret": ["r", "focus", 4]}, "spec": "§16"},
+    "nav_on_radio_ignored": {"value": {"ok": true, "ret": ["top", "focus"]}, "spec": "§16"},
+    "ring_after_cell_3": {"value": true, "spec": "§16"},
+    "disabled_to_nearest": {"value": {"ok": true, "ret": ["bottom"]}, "spec": "§16"}
+  },
+  "files": {"canvas_log.lua": "canvas_log.util.lua"},
+  "errors": []
+}

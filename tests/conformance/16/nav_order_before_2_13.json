@@ -1,0 +1,13 @@
+{
+  "spec": "§16",
+  "about": "a package for 2.12 moves focus in declaration order: up and left to the previous control, down and right to the next, skipping disabled controls, with regions taking part and nav ignored; at either end the arrow returns the same control with focus (probe-confirmed; the contract does not say what the ends give)",
+  "manifest": {"api": "2.12"},
+  "expect": {
+    "declaration_order": {"value": "B,focus C,focus B,focus A,focus B,focus", "spec": "§16"},
+    "skips_disabled_ignores_nav": {"value": "m3,focus m4,focus", "spec": "§16"},
+    "past_the_last": {"value": {"ok": true, "ret": ["m4", "focus"]}, "deviation": "D7", "spec_value": {"ok": true, "ret": [null, null]}},
+    "before_the_first": {"value": {"ok": true, "ret": ["m1", "focus"]}, "deviation": "D7", "spec_value": {"ok": true, "ret": [null, null]}},
+    "focused": {"value": "m1", "spec": "§16"}
+  },
+  "errors": []
+}

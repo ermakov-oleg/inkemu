@@ -262,7 +262,7 @@ fn random_bytes_system_act_and_small_members() {
         ),
         json!([
             "string", 16, 1, "nil", "inactive", 0, 436, true, 2, 4, true, false, false, false, false,
-            false, true
+            true, true
         ]),
         "API 2.33.1 contract §5 says otherwise: perf:info() is not empty (05/perf_info); random:bytes(0) is invalid_argument (26/random_bytes); §25: power_off outside a key or pointer up is inactive (25/act_inactive)"
     );
@@ -284,7 +284,6 @@ fn not_emulated_members_are_nil() {
     for name in [
         "ctx.crypto",
         "ctx.nn",
-        "ctx.ui",
         "ctx.widget",
         "ctx.dialog.choose",
         "ctx.i18n.t",

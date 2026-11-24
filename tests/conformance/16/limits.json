@@ -1,0 +1,14 @@
+{
+  "spec": "§16",
+  "about": "a frame holds 128 controls, labels included, and a radio counts itself and each of its items; the call that goes past 128 returns limit_exceeded and is not drawn (radio count probe-confirmed)",
+  "expect": {
+    "buttons_128.accepted": {"value": 128, "spec": "§16"},
+    "buttons_129th": {"value": {"ok": true, "ret": [null, "limit_exceeded"]}, "spec": "§16"},
+    "labels_and_buttons.accepted": {"value": 128, "spec": "§16"},
+    "labels_and_buttons_129th": {"value": {"ok": true, "ret": [null, "limit_exceeded"]}, "spec": "§16"},
+    "radio_7_items_fills_128": {"value": 0, "spec": "§16"},
+    "radio_8_items_is_129": {"value": {"ok": true, "ret": [null, "limit_exceeded"]}, "spec": "§16"}
+  },
+  "pixels": [[0, 15, 1], [300, 725, 0], [399, 725, 0]],
+  "errors": []
+}

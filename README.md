@@ -403,6 +403,32 @@ Grey, as measured on 26112001: the canvas of a normal frame is 1-bit, and grey i
 - `g:rect(x, y, w, h, {radius = r})` rounds the corners; this is how the firmware's own UI draws rounded boxes.
 - A grey PNG or JPEG from `ctx.image` is dithered by `g:image` after scaling (in a gray frame it keeps 4 steps).
 
+### `ctx.ui`
+
+`ctx.ui` (§16) is the reader's control library written again in Lua from the contract and from black-box
+measurements of firmware 26112001. It runs in the app's Lua state in an environment of its own, and its
+instructions count against the app's budget. `ctx.capabilities.ui` is true without `"requires": ["ui"]`, and the
+package manifest's `api` decides which rules apply.
+
+- Works: `create`, `begin_frame`/`end_frame`, `label`, `button` (text, `selected`, `emphasis`, `badge`, `border`,
+  both focus styles), `region` with its `draw`, `radio` (items are parts with their own hits and focus,
+  `change`/`activate` with the item number), `handle_event`, `focus`/`focused` with parts, the arrow keys (by
+  position from API 2.13, in declaration order before it), `row`/`column` (the 2.15 flex layout with `wrap`,
+  `baseline`, `aspect_ratio`, percentages, background, border, radius and dividers; the earlier rules for packages
+  before 2.15) and `ui:layout`.
+- Raises "not implemented in inkemu yet": the methods `switch`, `tabs`, `image`, `field`, `stepper`, `pager`,
+  `list`, `progress`, `grid`, `stack` (before 2.15 these two give `invalid_argument`), `skin`, `editing` and
+  `stop_edit`; the same kinds as children in a frame (`ui:layout` places children of every control kind);
+  `grid` and `stack` children; a button `image`; a registered skin on a button, a radio, a `switch` or `tabs`
+  child, and a container in a frame. An unregistered skin is `invalid_argument`. `create` takes `skins` without checking
+  their entries, which the contract refuses when malformed.
+- Where the reader measurably differs from the contract, inkemu follows the reader; `spec/deviations.md` lists
+  each case (D3–D15).
+- The recorded firmware outputs are replayed in `tests/test_inkui_oracle.py`. A "Today" app built on `ctx.ui`
+  draws its main, clock-face and setup screens in inkemu pixel for pixel as in x4pro-emu, except where the app
+  draws its own shapes; its `ui:layout` boxes, focus and event results matched exactly. That comparison was a local
+  run with the reader's BDF fonts, which are not in this repository, so it cannot be reproduced from it.
+
 ## Fonts
 
 `ctx.fonts.small`, `medium` and `large` on the reader are the firmware's built-in bitmap font: line height 20/24/30,
@@ -456,6 +482,7 @@ the start with an error. From each file inkemu takes:
   (`locale`), `perf` (`info` = `{tick_us, draw_us, cmd_count, image_count, asset_hit, asset_miss, draw_frame}`:
   `cmd_count` and `image_count` are the commands and `g:image` calls accepted in the last frame, `draw_frame` the
   frames of this session), `gc`, `budget`, `reader` (answers from `<fixtures dir>/reader.json`), `lockscreen`, `lock`.
+- `ui` (§16), in progress: see [`ctx.ui`](#ctxui) above.
 
 `clock:now()` has `year month day hour minute second weekday hour12 date_order date_sep epoch_sec local_sec
 offset_minutes revision valid`.
@@ -471,11 +498,11 @@ offset_minutes revision valid`.
   `16777217.0 == 16777216.0`).
 - The app sees no `io`, `os`, `debug`, `package`, `load`, `loadstring`, `dofile`, `loadfile`, `collectgarbage` or
   `print`, as on the device; `require` searches only the app folder. Lua 5.5's global `warn` is visible to the app.
-- Not emulated, so nil: `ctx.crypto`, `ctx.nn`, `ctx.ui`, `ctx.widget`, `dialog:choose`, `i18n:t`,
+- Not emulated, so nil: `ctx.crypto`, `ctx.nn`, `ctx.widget`, `dialog:choose`, `i18n:t`,
   `input.keys`, `input.listen`, `input.gamepad`, `device.display`, `device.keep_awake`, `device.radios`,
   `screen.occlusion`. No BLE, no WebSocket.
-- `ctx.capabilities` reports what inkemu emulates, except that `image_transform` is true as on the device: `dialog frontlight image_decode image_transform pattern reader`
-  are true, `ble identity nn ui ttf` false. The device reports `ble dialog frontlight identity image_decode
+- `ctx.capabilities` reports what inkemu emulates, except that `image_transform` is true as on the device: `dialog frontlight image_decode image_transform pattern reader ui`
+  are true, `ble identity nn ttf` false. The device reports `ble dialog frontlight identity image_decode
   image_transform nn pattern reader ui` as true and `ttf` as false.
 - Docked input (`ctx.input:edit`) is the dialog plate: the app gets no input while it is open (on the device,
   pointers outside `rect` and the keys other than Back still reach it), the host draws no text in `rect` (it is

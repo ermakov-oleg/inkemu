@@ -1,0 +1,32 @@
+{
+  "spec": "§16",
+  "about": "ok down presses the focused control and its up activates it; an ok up activates only after an ok down with focus unchanged (a frame between them is fine); arrows act on down; other keys give nil, nil; a repeat key, a key without phase and anything that is not a key or pointer event are invalid_argument (probe-confirmed)",
+  "steps": ["key ok"],
+  "expect": {
+    "before_any_frame": {"value": {"ok": true, "ret": [null, null]}, "spec": "§16"},
+    "ok_up_without_down": {"value": {"ok": true, "ret": [null, null]}, "deviation": "D5", "spec_value": {"ok": true, "ret": ["a", "activate"]}},
+    "ok_down": {"value": {"ok": true, "ret": ["a", "press"]}, "spec": "§16"},
+    "ok_up": {"value": {"ok": true, "ret": ["a", "activate"]}, "spec": "§16"},
+    "ok_up_again": {"value": {"ok": true, "ret": [null, null]}, "deviation": "D5", "spec_value": {"ok": true, "ret": ["a", "activate"]}},
+    "ok_down_2": {"value": {"ok": true, "ret": ["a", "press"]}, "spec": "§16"},
+    "ok_up_after_frame": {"value": {"ok": true, "ret": ["a", "activate"]}, "spec": "§16"},
+    "ok_down_3": {"value": {"ok": true, "ret": ["a", "press"]}, "spec": "§16"},
+    "arrow_away": {"value": {"ok": true, "ret": ["b", "focus"]}, "spec": "§16"},
+    "ok_up_after_move": {"value": {"ok": true, "ret": [null, null]}, "spec": "§16"},
+    "arrow_up_phase": {"value": {"ok": true, "ret": [null, null]}, "spec": "§16"},
+    "back": {"value": {"ok": true, "ret": [null, null]}, "spec": "§16"},
+    "unknown_key": {"value": {"ok": true, "ret": [null, null]}, "spec": "§16"},
+    "no_key": {"value": {"ok": true, "ret": [null, null]}, "spec": "§16"},
+    "gamepad": {"value": {"ok": true, "ret": ["b", "press"]}, "spec": "§4"},
+    "repeat_arrow": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "deviation": "D4", "spec_value": {"ok": true, "ret": [null, null]}},
+    "repeat_ok": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "deviation": "D4", "spec_value": {"ok": true, "ret": [null, null]}},
+    "no_phase": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "not_a_table": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "nil": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "empty": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "other_type": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "focused": {"value": "b", "spec": "§16"},
+    "runner_ok": {"value": "down:b,press up:b,activate", "spec": "§16"}
+  },
+  "errors": []
+}

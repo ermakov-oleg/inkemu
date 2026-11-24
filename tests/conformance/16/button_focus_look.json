@@ -1,0 +1,18 @@
+{
+  "spec": "§16",
+  "about": "once a key event turns focus drawing on, the focused button in the default fill style is filled with its text in 0, and a selected or emphasized one also gets a 2 px ring 3 px outside it (radius + 3 when rounded); in the 2.16 outline style every focused button gets only that ring; border false still fills or rings (probe-confirmed)",
+  "files": {"canvas_log.lua": "canvas_log.util.lua"},
+  "expect": {
+    "fill.normal": {"value": true, "spec": "§16"},
+    "fill.round": {"value": true, "spec": "§16"},
+    "fill.selected": {"value": true, "spec": "§16"},
+    "fill.emphasis": {"value": true, "spec": "§16"},
+    "fill.borderless": {"value": true, "spec": "§16"},
+    "outline.normal": {"value": true, "spec": "§16"},
+    "outline.round": {"value": true, "spec": "§16"},
+    "outline.selected": {"value": true, "spec": "§16"},
+    "outline.emphasis": {"value": true, "spec": "§16"},
+    "outline.borderless": {"value": true, "spec": "§16"}
+  },
+  "errors": []
+}
