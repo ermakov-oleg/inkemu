@@ -19,7 +19,7 @@ Already green and pinned: `05/cmd_cap_1025`, `05/cmd_cap_clear`, `05/cmd_cap_tex
 
 ## §6 Drawing
 
-All §6 checks are green and pinned: `06/g_methods`, `06/canvas_inactive`, `06/polyline_points`, `06/polygon_points`, `06/poly_over_128` (deviation D2), `06/pattern_invalid_args`, `06/arc_full_turn`, `06/circle_fill_pixels`, `06/image_invalid_value`, `06/image_layer_self`, `06/image_src_invalid`, `06/image_released`, and the valid cases `06/g_methods_present`, `06/polyline_points_valid`, `06/polygon_points_valid`, `06/pattern_valid_args`, `06/image_src_valid`, `06/arc_quadrant`, `06/pattern_unknown_kind`, `06/polygon_fill_stroke`, `06/rect_radius_rows`, `06/rect_stroke_inward`, `06/rect_zero_size`, `06/success_returns_nothing`.
+All §6 checks are green and pinned: `06/g_methods`, `06/canvas_inactive`, `06/polyline_points`, `06/polygon_points`, `06/poly_over_128` (deviation D2), `06/pattern_invalid_args`, `06/arc_full_turn`, `06/circle_fill_pixels`, `06/image_invalid_value`, `06/image_layer_self`, `06/image_src_invalid`, `06/image_released`, and the valid cases `06/g_methods_present`, `06/polyline_points_valid`, `06/polygon_points_valid`, `06/pattern_valid_args`, `06/image_src_valid`, `06/arc_quadrant`, `06/pattern_unknown_kind`, `06/polygon_fill_stroke`, `06/polygon_pixel_centres` (deviation D16), `06/rect_radius_rows`, `06/rect_stroke_inward`, `06/rect_zero_size`, `06/success_returns_nothing`.
 
 ## §7 Text and fonts
 
@@ -59,4 +59,4 @@ Already green and pinned: `29/files_name_refused`, `29/files_name_refused_calls`
 
 ## Deviations
 
-Deviations (D1, D2) and the note N1 are listed in `spec/deviations.md`. The core follows D2: `06/poly_over_128` is green.
+Deviations (D1–D16) and the note N1 are listed in `spec/deviations.md`, each with its pinning checks.
