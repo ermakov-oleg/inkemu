@@ -36,31 +36,49 @@ const STORAGE_DIR: &str = "files";
 const APP_FILES_DIR: &str = "appfiles";
 
 /// The files of one directory that an app can name. Of names that differ only in case (the device's card has one
-/// file for them) the first in byte order is kept.
+/// file for them) the first in byte order is kept. The others are pushed to `warnings` as one line.
 fn read_dir(
     dir: &Path,
     name_ok: fn(&str) -> bool,
     case_insensitive: bool,
+    warnings: &mut Vec<String>,
 ) -> BTreeMap<String, Vec<u8>> {
     let mut files = BTreeMap::new();
     let mut seen = std::collections::BTreeSet::new();
+    let mut skipped = Vec::new();
     if let Ok(rd) = fs::read_dir(dir) {
         let mut entries: Vec<_> = rd.flatten().collect();
         entries.sort_by_key(|e| e.file_name());
         for e in entries {
-            let Ok(name) = e.file_name().into_string() else {
-                continue;
-            };
-            if !e.path().is_file() || !name_ok(&name) {
+            if !e.path().is_file() {
                 continue;
             }
+            let name = match e.file_name().into_string() {
+                Ok(name) if name_ok(&name) => name,
+                Ok(name) => {
+                    skipped.push(py_repr_str(&name));
+                    continue;
+                }
+                Err(raw) => {
+                    skipped.push(py_repr_str(&raw.to_string_lossy()));
+                    continue;
+                }
+            };
             if case_insensitive && !seen.insert(app_file_key(&name)) {
+                skipped.push(py_repr_str(&name));
                 continue;
             }
             if let Ok(data) = fs::read(e.path()) {
                 files.insert(name, data);
             }
         }
+    }
+    if !skipped.is_empty() {
+        warnings.push(format!(
+            "{}: not loaded, the app cannot name them: {}",
+            dir.display(),
+            skipped.join(", ")
+        ));
     }
     files
 }
@@ -69,19 +87,31 @@ fn storage_name(name: &str) -> bool {
     storage_name_ok(name.as_bytes())
 }
 
-/// The app data on disk, and why `state.json` could not be read (for the core's "unreadable state" warning).
-pub fn load(state_dir: &Path) -> (Persisted, Option<String>) {
+/// The app data on disk, why `state.json` could not be read (for the core's "unreadable state" warning), and
+/// warnings about files left out.
+pub fn load(state_dir: &Path) -> (Persisted, Option<String>, Vec<String>) {
     let (state_json, state_error) = match read_opt(&state_dir.join("state.json")) {
         Ok(data) => (data, None),
         Err(e) => (None, Some(e)),
     };
+    let mut warnings = Vec::new();
     let persisted = Persisted {
         state_json,
         lock_json: read_opt(&state_dir.join("lock.json")).unwrap_or_default(),
-        files: read_dir(&state_dir.join(STORAGE_DIR), storage_name, false),
-        app_files: read_dir(&state_dir.join(APP_FILES_DIR), app_file_name_ok, true),
+        files: read_dir(
+            &state_dir.join(STORAGE_DIR),
+            storage_name,
+            false,
+            &mut warnings,
+        ),
+        app_files: read_dir(
+            &state_dir.join(APP_FILES_DIR),
+            app_file_name_ok,
+            true,
+            &mut warnings,
+        ),
     };
-    (persisted, state_error)
+    (persisted, state_error, warnings)
 }
 
 fn write_atomic(path: &Path, tmp: &Path, data: &[u8]) -> io::Result<()> {
@@ -173,5 +203,44 @@ pub fn seed_files(fixtures_dir: &Path, state_dir: &Path) {
             let _ = fs::create_dir_all(&dst);
             let _ = fs::copy(e.path(), dst.join(&name));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn names_left_out_are_listed_in_one_warning_per_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let (storage, app) = (dir.path().join(STORAGE_DIR), dir.path().join(APP_FILES_DIR));
+        fs::create_dir_all(&storage).unwrap();
+        fs::create_dir_all(&app).unwrap();
+        for name in ["ok.txt", "Upper.txt", "a b"] {
+            fs::write(storage.join(name), b"x").unwrap();
+        }
+        for name in ["Note.txt", "a~b"] {
+            fs::write(app.join(name), b"x").unwrap();
+        }
+        // a second spelling only where the file system keeps both (not on a case-insensitive macOS volume)
+        let dup = fs::write(app.join("note.TXT"), b"y").is_ok()
+            && fs::read_dir(&app).unwrap().count() == 3;
+        let (p, _, warnings) = load(dir.path());
+        assert_eq!(p.files.keys().collect::<Vec<_>>(), ["ok.txt"]);
+        assert_eq!(p.app_files.keys().collect::<Vec<_>>(), ["Note.txt"]);
+        let dup = if dup { ", 'note.TXT'" } else { "" };
+        assert_eq!(
+            warnings,
+            [
+                format!(
+                    "{}: not loaded, the app cannot name them: 'Upper.txt', 'a b'",
+                    storage.display()
+                ),
+                format!(
+                    "{}: not loaded, the app cannot name them: 'a~b'{dup}",
+                    app.display()
+                ),
+            ]
+        );
     }
 }

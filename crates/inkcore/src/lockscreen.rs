@@ -56,7 +56,6 @@ pub(crate) struct Lock {
     /// Clock ms when the last session with `lock.net` started.
     pub(crate) net_ms: Option<i64>,
     pub(crate) wake_timer: Option<TimerId>,
-    pub(crate) deadline: Option<TimerId>,
     /// The previous frame stays on screen until the woken session draws.
     pub(crate) stale: bool,
 }
@@ -146,7 +145,6 @@ pub(crate) fn end_lock(st: &Shared) {
         s.lock.ctx = None;
         s.lock.stale = false;
         s.lock.wake_timer = None;
-        s.lock.deadline = None;
     });
 }
 
@@ -234,15 +232,10 @@ pub(crate) fn after_load(h: &Host) {
                     .start_ms
                     .saturating_add(PREP_MS)
                     .saturating_sub(s.sched.clock.ms);
-                s.lock.deadline = Some(s.add_timer(due, Rc::new(end_prep), 0));
+                s.add_timer(due, Rc::new(present), 0);
             });
         }
     }
-}
-
-fn end_prep(h: &Host) {
-    with(h.st, |s| s.lock.deadline = None);
-    present(h);
 }
 
 /// Unfinished requests and timers never deliver once the session draws its last frame.
@@ -251,7 +244,6 @@ fn cancel_all(s: &mut State) {
         s.sched.cancel(t);
     }
     s.tick = None;
-    s.lock.deadline = None;
     s.lock.wake_timer = None;
     s.net.stop();
     s.net.inflight = 0;

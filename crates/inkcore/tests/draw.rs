@@ -210,6 +210,33 @@ fn text_box_wraps() {
 }
 
 #[test]
+fn text_box_centres_a_line_where_a_centred_text_lands() {
+    // 7 spare pixels each way: an odd text in an even box, then an even text in an odd box (line heights are even,
+    // so the box height is odd); 3.5 rounded half to even gave 4 where `//` gives 3
+    for parity in [1, 0] {
+        let setup = format!(
+            "local f = ctx.fonts.medium
+             for _, c in ipairs({{'x', 'xx', 'i', 'ii', 'm', 'W', 'ab'}}) do
+               if f:measure(c) % 2 == {parity} then s = c break end
+             end
+             local w, h = f:measure(s) + 7, f.line_height + 7
+             g:clear(0)"
+        );
+        let opts = "{font = 'medium', align = 'center', valign = 'middle'}";
+        let boxed = draw(&format!("{setup}; g:text_box(10, 20, w, h, s, {opts})"));
+        let plain = draw(&format!(
+            "{setup}; g:text(10 + w // 2, 20 + h // 2, s, {opts})"
+        ));
+        let (b, p) = (boxed.raw_frame(), plain.raw_frame());
+        assert!(black(&b) > 0, "parity {parity}");
+        assert_eq!(
+            b.px, p.px,
+            "parity {parity}: §7 en-07:80, x - width // 2 and y - line_height // 2 at the box centre"
+        );
+    }
+}
+
+#[test]
 fn wrap_splits_words_and_long_words() {
     let (c, fonts) = (Canvas::new(480, 800, Fonts::new()), Fonts::new());
     let lines = c.wrap("small", "aaaaaaaaaaaaaaaaaaaa b\nc", 60.0);

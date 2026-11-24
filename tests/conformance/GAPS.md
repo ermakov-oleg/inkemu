@@ -1,7 +1,7 @@
 # Core gaps against API 2.33
 
-Every entry below is a rule of the API 2.33 contract that the Rust core does not follow yet. Each one is pinned by a
-conformance check listed in `pending.json`; when the core is fixed the check turns green and its pending entry goes.
+The Rust core follows every rule listed below, and each one is pinned by a green conformance check; `pending.json` is
+empty. A check that turns red is a regression. The "Not covered" notes name what no check pins yet.
 Source: `probe-confirmed` means the behaviour was measured on the reader (firmware 26112001); `contract only` means the
 contract states it and the reader was not measured. File names are relative to the repository root.
 
@@ -27,11 +27,11 @@ All §7 checks are green and pinned: `07/text_invalid_utf8`, `07/text_rtl`, `07/
 
 ## §9 Private files
 
-Already green and pinned: `09/storage_usage`, `09/storage_name_valid`, `09/storage_name_refused`, `09/storage_file_size_max`, `09/storage_remove_existing`, `09/storage_missing_file`, `09/storage_write_replaces`, `09/storage_list_order` (byte order is contract only; the probe sample was alphabetical), `09/storage_full_quota` (512 full-size files are exactly the 128 MB total, so the total quota is not reachable separately and is covered by this check).
+Already green and pinned: `09/storage_usage`, `09/storage_name_valid`, `09/storage_name_refused`, `09/storage_file_size_max`, `09/storage_remove_existing`, `09/storage_missing_file`, `09/storage_write_replaces`, `09/storage_list_order` (byte order is contract only; the probe sample was alphabetical), `09/storage_full_quota` (512 full-size files are exactly the 128 MB total, so the total quota is not reachable separately and is covered by this check), `09/storage_name_invalid`, `09/storage_name_exists_invalid`, `09/storage_file_size_limit`, `09/storage_file_count_limit`, `09/storage_remove_missing`.
 
 ## §12 Clock, log and memory
 
-Already green and pinned: `12/log_and_clock`, `12/clock_fields` (date and time fields, epoch and local seconds), `12/clock_snapshot`, `12/log_returns_nothing`, `12/clock_millis`.
+Already green and pinned: `12/log_and_clock`, `12/clock_fields` (date and time fields, epoch and local seconds), `12/clock_snapshot`, `12/log_returns_nothing`, `12/clock_millis`, `12/log_methods`, `12/clock_revision_start`, `12/clock_weekday_sunday`, `12/clock_weekday_saturday`.
 
 ## §14 Networking
 
@@ -47,15 +47,15 @@ All §15 checks are green and pinned: `15/lock_reason_first`, `15/lock_reason_ti
 
 ## §25 System actions
 
-Already green and pinned: `25/act_refresh`, `25/act_inactive_no_lock` (refused `sleep`/`power_off` calls do not lock the device), `25/act_args` (unknown name is `nil, "invalid_argument"` - probe-confirmed; a non-string name raises). Not covered: `act("power_off")` with its confirmation dialog and `busy` (contract only, needs system dialog support).
+Already green and pinned: `25/act_refresh`, `25/act_inactive_no_lock` (refused `sleep`/`power_off` calls do not lock the device), `25/act_args` (unknown name is `nil, "invalid_argument"` - probe-confirmed; a non-string name raises), `25/act_inactive`, `25/act_sleep_key`, `25/act_sleep_tap`. Not covered: `act("power_off")` with its confirmation dialog and `busy` (contract only, needs system dialog support).
 
 ## §26 Encoding, hashes, random
 
-Already green and pinned: `26/encoding`, `26/hash_input_max`, `26/encoding_input_max`, `26/base64_decode`, `26/url_encode_decode`, `26/random_bytes_range`, `26/hash_hmac_sha256` (the probe's `k`/`m` vector, RFC 4231 cases 2 and 6), `26/hex_decode`, `26/random_uuid`, `26/hash_crc32` and `26/hash_sha1` (probe-confirmed; fixed in the core).
+Already green and pinned: `26/encoding`, `26/hash_input_max`, `26/encoding_input_max`, `26/base64_decode`, `26/url_encode_decode`, `26/random_bytes_range`, `26/hash_hmac_sha256` (the probe's `k`/`m` vector, RFC 4231 cases 2 and 6), `26/hex_decode`, `26/random_uuid`, `26/hash_crc32` and `26/hash_sha1` (probe-confirmed; fixed in the core), `26/hash_input_limit`, `26/encoding_input_limit`, `26/base64_encode_std`, `26/base64_url_alphabet`, `26/base64_decode_url_unpadded`, `26/url_decode_invalid`, `26/url_query`, `26/random_bytes`.
 
 ## §29 App files
 
-Already green and pinned: `29/files_name_refused`, `29/files_name_refused_calls`, `29/files_name_accepted`, `29/files_missing_file`, `29/files_write_max`, `29/files_write_replaces`, `29/files_read_whole`, `29/files_remove_existing`, `29/files_append`, `29/files_path_and_separation` (`ctx.files.path` is `/AppFiles/<app_id>`, probe-confirmed; private storage and app files are separate), `29/files_append_past_call_limit`. Not covered: public folders (`ctx.files:folder`, §29 2.31), `io_error` for a subfolder with a file's name, and the opening of files by the reader.
+Already green and pinned: `29/files_name_refused`, `29/files_name_refused_calls`, `29/files_name_accepted`, `29/files_missing_file`, `29/files_write_max`, `29/files_write_replaces`, `29/files_read_whole`, `29/files_remove_existing`, `29/files_append`, `29/files_path_and_separation` (`ctx.files.path` is `/AppFiles/<app_id>`, probe-confirmed; private storage and app files are separate), `29/files_append_past_call_limit`, `29/files_name_illegal`, `29/files_name_illegal_calls`, `29/files_name_inner_space`, `29/files_case_insensitive`, `29/files_list_items`, `29/files_list_empty`, `29/files_read_ranges`, `29/files_read_default_len`, `29/files_read_arg_errors`, `29/files_write_limit`, `29/files_append_invalid`, `29/files_remove_missing`, `29/files_count_limit`, `29/files_no_total_limit`. Not covered: public folders (`ctx.files:folder`, §29 2.31), `io_error` for a subfolder with a file's name, the opening of files by the reader, and `list()` returning `nil, "limit_exceeded"` when more than 512 files were put in `appfiles/` on disk (inkemu lists them all).
 
 ## Deviations
 

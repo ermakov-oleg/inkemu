@@ -129,9 +129,11 @@ impl NetState {
         }
     }
 
-    /// The app stopped: answers still on their way are dropped (0.1 cancelled their timers).
+    /// The app stopped: answers still on their way are dropped (0.1 cancelled their timers), and requests an async
+    /// host (the page) has not taken yet are never sent.
     pub(crate) fn stop(&mut self) {
         self.waiting.clear();
+        self.outbox.clear();
     }
 
     pub(crate) fn take_outgoing(&mut self) -> Vec<OutRequest> {

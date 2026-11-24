@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use mlua::{IntoLuaMulti, Lua, Table, Value};
 
 use super::object::{method, new_object, Method};
-use super::{arg, int_value, raw, soft_fail};
+use super::{arg, check_arg, int_value, raw, soft_fail, whole};
 use crate::config::STORAGE_WRITE_MAX;
 use crate::emu::{with, Shared, State};
 
@@ -75,7 +75,7 @@ pub fn app_file_name_ok(name: &str) -> bool {
     }
     if name
         .chars()
-        .any(|c| c.is_control() || "/\\:*?\"<>|~".contains(c))
+        .any(|c| matches!(c, '\0'..='\x1f' | '\x7f') || "/\\:*?\"<>|~".contains(c))
     {
         return false;
     }
@@ -177,13 +177,13 @@ fn writer(st: &Shared, dir: Dir, mode: Mode) -> Method {
     })
 }
 
-/// An optional integer argument: nil gives `default`, a float counts if it is whole.
-fn opt_int(v: &Value, default: i64) -> Option<i64> {
-    match v {
-        Value::Nil => Some(default),
-        Value::Integer(i) => Some(i64::from(*i)),
-        Value::Number(n) if n.fract() == 0.0 && n.abs() <= i32::MAX as f32 => Some(*n as i64),
-        _ => None,
+/// An optional §0 integer argument #`i + 1` of `read`: nil gives `default`, another non-number raises, and a
+/// number that is not an integer is None.
+fn opt_whole(a: &[Value], i: usize, default: i64) -> mlua::Result<Option<i64>> {
+    match arg(a, i) {
+        Value::Nil => Ok(Some(default)),
+        v @ (Value::Integer(_) | Value::Number(_)) => Ok(whole(v)),
+        v => check_arg("read", i + 1, v, "number").map(|()| None),
     }
 }
 
@@ -192,11 +192,11 @@ fn range_reader(st: &Shared) -> Method {
     let st = st.clone();
     method(move |lua, args| {
         let a = args.into_vec();
+        let (offset, len) = (opt_whole(&a, 1, 0)?, opt_whole(&a, 2, READ_DEFAULT)?);
         let Some(name) = target(Dir::App, arg(&a, 0)) else {
             return soft_fail(lua, "invalid_argument");
         };
-        let (Some(offset), Some(len)) = (opt_int(arg(&a, 1), 0), opt_int(arg(&a, 2), READ_DEFAULT))
-        else {
+        let (Some(offset), Some(len)) = (offset, len) else {
             return soft_fail(lua, "invalid_argument");
         };
         if offset < 0 || len < 1 {
@@ -360,10 +360,13 @@ mod tests {
         assert!(!storage_name_ok(&[b'a'; 65]) && storage_name_ok(&[b'a'; 64]));
         assert!(app_file_name_ok("Мой файл.TXT") && app_file_name_ok("a b"));
         assert!(!app_file_name_ok(&"я".repeat(65)) && app_file_name_ok(&"я".repeat(64)));
-        for bad in ["COM1.x", "lpt9", "Nul", ".a", "a.", "a ", "a~", "a\u{7f}"] {
+        for bad in [
+            "COM1.x", "lpt9", "Nul", ".a", "a.", "a ", "a~", "a\u{7f}", "a\u{1f}", "a\0",
+        ] {
             assert!(!app_file_name_ok(bad), "{bad}");
         }
-        for ok in ["COM0", "com10", "x.con", "console"] {
+        // §29 bans only U+0000-U+001F and U+007F; the C1 controls are legal
+        for ok in ["COM0", "com10", "x.con", "console", "a\u{80}", "a\u{9f}"] {
             assert!(app_file_name_ok(ok), "{ok}");
         }
     }

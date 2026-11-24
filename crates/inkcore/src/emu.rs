@@ -532,6 +532,7 @@ pub(crate) fn boot(st: &Shared, mode: BootMode) {
             s.partials = 0;
         }
         (s.defer_until, s.perf) = (0, Perf::default());
+        s.clock_revision = 1;
         (
             s.cfg.firmware_api,
             s.cfg.app_dir_label.clone(),

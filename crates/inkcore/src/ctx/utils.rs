@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 
 use super::convert::{big_int_warning, dump, json_to_lua, lua_to_json};
 use super::object::{method, new_object, Method};
-use super::{arg, bytes_arg, check_arg, raw, soft_fail};
+use super::{arg, bytes_arg, check_arg, raw, soft_fail, whole};
 use crate::emu::{with, Shared};
 use crate::lua::first_in_callback;
 
@@ -152,10 +152,8 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
         method(move |lua, args| {
             let a = args.into_vec();
             check_arg("bytes", 1, arg(&a, 0), "number")?;
-            let n = match arg(&a, 0) {
-                Value::Integer(i) => i64::from(*i),
-                Value::Number(f) if f.fract() == 0.0 => *f as i64,
-                _ => return soft_fail(lua, "invalid_argument"),
+            let Some(n) = whole(arg(&a, 0)) else {
+                return soft_fail(lua, "invalid_argument");
             };
             if !(1..=MAX_RANDOM_BYTES).contains(&n) {
                 return soft_fail(lua, "invalid_argument");
@@ -209,14 +207,14 @@ fn url_query() -> Method {
         };
         let mut items = vec![];
         for pair in t.pairs::<Value, Value>() {
+            if items.len() == MAX_QUERY_ITEMS {
+                return soft_fail(lua, "limit_exceeded");
+            }
             let (k, v) = pair?;
             let (Value::String(k), Some(v)) = (&k, query_value(&v)) else {
                 return soft_fail(lua, "invalid_argument");
             };
             items.push((k.as_bytes().to_vec(), v));
-        }
-        if items.len() > MAX_QUERY_ITEMS {
-            return soft_fail(lua, "limit_exceeded");
         }
         items.sort();
         let out: Vec<String> = items

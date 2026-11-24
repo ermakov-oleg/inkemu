@@ -327,3 +327,41 @@ fn layer_draw_nests_inside_layer_draw() {
     assert_eq!([f.get(25, 5), f.get(20, 0)], [1, 0]);
     assert_eq!([f.get(5, 5), f.get(8, 0), f.get(0, 0)], [1, 0, 0]);
 }
+
+#[test]
+fn files_read_offset_and_len_follow_the_integer_rule() {
+    let mut core = boot("function on_load(c) assert(c.files:write('d', '0123456789')) end");
+    no_errors(&core);
+    assert_eq!(
+        core.lua_eval(
+            "local function r(...) return select(2, ctx.files:read('d', ...)) end\n\
+             return {r(0, 3e9), r(0, 2.5), r(2.5), r(0, 0 / 0), r(0, math.huge)}"
+        )
+        .unwrap(),
+        // §29: a len above 65536 is limit_exceeded; §0: a non-integral number is invalid_argument
+        json!([
+            "limit_exceeded",
+            "invalid_argument",
+            "invalid_argument",
+            "invalid_argument",
+            "invalid_argument"
+        ]),
+    );
+    assert_eq!(
+        core.lua_eval("return {ctx.files:read('d', 4.0, 3.0), ctx.files:read('d', 1e30, 3)}")
+            .unwrap(),
+        json!(["456", ""])
+    );
+    for (args, n) in [("'d', 'x'", 2), ("'d', 0, {}", 3), ("'nope', true", 2)] {
+        let err = core
+            .lua_eval(&format!(
+                "local ok, e = pcall(ctx.files.read, ctx.files, {args}) return e"
+            ))
+            .unwrap();
+        let err = err.as_str().unwrap_or_default().to_string();
+        assert!(
+            err.contains(&format!("bad argument #{n} to 'read' (number expected")),
+            "§0.3: a wrong positional type raises: {args}: {err}"
+        );
+    }
+}

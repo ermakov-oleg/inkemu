@@ -1,7 +1,9 @@
 // Performs the app's outgoing requests (take_outgoing) with fetch and returns the core's `deliver` arguments.
 import { toBase64, fromBase64 } from './core.js';
 
-const DEFAULT_TIMEOUT_MS = 15000;
+const DEFAULT_TIMEOUT_MS = 30000;
+// §14: what the host sends for a body the app gave no content-type
+const DEFAULT_CONTENT_TYPE = 'text/plain; charset=utf-8';
 
 export function corsLine(method, url) {
   return (
@@ -22,7 +24,13 @@ export async function perform(request, fetchFn = globalThis.fetch) {
   try {
     const init = { method, headers: request.headers ?? [], signal: ctl.signal };
     // fetch throws a TypeError for a GET/HEAD body, which would read as a CORS failure
-    if (request.body_b64 && method !== 'GET' && method !== 'HEAD') init.body = fromBase64(request.body_b64);
+    if (request.body_b64 && method !== 'GET' && method !== 'HEAD') {
+      init.body = fromBase64(request.body_b64);
+      // a Uint8Array body gets no content-type from fetch
+      if (!init.headers.some(([k]) => k.toLowerCase() === 'content-type')) {
+        init.headers = [...init.headers, ['content-type', DEFAULT_CONTENT_TYPE]];
+      }
+    }
     const res = await fetchFn(url, init);
     const body = new Uint8Array(await res.arrayBuffer());
     return { id, status: res.status, headers: [...res.headers], body_b64: toBase64(body), delay_ms: 0 };

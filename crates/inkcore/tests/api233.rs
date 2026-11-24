@@ -102,6 +102,21 @@ fn clock_revision_changes_when_the_clock_is_moved() {
 }
 
 #[test]
+fn clock_revision_is_1_after_a_restart() {
+    let mut core = boot("");
+    core.wait(60_000).unwrap();
+    assert_ne!(eval(&mut core, "return ctx.clock:now().revision"), json!(1));
+    core.restart();
+    assert_eq!(
+        eval(&mut core, "return ctx.clock:now().revision"),
+        json!(1),
+        "§12: 1 at the start of the session"
+    );
+    core.advance(5_000).unwrap();
+    assert_eq!(eval(&mut core, "return ctx.clock:now().revision"), json!(1));
+}
+
+#[test]
 fn log_is_a_table_of_levels_and_still_callable() {
     let core = boot(
         "ctx.log:info('i1')\nctx.log:warn('w1')\nctx.log:error('e1')\nctx:log('y')\n\
@@ -323,4 +338,23 @@ fn random_bytes_takes_whole_numbers_only() {
         ]),
         "API 2.33.1 contract §0: only a whole float is an integer (26/random_bytes)"
     );
+}
+
+#[test]
+fn url_query_takes_at_most_64_items() {
+    let mut core = boot("");
+    let query = |n: u32| {
+        format!(
+            "local t = {{}} for i = 1, {n} do t['k' .. i] = i end \
+             local s, e = ctx.url:query(t) return {{s and #s or false, e or false}}"
+        )
+    };
+    assert_eq!(eval(&mut core, &query(64))[1], json!(false));
+    for n in [65, 100_000] {
+        assert_eq!(
+            eval(&mut core, &query(n)),
+            json!([false, "limit_exceeded"]),
+            "{n}"
+        );
+    }
 }

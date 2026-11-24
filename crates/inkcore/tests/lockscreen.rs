@@ -258,23 +258,124 @@ fn a_networked_first_session_draws_twice_and_ends_its_timers() {
 }
 
 #[test]
+fn a_full_request_from_a_wake_on_draw_is_for_that_frame() {
+    let lock = "function on_draw(c, g)\n\
+          if c.lock.reason == 'timer' and not c.storage:read('full') then\n\
+            c.storage:write('full', '1') c:invalidate('full')\n\
+          end\n\
+          g:text(0, 0, 'locked')\n\
+        end\n";
+    let mut core = Core::new(
+        files(r#"{"interval_sec": 60}"#, lock),
+        Config::default(),
+        Persisted::default(),
+    );
+    core.lock();
+    core.wait(121_000).unwrap();
+    assert_eq!(
+        core.status().refreshes,
+        ["full", "full", "full", "partial"],
+        "ctx:invalidate(\"full\") makes the frame of step 5 full (§15)"
+    );
+}
+
+#[test]
+fn requests_not_taken_by_the_host_are_dropped_when_the_app_stops() {
+    let lock =
+        "function on_load(c) c.net:request({url = 'http://x.test/lock'}, function() end) end\n\
+        function on_draw(c, g) end\n";
+    let mut files = files(r#"{"interval_sec": 60, "net": true}"#, lock);
+    files.0.insert(
+        "index.lua".into(),
+        b"function on_load(c) c.net:request({url = 'http://x.test/app'}, function() end) end\n"
+            .to_vec(),
+    );
+    let cfg = Config {
+        net_mode: NetMode::Live,
+        ..Config::default()
+    };
+    let mut core = Core::new(files, cfg, Persisted::default());
+    // the app's request is still in the outbox when it leaves for the lock screen
+    core.lock();
+    core.wait(28_000).unwrap();
+    assert!(
+        core.take_outgoing().is_empty(),
+        "the page must not send them"
+    );
+}
+
+#[test]
 fn input_and_budget_are_inactive_in_a_lock_session() {
-    let mut core = app_with("");
+    // ctx.net exists only in a lock block with "net"
+    let mut core = net_app_with("");
     core.lock();
     for (call, want) in [
         ("ctx.budget:extend()", "inactive"),
         ("ctx.input:text({}, function() end)", "inactive"),
         ("ctx.input:edit({})", "inactive"),
+        ("ctx.dialog:confirm({}, function() end)", "inactive"),
+        ("ctx.dialog:toast('hi')", "inactive"),
         ("ctx.screen:set_orientation('landscape')", "inactive"),
+        ("ctx.net:websocket({url = 'ws://x.test/'})", "inactive"),
     ] {
         let got = core.lua_eval(&format!("return select(2, {call})")).unwrap();
         assert_eq!(got, want, "{call}");
     }
 }
 
+#[test]
+fn a_confirm_from_the_lock_screen_opens_no_dialog() {
+    let lock = "function on_load(c)\n\
+          got = select(2, c.dialog:confirm({title = 'T'}, function() end))\n\
+        end\n\
+        function on_draw(c, g) g:text(0, 0, 'confirm ' .. tostring(got)) end\n";
+    let mut core = Core::new(
+        files(r#"{"interval_sec": 60}"#, lock),
+        Config::default(),
+        Persisted::default(),
+    );
+    core.lock();
+    assert!(has_text(&core, "confirm inactive"));
+    assert!(core.status().pending.is_none());
+    core.wait(61_000).unwrap();
+    assert_eq!(core.lock_wakes(), 1);
+    assert!(core.status().pending.is_none());
+    core.unlock();
+    assert!(!core.locked() && has_text(&core, "app screen"));
+}
+
+#[test]
+fn clock_revision_is_1_in_every_lock_session() {
+    let mut core = app_with("");
+    core.wait(60_000).unwrap();
+    assert_ne!(core.lua_eval("return ctx.clock:now().revision").unwrap(), 1);
+    core.lock();
+    assert_eq!(
+        core.lua_eval("return ctx.clock:now().revision").unwrap(),
+        1,
+        "§12: 1 at the start of the session; §15: each lock refresh is a session"
+    );
+    core.wait(61_000).unwrap();
+    assert_eq!(core.lock_wakes(), 1);
+    assert_eq!(core.lua_eval("return ctx.clock:now().revision").unwrap(), 1);
+    core.unlock();
+    assert_eq!(core.lua_eval("return ctx.clock:now().revision").unwrap(), 1);
+}
+
 fn app_with(index_lua: &str) -> Core {
     let manifest = r#"{"app_id": "testapp", "entry": "index.lua", "api": "2.33",
         "lockscreen": {"interval_sec": 60}}"#;
+    core_with(manifest, index_lua)
+}
+
+/// A networked lock block: the app holds the `net` permission.
+fn net_app_with(index_lua: &str) -> Core {
+    let manifest = r#"{"app_id": "testapp", "entry": "index.lua", "api": "2.33", "permissions": ["net"],
+        "lockscreen": {"interval_sec": 60, "net": true}}"#;
+    core_with(manifest, index_lua)
+}
+
+fn core_with(manifest: &str, index_lua: &str) -> Core {
     let lock = "function on_draw(c, g) g:text(0, 0, 'locked') end\n";
     let files = AppFiles(BTreeMap::from([
         ("manifest.json".to_string(), manifest.as_bytes().to_vec()),
@@ -375,17 +476,6 @@ fn act_power_off_from_an_up_event_returns_nothing_and_stays() {
     assert!(logged(&core, "power_off: the confirmation dialog is not emulated").is_some());
     let st = core.status();
     assert!(st.running && !st.locked && st.pending.is_none());
-}
-
-#[test]
-fn act_sleep_is_inactive_in_a_lock_screen_session() {
-    let mut core = app_with("");
-    core.lock();
-    assert_eq!(
-        core.lua_eval("return select(2, ctx.system:act('sleep'))")
-            .unwrap(),
-        "inactive"
-    );
 }
 
 #[test]

@@ -116,3 +116,33 @@ test('any other failure still answers the request', async () => {
   assert.equal(r.error, 'no_network');
   assert.match(r.log, /^net: POST https:\/\/api\.example\.com\/x failed: boom$/);
 });
+
+test('a body without content-type goes out as text/plain (§14); the app header is kept', async () => {
+  const seen = [];
+  const fetchFn = async (url, init) => {
+    seen.push(init.headers);
+    return response(200, new Uint8Array(), {});
+  };
+  const headers = [['x-a', '1']];
+  await perform(req({ headers }), fetchFn);
+  await perform(req({ headers: [['Content-Type', 'application/json']] }), fetchFn);
+  await perform(req({ method: 'PUT', headers: [], body_b64: '' }), fetchFn);
+  assert.deepEqual(seen[0], [['x-a', '1'], ['content-type', 'text/plain; charset=utf-8']]);
+  assert.deepEqual(headers, [['x-a', '1']]);
+  assert.deepEqual(seen[1], [['Content-Type', 'application/json']]);
+  assert.deepEqual(seen[2], []);
+});
+
+test('without timeout_ms the request times out after 30000 ms (§14)', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const fetchFn = (url, init) =>
+    new Promise((resolve, reject) => init.signal.addEventListener('abort', () => reject(new Error('aborted'))));
+  let r;
+  const done = perform(req({ timeout_ms: 0 }), fetchFn).then((v) => (r = v));
+  t.mock.timers.tick(29999);
+  await new Promise(setImmediate);
+  assert.equal(r, undefined);
+  t.mock.timers.tick(1);
+  await done;
+  assert.deepEqual(r, { id: 7, error: 'timeout' });
+});

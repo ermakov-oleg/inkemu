@@ -22,7 +22,7 @@ The worker (`worker.js`) owns the Wasm core; the page (`app.js`) never calls it 
 
 ## After every command, tick and delivery
 
-The worker drains `take_outgoing`, performs each request with `net.js` (`fetch`, `timeout_ms`, default 15 s) and
+The worker drains `take_outgoing`, performs each request with `net.js` (`fetch`, `timeout_ms`, default 30 s) and
 delivers the answer through the same path; answers meant for an older core are dropped.
 
 Real time keeps running while a dialog is open (the Tk window froze it); `tick` does not look at dialogs.

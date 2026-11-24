@@ -295,7 +295,8 @@ impl Canvas {
         let (font, f, style) = (opts.font, &self.fonts, opts.layout.style);
         let lh = f.line_height(font);
         let place = |at: f64, size: f64, room: f64, a: Align| match a {
-            Align::Middle => at + (room - size) / 2.0,
+            // where a centred `g:text` at the box centre lands: `x - width // 2` (§7) at `x + w // 2`
+            Align::Middle => at + (room / 2.0).floor() - (size / 2.0).floor(),
             Align::End => at + room - size,
             Align::Start | Align::Baseline => at,
         };

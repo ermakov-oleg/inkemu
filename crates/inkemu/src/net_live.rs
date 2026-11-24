@@ -143,7 +143,7 @@ impl Net {
         }
         let result = if !r.body.is_empty() {
             if !has_type {
-                req = req.set("Content-type", "application/x-www-form-urlencoded");
+                req = req.set("Content-type", "text/plain; charset=utf-8");
             }
             req.send_bytes(&expand(&r.body, &self.secrets))
         } else if r.method == "POST" {
@@ -287,6 +287,63 @@ mod tests {
         for h in ["User-Agent", "Content-Type", "x-cookie-jar"] {
             assert!(!sensitive(h), "{h}");
         }
+    }
+
+    /// The `Content-Type` a one-shot local server saw for `headers` and a body.
+    fn sent_type(headers: Vec<(String, String)>) -> Option<String> {
+        use std::io::{BufRead, BufReader, Read, Write};
+        let srv = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/p", srv.local_addr().unwrap());
+        let seen = std::thread::spawn(move || {
+            let (conn, _) = srv.accept().unwrap();
+            let mut rd = BufReader::new(conn.try_clone().unwrap());
+            let mut found = None;
+            loop {
+                let mut line = String::new();
+                rd.read_line(&mut line).unwrap();
+                let line = line.trim_end();
+                if line.is_empty() {
+                    break;
+                }
+                if let Some((k, v)) = line.split_once(':') {
+                    if k.eq_ignore_ascii_case("content-type") {
+                        found = Some(v.trim().to_string());
+                    }
+                }
+            }
+            let mut body = [0u8; 1];
+            rd.read_exact(&mut body).unwrap();
+            let mut conn = conn;
+            conn.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                .unwrap();
+            found
+        });
+        let net = Net::new(NetMode::Live, Vec::new(), PathBuf::new());
+        let r = OutRequest {
+            id: 1,
+            method: "PUT".into(),
+            url,
+            headers,
+            body: b"x".to_vec(),
+            timeout_ms: 5000,
+        };
+        let got = net.fetch(&r);
+        assert!(
+            matches!(got, NetResult::Response { status: 200, .. }),
+            "{got:?}"
+        );
+        seen.join().unwrap()
+    }
+
+    #[test]
+    fn a_body_without_content_type_is_sent_as_text_plain() {
+        assert_eq!(
+            sent_type(Vec::new()).as_deref(),
+            Some("text/plain; charset=utf-8"),
+            "§14: the host's default content-type"
+        );
+        let json = vec![("content-type".into(), "application/json".into())];
+        assert_eq!(sent_type(json).as_deref(), Some("application/json"));
     }
 
     #[test]

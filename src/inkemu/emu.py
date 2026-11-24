@@ -40,7 +40,7 @@ class Emu:
     """One emulated InkApp: Lua state, ctx, virtual time, screen and lifecycle."""
 
     instruction_budget = INSTRUCTION_BUDGET  # per outermost callback; tests lower it on the class
-    storage_quota = STORAGE_QUOTA  # (bytes, files) of ctx.storage and again of ctx.files; tests lower it on the class
+    storage_quota = STORAGE_QUOTA  # (bytes, files) of ctx.storage; ctx.files takes only the file count; tests lower it
 
     def __init__(
         self,
