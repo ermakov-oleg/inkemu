@@ -417,7 +417,7 @@ dependencies = [
 
 [[package]]
 name = "inkcore"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "crc32fast",
  "flate2",
@@ -437,7 +437,7 @@ dependencies = [
 
 [[package]]
 name = "inkcore-wasm"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "base64",
  "inkcore",
@@ -446,7 +446,7 @@ dependencies = [
 
 [[package]]
 name = "inkemu"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "inkcore",
  "libc",
@@ -457,7 +457,7 @@ dependencies = [
 
 [[package]]
 name = "inkemu-py"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "inkcore",
  "inkemu",
