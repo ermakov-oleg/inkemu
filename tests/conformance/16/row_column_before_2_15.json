@@ -1,12 +1,13 @@
 {
   "spec": "§16",
-  "about": "a package for 2.12 keeps the rules before 2.15: every child has an integer w and h, children follow each other from the container's corner with gap, the 2.15 fields and look are ignored, spacer, fit, whole floats a 32-bit Lua cannot hold as integers and an x past 32767 are refused, and the grid, stack and layout methods give invalid_argument; a child outside the container is drawn whole (probe-confirmed except the fit record, which follows the contract text, and the 32-bit and x records, which are not measured; x_32768 is D15)",
+  "about": "a package for 2.12 keeps the rules before 2.15: every child has an integer w and h, children follow each other from the container's corner with gap, the 2.15 fields and look are ignored, spacer, fit, whole floats a 32-bit Lua cannot hold as integers and an x past 32767 are refused, and the grid, stack and layout methods give invalid_argument; a child outside the container is drawn whole, and the children before an invalid one stay registered though the call is refused (oracle s36; the rest probe-confirmed except the fit record, which follows the contract text, and the 32-bit and x records, which are not measured; x_32768 is D15)",
   "manifest": {"api": "2.12"},
   "expect": {
     "column": {"value": {"ok": true, "ret": []}, "spec": "§16"},
     "row": {"value": {"ok": true, "ret": []}, "spec": "§16"},
     "no_width": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
     "spacer": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "partial": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
     "fit": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
     "x_past_32_bits": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
     "x_32768": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "deviation": "D15", "spec_value": {"ok": true, "ret": []}},

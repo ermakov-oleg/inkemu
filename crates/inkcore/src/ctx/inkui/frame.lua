@@ -3,9 +3,11 @@
 
 MAX_CONTROLS = 128
 
--- control kinds by name, filled by the control files: { check = function(c, o, st) -> ok, paint = function(g, c,
--- look), focusable = bool, cost = controls counted against MAX_CONTROLS: a number, 1 when nil, or a function of the
--- control record }; composite.lua adds the fields of composite kinds
+-- control kinds by name, filled by the control files: { check = function(c, o, st) -> ok, check_box = function(c)
+-- -> ok, paint = function(g, c, look), focusable = bool, cost = controls counted against MAX_CONTROLS: a number, 1
+-- when nil, or a function of the control record }; composite.lua adds the fields of composite kinds. `check` reads
+-- only the script's fields; the optional `check_box` holds the placed box to the kind's rules and derives what the
+-- box gives, so a hidden child is checked without it.
 kinds = {}
 
 -- a canvas is the frame's g (or a layer's): host objects that cannot be told apart from Lua, so look at the methods
@@ -42,6 +44,12 @@ methods.end_frame = function(self)
   end
 end
 
+-- whether the placed box of control record `c` is in range and keeps its kind's rules
+function box_ok(c)
+  local check_box = c.kind.check_box
+  return in_range(c) and (check_box == nil or check_box(c))
+end
+
 -- how many of a frame's MAX_CONTROLS the control record `c` takes
 function cost_of(c)
   local cost = c.kind.cost
@@ -72,7 +80,7 @@ function declare(st, name, id, o)
     return nil, INVALID
   end
   local c = { kind = kind, id = id, x = o.x, y = o.y, w = o.w, h = o.h }
-  if not (kind.check(c, o, st) and in_range(c)) then
+  if not (kind.check(c, o, st) and box_ok(c)) then
     return nil, INVALID
   end
   if not reserve(f, cost_of(c)) then

@@ -80,7 +80,7 @@ end
 -- what end_frame keeps for a container: it takes no focus and paints only its own look
 local CONTAINER_KIND = { paint = paint_container }
 
--- The control record of node `n`, checked by its kind's own rules: the record, or nil and the error code.
+-- The control record of node `n`, checked by its kind's field rules: the record, or nil and the error code.
 local function control_of(st, n)
   local c = { kind = kinds[n.kind], id = n.id }
   if not c.kind.check(c, n.o, st) then
@@ -89,7 +89,8 @@ local function control_of(st, n)
   return c
 end
 
--- Checks the controls under `n` without registering them (a hidden or zero-size subtree); returns as `register`.
+-- Checks the fields of the controls under `n` without registering them (a hidden or zero-size subtree), but not
+-- their boxes; returns as `register`.
 local function check_only(st, n)
   if CONTAINERS[n.kind] then
     for _, child in ipairs(n.nodes or n.children) do
@@ -141,7 +142,7 @@ local function register(st, f, n)
   end
   -- placed first: what a control costs may depend on its box
   c.x, c.y, c.w, c.h = n.x, n.y, n.w, n.h
-  if not in_range(c) then
+  if not box_ok(c) then
     return nil, INVALID
   end
   if not reserve(f, cost_of(c)) then
@@ -196,11 +197,12 @@ local function declare_container(st, kind, id, o)
       root = ok and root
     end
   else
+    -- a tree cut at its first invalid child: what comes before it is registered first
     root, err = old_tree(st, f, id, kind, o, x, y, w, h)
   end
   if root then
-    local _
-    _, err = register(st, f, root)
+    local _, refused = register(st, f, root)
+    err = refused or err
   end
   if err then
     return nil, err

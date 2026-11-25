@@ -547,17 +547,18 @@ function layout_tree(st, frame, id, kind, o, w)
 end
 
 -- Before 2.15 a container's children all have integer sizes and follow each other from its corner, `gap` apart;
--- the 2.15 fields are ignored. Sets `n.x n.y n.w n.h` of every node.
+-- the 2.15 fields are ignored. Sets `n.x n.y n.w n.h` of every node. At the first invalid child it stops, keeping the
+-- children before it (and what was built of a container it stopped in).
 local function old_children(cx, n, o, level)
   local list = o.children
   if list == nil then
     list = {}
   end
+  n.children = {}
   if type(list) ~= "table" or not (o.gap == nil or (is_integral(o.gap) and o.gap >= 0)) then
     return fail(cx, INVALID)
   end
   local gap, at = int_or(o.gap, 0), 0
-  n.children = {}
   for i = 1, #list do
     local item = list[i]
     if type(item) ~= "table" or not (is_side(item.w) and is_side(item.h)) then
@@ -580,24 +581,22 @@ local function old_children(cx, n, o, level)
     if cx.err then
       return
     end
+    n.children[i] = c
     if FLEX[kind] then
       old_children(cx, c, item, level + 1)
+      if cx.err then
+        return
+      end
     end
-    if cx.err then
-      return
-    end
-    n.children[i] = c
   end
 end
 
 -- The tree of a row or column declared as `id` in `frame` by a package for API 2.14 or earlier, placed at `x, y`
--- with size `w` × `h`. Returns as layout_tree does.
+-- with size `w` × `h`. Returns the tree, and the error code when a child is invalid: the reader registers the
+-- children one by one, so those before the invalid one are still registered (oracle s36).
 function old_tree(st, frame, id, kind, o, x, y, w, h)
   local cx = { st = st, frame = frame, ids = { [id] = true } }
   local n = { kind = kind, o = o, id = id, x = x, y = y, w = w, h = h }
   old_children(cx, n, o, 1)
-  if cx.err then
-    return nil, cx.err
-  end
-  return n
+  return n, cx.err
 end

@@ -1,7 +1,7 @@
 -- ctx.ui (§16, 2.14): composite controls, made of parts that are hit and focused one at a time, and `radio` and
 -- `tabs`.
 --
--- A composite kind has, besides `check` and `paint`:
+-- A composite kind has, besides `check`, `paint` and an optional `check_box`:
 --   count(c)            how many parts the control has this frame (each costs one control more)
 --   parts(c)            its parts in order, as { part = number, x, y, w, h }, from the control's final box
 --   part_enabled(c, n)  optional: false when part `n` is unavailable on its own
@@ -354,12 +354,15 @@ kinds.stepper = composite({
     end
     local lo, hi, v = o.min, o.max, o.value
     if not (is_integral(lo) and is_integral(hi) and lo <= hi and int_in(v, lo, hi)
-      and (o.step == nil or int_in(o.step, 1, math.maxinteger)) and c.w >= 2 * c.h) then
+      and (o.step == nil or int_in(o.step, 1, math.maxinteger))) then
       return false
     end
     c.min, c.max, c.value = math.tointeger(lo), math.tointeger(hi), math.tointeger(v)
     c.step = o.step and math.tointeger(o.step) or 1
     return true
+  end,
+  check_box = function(c)
+    return c.w >= 2 * c.h
   end,
   count = function()
     return 2
@@ -412,12 +415,19 @@ kinds.pager = composite({
     end
     local pages, page, bw = o.pages, o.page, o.button_w
     if not (is_integral(pages) and pages >= 1 and int_in(page, 1, pages)
-      and (bw == nil or int_in(bw, 1, c.w // 2))) then
+      and (bw == nil or int_in(bw, 1, math.maxinteger))) then
       return false
     end
     c.pages, c.page = math.tointeger(pages), math.tointeger(page)
+    c.button_w = bw and math.tointeger(bw)
+    return true
+  end,
+  check_box = function(c)
+    if c.button_w and c.button_w > c.w // 2 then
+      return false
+    end
     -- not measured: the default button width is h, but never more than half the box
-    c.button_w = bw and math.tointeger(bw) or math.min(c.h, c.w // 2)
+    c.button_w = c.button_w or math.min(c.h, c.w // 2)
     return true
   end,
   count = function()
@@ -468,7 +478,7 @@ kinds.list = composite({
     end
     local count, row_h = o.count, o.row_h
     -- not measured: `selected` has no upper bound (a row past the count simply is never on a page)
-    if not (is_integral(count) and count >= 0 and int_in(row_h, 1, c.h)
+    if not (is_integral(count) and count >= 0 and int_in(row_h, 1, math.maxinteger)
       and (o.page == nil or int_in(o.page, 1, math.maxinteger))
       and (o.selected == nil or int_in(o.selected, 1, math.maxinteger))) then
       return false
@@ -480,11 +490,19 @@ kinds.list = composite({
     c.skin, c.draw = skin, o.draw
     c.enabled = o.enabled ~= false
     c.count, c.row_h = math.tointeger(count), math.tointeger(row_h)
+    c.page = o.page and math.tointeger(o.page) or 1
+    c.selected = o.selected and math.tointeger(o.selected)
+    return true
+  end,
+  -- a row must fit the box; the box then gives the pages
+  check_box = function(c)
+    if c.row_h > c.h then
+      return false
+    end
     c.per = c.h // c.row_h
     -- ceil without the sum, which could pass 32 bits
     c.pages = math.max(1, c.count // c.per + (c.count % c.per > 0 and 1 or 0))
-    c.page = math.min(o.page and math.tointeger(o.page) or 1, c.pages)
-    c.selected = o.selected and math.tointeger(o.selected)
+    c.page = math.min(c.page, c.pages)
     c.first, c.last = page_rows(c)
     return true
   end,

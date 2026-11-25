@@ -142,12 +142,15 @@ no radio and is not the device, so panel timing and network completion were not 
   refused (a bad field of its own, or a box placed past 32767, see D15), the call returns `invalid_argument` there,
   and the container and the children registered before stay: they are drawn, hit and take focus. When the 128 controls
   run out first, the call returns `limit_exceeded` (D9), even if a later child is bad.
-- inkemu does: the same, for a control's own fields and its placed box. Sizing fields are checked for the whole tree
-  before anything is registered.
+- inkemu does: the same, for a control's own fields and its placed box, including the box rules of `stepper`,
+  `pager` and `list`. From 2.15 the sizing fields are checked for the whole tree before anything is registered;
+  before 2.15 the children are walked one by one, so one without an integer `w` or `h` also keeps those before it.
 - Status: measured on 26112001 (the reader's UI library run as a black box) for a bad field on the first child,
-  a bad field on the last child after the limit, and children placed past 32767; a bad field of its own on a child
-  in the middle, after valid ones, was not measured and is inferred from those cases.
-- Checks: `16/layout_limits` (`bad_child.before`, `child_past_32767.before`).
+  a bad field on the last child after the limit, children placed past 32767 and, before 2.15, a child without `w`
+  after valid ones (oracle s36); a bad field of its own on a child in the middle, after valid ones, was not measured
+  and is inferred from those cases.
+- Checks: `16/layout_limits` (`bad_child.before`, `child_past_32767.before`), `16/row_column_before_2_15`
+  (`partial`).
 
 ### D15 - coordinates up to 32767
 
@@ -267,10 +270,12 @@ and Wi-Fi rules of the lock screen (§15). These are nil or ignored in inkemu.
     same cumulative formula in 32-bit integers; the s17 oracle steps in `tests/test_inkui_oracle.py` pin those
     cases.
 - `ctx.ui` containers, not measured:
-  - A frame checks the structure and the sizing fields of the whole tree first (kinds, ids, sizes, the fields a
-    content size reads), so a bad one anywhere refuses the call before anything is registered; only a control's other
-    fields and its placed box are checked one by one (D14). A missing `id` or `kind` was measured only on the first
-    child.
+  - From 2.15 a frame checks the structure and the sizing fields of the whole tree first (kinds, ids, sizes, the
+    fields a content size reads), so a bad one anywhere refuses the call before anything is registered; only a
+    control's other fields and its placed box are checked one by one (D14). A missing `id` or `kind` was measured only
+    on the first child.
+  - Before 2.15 every refusal of a child (a bad `kind`, `id` or `gap`, too deep a nesting, as well as a missing `w`
+    or `h`, the one measured) keeps the children before it registered, including those of a container it stops in.
   - A part inkemu does not implement yet raises only when nothing in that first pass is invalid.
   - The 1024 children are counted in frames too.
   - A control declared at top level is held to the same 32767 limits as a child (D15).
@@ -306,6 +311,9 @@ and Wi-Fi rules of the lock screen (§15). These are nil or ignored in inkemu.
   - In a stack, a percentage `h` with `aspect_ratio` and no `w` gives the width once the inner height is known; a
     fitted stack's height takes each child's height at the width it gets in the inner box.
   - A stack nested in a row or column follows the contract text.
+  - A grid with `columns = { min = … }` asks for 0 px of width when an outer container computes its content size,
+    since its columns are counted from a width it does not have yet: as a `row` child with no `w` and no `grow` it
+    gets a width of 0.
 - `ctx.ui` radio, as measured with the reader's UI library run as a black box: a radio works at every API minor (as
   the other 2.13 and 2.14 controls do), a `nav` on it is accepted and ignored (the contract says composites take no
   `nav`), a 3 px cell draws no dot, and the fallback to the first control lands on item 1 while `ui:focus(id)` without
@@ -358,6 +366,17 @@ and Wi-Fi rules of the lock screen (§15). These are nil or ignored in inkemu.
   - `bold`, `reserve` and `font_min` of any type are accepted on both and have no effect.
   - A disabled box whose skin has a disabled look draws every part in it and gets no dots; without one, the parts
     are drawn normally and the dots cover the whole box.
+- `ctx.ui` stepper, not measured: `value ± step` is computed in 32-bit integers, so near the ends of that range it
+  can wrap past `min` or `max` instead of being clamped.
+- `ctx.ui` stepper, pager and list as children of a `row`, `column` or `grid`, as measured with the reader's UI
+  library run as a black box (oracle `s36_composite_children`): stretched or sized, they are drawn, hit and focused
+  from their laid-out box. A laid-out box that breaks the kind's box rule (a stepper narrower than 2h, a pager whose
+  `button_w` is over w // 2, a list whose `row_h` is over h) refuses the call as a bad field does (D14); a hidden
+  child's box is not held to those rules. `ui:layout` places such children without the box rules, and a stepper
+  cannot take `w = "fit"`. Checks: `16/composite_children`.
+- `ctx.ui` stepper, pager and list as children, not measured:
+  - A child laid out with zero width or height is not held to the box rules either, as it is not registered; its own
+    fields are still checked, as a hidden child's are.
 - `ctx.ui` list, as measured with the reader's UI library run as a black box (oracles `s21_list`, `s30_list_order_nav`):
   a page holds h // row_h rows (row_h 1..h), pages are max(1, ceil(count / rows)) and a page past the last is the
   last; row parts are the data indexes, a control costs 1 + the rows of its page, and `draw(g, box, index, state)` is
