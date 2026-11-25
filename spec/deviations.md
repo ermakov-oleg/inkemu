@@ -432,3 +432,22 @@ the README.
   - A skin whose image was released draws nothing of it (the canvas refuses those `g:image` calls) and still gets
     its text (check `16/skin_nine_slice`).
   - A `skins` key that is not a non-empty string, or a skin or variant that is not a table, is `invalid_argument`.
+- `ctx.ui` text fields, as measured with the reader's UI library run as a black box (oracle `s26_field`, API 2.12 and
+  2.26 alike): `ui:field` checks only `x`, `y`, `w`, `h`, `enabled` and `nav`; `text`, `placeholder`, `radius`, the
+  edit options and the callbacks are taken as they are, and `selected`, `badge` and an unknown `skin` are ignored. A
+  truthy `multiline` (even `"yes"`) draws the text wrapped by character from the top. Activating a field calls
+  `ctx.input:edit` with the text, `placeholder`, `max_chars`, `kind`, `multiline` and `enter` declared in the last
+  frame, unchecked, the area inside the 8 px margin as `rect`, and the library's own `on_change` and `on_end` even when
+  the field sets neither. Switching fields, `ui:stop_edit` and an `end_frame` without the edited field close the edit
+  with `ed:close()`, before the next edit starts or anything is painted. Checks: `16/field_edit` (on inkemu's own
+  docked input).
+- `ctx.ui` text fields, not measured:
+  - `enter = "next"` goes to the first enabled field after the edited one in the last frame, past other controls;
+    focus moves there even when the host refuses that edit.
+  - The callbacks, `enter` and the options come from the frame the edit started on; an `on_change` or `on_end` that
+    is not a function is left out. Inside the field's own `on_end`, `ui:editing()` is already nil.
+  - At `end_frame` an edit goes on while its id is declared as a field, even a disabled one, and ends when the id is
+    declared as another kind.
+  - A secret text is drawn as one `*` per UTF-8 character (per byte when it is not valid UTF-8); a secret text that
+    is not a string is drawn as it is.
+  - A field 16 px or less wide or high still draws its text box and passes its `rect`, which the host refuses.

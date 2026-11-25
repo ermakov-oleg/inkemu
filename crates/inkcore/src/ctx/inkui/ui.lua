@@ -24,8 +24,8 @@ end
 
 -- every method of §16 exists from the start; the files that implement one replace its stub
 for _, name in ipairs({
-  "begin_frame", "end_frame", "handle_event", "focus", "focused", "layout", "skin", "editing", "stop_edit",
-  "label", "button", "image", "field", "region",
+  "begin_frame", "end_frame", "handle_event", "focus", "focused", "layout", "skin",
+  "label", "button", "image", "region",
   "radio",
   "row", "column", "grid", "stack",
 }) do
@@ -81,6 +81,8 @@ function create(opts)
     owners = {},
     -- the skins of `create` by name, checked (skin.lua)
     skins = skins,
+    -- the field being edited (field.lua)
+    edit = nil,
   }
   return obj
 end

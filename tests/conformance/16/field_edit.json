@@ -1,0 +1,26 @@
+{
+  "spec": "§16",
+  "about": "a tapped field edits through ctx.input:edit, and while it does the script's own edit is busy; confirming a field with enter = next calls its on_end, then the next field (past a button) edits and takes focus; Back only calls on_end; a field tapped while the script's edit is open gets activate and edits nothing; stop_edit closes the edit without on_end and returns its text",
+  "steps": ["tap 100 60", "observe s1", "answer yes", "observe s2", "answer no", "observe s3", "answer yes",
+            "observe s4", "tap 100 60", "wait 1s", "observe s5"],
+  "expect": {
+    "tap1": {"value": ["a", "edit", "a"], "spec": "§16"},
+    "s1.pending.kind": {"value": "edit", "spec": "§16"},
+    "s1.pending.text": {"value": "first", "spec": "§16"},
+    "script_edit_while_field_edits": {"value": {"ok": true, "ret": [null, "busy"]}, "spec": "§16"},
+    "after_next": {"value": "b/b", "spec": "§16"},
+    "s2.pending.kind": {"value": "edit", "spec": "§16"},
+    "s2.pending.text": {"value": "second", "spec": "§16"},
+    "ends": {"value": "a:first:enter b:second:back", "spec": "§16"},
+    "field_while_script_edits": {"value": {"ok": true, "ret": ["a", "activate"]}, "spec": "§16"},
+    "editing_while_script_edits": {"value": "nil", "spec": "§16"},
+    "s3.pending.kind": {"value": "edit", "spec": "§4"},
+    "s3.pending.text": {"value": "mine", "spec": "§4"},
+    "s4.pending": {"value": null, "spec": "§4"},
+    "tap2": {"value": ["a", "edit", "a"], "spec": "§16"},
+    "stop_edit": {"value": {"ok": true, "ret": ["first"]}, "spec": "§16"},
+    "editing_after_stop": {"value": "nil", "spec": "§16"},
+    "s5.pending": {"value": null, "spec": "§16"}
+  },
+  "errors": []
+}

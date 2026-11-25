@@ -106,7 +106,7 @@ fn every_fresh_lua_state_gets_the_library() {
 }
 
 #[test]
-fn dot_calls_and_stubs_raise_at_the_app_line() {
+fn dot_calls_raise_at_the_app_line() {
     let mut core = boot("");
     let err = core.lua_exec("ctx.ui.create()").unwrap_err();
     assert!(
@@ -122,13 +122,6 @@ fn dot_calls_and_stubs_raise_at_the_app_line() {
         err.starts_with(
             "lua_exec:2: bad argument #1 to 'begin_frame' (call ui:begin_frame with a colon)"
         ),
-        "{err}"
-    );
-    let err = core
-        .lua_exec("local ui = ctx.ui:create()\nui:field('ok', {})")
-        .unwrap_err();
-    assert!(
-        err.starts_with("lua_exec:2: ui:field is not implemented in inkemu yet"),
         "{err}"
     );
 }
@@ -999,19 +992,60 @@ fn layout_run(api: &str, code: &str) -> String {
     }
 }
 
+/// Lua for [`layout_run`] that plays the docked input as the oracle's stub does: `input.edit` keeps its options in
+/// `opened` (or answers `nil, refuse` while `refuse` is set) and returns an edit whose `close` counts in `closed`;
+/// `finish(how, text)` ends the live edit as the host does, `typed(text)` changes its text; `tap(x, y)` is a tap.
+const DOCKED: &str = r#"
+local opened, closed, live, refuse = {}, 0, nil, nil
+input.edit = function(_, o)
+  if refuse then return nil, refuse end
+  local ed = { o = o, t = o.text }
+  function ed.close(self)
+    closed = closed + 1
+    if live ~= self then return nil end
+    live = nil
+    return self.t
+  end
+  live = ed
+  opened[#opened + 1] = o
+  return ed
+end
+local function finish(how, text)
+  local ed = live
+  live = nil
+  ed.t = text or ed.t
+  ed.o.on_end("ctx", ed.t, how)
+end
+local function typed(text) live.t = text live.o.on_change("ctx", text) end
+local function tap(x, y)
+  local id, action = ui:handle_event({ type = "pointer", phase = "up", gesture = "tap", x = x, y = y })
+  return tostring(id) .. "," .. tostring(action)
+end
+"#;
+
 #[test]
-fn containers_raise_what_inkemu_does_not_implement_at_the_app_line() {
+fn a_field_child_is_drawn_and_edits_in_the_box_its_container_gives_it() {
     for kind in ["column", "grid", "stack"] {
         let code = format!(
-            "ui:begin_frame(g)\nui:{kind}('c', {{x = 0, y = 0, w = 100, h = 100, columns = {cols}, children = {{{{kind = 'field', id = 's', w = 10, h = 10}}}}}})",
+            "{DOCKED}ui:begin_frame(g)\n\
+             ui:{kind}('c', {{x = 10, y = 20, w = 200, h = 100, columns = {cols}, children = {{\n\
+               {{kind = 'field', id = 's', w = 100, h = 40, text = 'hi'}}}}}})\n\
+             ui:end_frame()\n\
+             local r = tap(15, 25) local o = opened[1].rect\n\
+             return table.concat(log, ' '), r, o.x, o.y, o.w, o.h",
             cols = if kind == "grid" { "1" } else { "nil" }
         );
-        let err = layout_run("2.26", &code);
-        assert!(
-            err.starts_with("index.lua:3: ui:field is not implemented in inkemu yet"),
-            "{code}: {err}"
+        assert_eq!(
+            layout_run("2.26", &code),
+            "rect(10,20,100,40,{line_width=1,radius=0}) \
+             text_box(18,28,84,24,hi,{font=@medium,overflow=ellipsis,valign=middle,wrap=none}),s,edit,18,28,84,24",
+            "{kind}"
         );
     }
+}
+
+#[test]
+fn an_invalid_child_field_refuses_the_container_and_ui_layout_takes_a_skin() {
     // an invalid field anywhere in the tree wins over a part inkemu lacks; ui:layout takes a registered container
     // skin and draws nothing
     assert_eq!(
@@ -1482,6 +1516,7 @@ fn whole_floats_past_32_bits_are_invalid_arguments() {
           add('rect.' .. k, function(v) return layout(with(R, k, v), {kind = 'row', children = {{grow = 1}}}) end)\n\
           add('row.' .. k, function(v) return framed('row', 'r', with(ROW, k, v)) end)\n\
           add('button.' .. k, function(v) return framed('button', 'b', with(R, k, v)) end)\n\
+          add('field.' .. k, function(v) return framed('field', 'f', with(R, k, v)) end)\n\
           add('radio.' .. k, function(v) return framed('radio', 'r', with(with(R, 'items', {'a'}), k, v)) end)\n\
         end\n\
         for _, k in ipairs({'w', 'h', 'min_w', 'max_w', 'min_h', 'max_h', 'grow', 'shrink'}) do\n\
@@ -1554,4 +1589,75 @@ fn grid_row_spans_a_span_past_min_columns_and_unused_rows() {
         out,
         "0,0,200,10 200,0,100,20 0,10,100,10 0,20,300,20 0,40,100,10,invalid_argument,100,invalid_argument"
     );
+}
+
+#[test]
+fn the_next_field_skips_other_controls_and_disabled_fields() {
+    let out = layout_run(
+        "2.26",
+        &format!(
+            "{DOCKED}local trace = {{}}\n\
+             local function frame()\n\
+               ui:begin_frame(g)\n\
+               ui:field('a', {{x = 0, y = 0, w = 100, h = 40, enter = 'next', on_end = function(ctx, text, how)\n\
+                 trace[#trace + 1] = 'end:' .. text .. ':' .. how .. ':' .. tostring(ui:editing()) end}})\n\
+               ui:button('b', {{x = 0, y = 50, w = 100, h = 40}})\n\
+               ui:field('c', {{x = 0, y = 100, w = 100, h = 40, enabled = false}})\n\
+               ui:field('d', {{x = 0, y = 150, w = 100, h = 40, text = 'dd', enter = 'next'}})\n\
+               ui:end_frame()\n\
+             end\n\
+             frame() trace[#trace + 1] = tap(5, 5)\n\
+             finish('enter', 'x')\n\
+             trace[#trace + 1] = tostring(ui:editing()) .. ':' .. tostring(ui:focused()) .. ':' .. opened[2].text\n\
+             finish('enter')\n\
+             trace[#trace + 1] = tostring(ui:editing()) .. ':' .. #opened\n\
+             tap(5, 5) refuse = 'busy' finish('enter', 'x')\n\
+             trace[#trace + 1] = tostring(ui:editing()) .. ':' .. tostring(ui:focused())\n\
+             return table.concat(trace, ' ')"
+        ),
+    );
+    // inside its own on_end the field is no longer edited; a refused next edit still takes focus there
+    assert_eq!(
+        out,
+        "a,edit end:x:enter:nil d:d:dd nil:2 end:x:enter:nil nil:d"
+    );
+}
+
+#[test]
+fn field_callbacks_that_are_not_functions_are_left_out_and_a_secret_counts_characters() {
+    let out = layout_run(
+        "2.26",
+        &format!(
+            "{DOCKED}ui:begin_frame(g)\n\
+             ui:field('n', {{x = 0, y = 0, w = 100, h = 40, on_change = 5, on_end = 'x', enter = 'next'}})\n\
+             ui:field('s', {{x = 0, y = 50, w = 100, h = 40, kind = 'secret', text = 'äöü'}})\n\
+             ui:field('z', {{x = 0, y = 100, w = 100, h = 40, kind = 'secret', text = '\\255\\254'}})\n\
+             ui:end_frame()\n\
+             tap(5, 5) typed('t') finish('enter')\n\
+             return log[4], log[6], ui:editing()"
+        ),
+    );
+    assert_eq!(
+        out,
+        "text_box(8,58,84,24,***,{font=@medium,overflow=ellipsis,valign=middle,wrap=none}),\
+         text_box(8,108,84,24,**,{font=@medium,overflow=ellipsis,valign=middle,wrap=none}),s"
+    );
+}
+
+#[test]
+fn an_edit_ends_at_end_frame_only_when_its_id_is_no_longer_a_field() {
+    let out = layout_run(
+        "2.26",
+        &format!(
+            "{DOCKED}local out = {{}}\n\
+             local function frame(decl) ui:begin_frame(g) decl() ui:end_frame()\n\
+               out[#out + 1] = tostring(ui:editing()) .. ':' .. closed end\n\
+             frame(function() ui:field('a', {{x = 0, y = 0, w = 100, h = 40}}) end)\n\
+             tap(5, 5)\n\
+             frame(function() ui:field('a', {{x = 0, y = 50, w = 100, h = 40, enabled = false}}) end)\n\
+             frame(function() ui:button('a', {{x = 0, y = 0, w = 100, h = 40}}) end)\n\
+             return table.concat(out, ' ')"
+        ),
+    );
+    assert_eq!(out, "nil:0 a:0 nil:1");
 }

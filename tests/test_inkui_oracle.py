@@ -15,6 +15,8 @@ Each step is compared in full, except:
   is left out of the named canvas calls, the rest is compared, and the step is skipped.
 - `HOST_REFUSES` lists the canvas calls the core refuses with a Lua error (the oracle's canvas accepted anything); any
   other refusal fails the step.
+- `HOST_FAILS` lists the bad canvas values the core reports when the replay's frame ends (the replay runs in one
+  frame), which the oracle's canvas took; any other error fails the scenario.
 - `PARKED` steps differ from the oracle in a known way that a later task decides. They are checked first, in full, and
   are strict xfails: one that matches, or differs in more than a frame's or a `ui:layout` call's results, fails.
 - An event step that acts on a frame with a control inkemu does not implement yet (the last closed frame had a
@@ -83,6 +85,12 @@ HOST_REFUSES: dict[tuple[str, int], list[str]] = {
             (41, LABEL_TEXT_REFUSED[:1]),
         )
     },
+}
+
+# scenario -> the core's error for each bad canvas value it finds when the replay's frame ends, in order
+HOST_FAILS: dict[str, list[str]] = {
+    # a field's radius is not checked (s26#62) and reaches g:rect as it is; the core fails the frame on "x"
+    **{f"s26_field.api{minor}": ["radius must be a finite number, got 'x'"] for minor in (12, 26)},
 }
 
 # (scenario, step) -> how inkemu still differs from the oracle there, until a later task decides
@@ -162,7 +170,9 @@ def replay(scenario: str, tmp: Path) -> tuple[list[dict], dict]:
     for w, h in sorted(set(IMAGE_MARKER.findall(json.dumps(inp["steps"])))):
         images(app, int(w), int(h))
     emu = Emu(app, state_dir=tmp / scenario / "state", fixtures_dir=tmp / scenario / "fx", fresh=True, fonts_dir=FONTS)
-    assert emu.errors == [], emu.errors
+    expected = HOST_FAILS.get(scenario, [])
+    assert len(emu.errors) == len(expected), emu.errors
+    assert all(e in r for e, r in zip(expected, emu.errors, strict=True)), emu.errors
     result = emu.lua_eval("return RESULT")
     ours = [json.loads(line) for line in result.split("\n")]
     assert len(ours) == len(data["output"])
