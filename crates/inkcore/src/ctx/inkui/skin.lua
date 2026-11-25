@@ -160,7 +160,9 @@ function skin_face(g, skin, x, y, w, h, st)
   local lk, invert, ring = pick(skin, st)
   nine_slice(g, lk, x, y, w, h, invert)
   local t, r, b, l = skin_pad(skin)
-  return lk.text_color, x + l, y + t, math.max(1, w - l - r), math.max(1, h - t - b), ring
+  -- the inverted normal look inverts its text colour too
+  local tc = invert and 15 - lk.text_color or lk.text_color
+  return tc, x + l, y + t, math.max(1, w - l - r), math.max(1, h - t - b), ring
 end
 
 function skin_ring(g, x, y, w, h)

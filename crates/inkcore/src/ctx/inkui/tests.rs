@@ -572,10 +572,10 @@ fn a_skinned_button_draws_its_look_then_the_text_the_ring_and_the_dots() {
         frame(&lua, BARE, "", &button(", skin = 'bare'")),
         [look("bare", false), text.into()]
     );
-    // no selected look: the normal one inverted, keeping its text colour
+    // no selected look: the normal one inverted, the text colour too
     assert_eq!(
         frame(&lua, BARE, "", &button(", skin = 'bare', selected = true")),
-        [look("bare", true), text.into()]
+        [look("bare", true), text.replace("color=4", "color=11")]
     );
     // the ring comes after the text, square whatever the radius
     assert_eq!(

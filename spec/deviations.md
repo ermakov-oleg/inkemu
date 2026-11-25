@@ -304,15 +304,14 @@ the README.
   - A cell `gap` wider than the box counts as the box, a cell never gets a negative size, and the text width after
     the ring is at least 0.
   - A `nav` entry naming a composite whose default part is unavailable falls back to the search by position.
-  - With a skin, a focused cell gets the square focus ring after its text; a disabled radio draws each cell in the
-    skin's disabled look when it has one (then no dots), else in its usual look covered with dots.
+  - With a skin that has a disabled look, a disabled radio draws each cell in it and gets no dots.
 - `ctx.ui` switch, as measured with the reader's UI library run as a black box: `selected` is not type-checked (any
   value but nil and false is on), a `badge` is ignored, a `radius` only shapes the focus frame (radius + 3 when
   positive), `focus_style` does not change a switch's look, and `bold = false` leaves `bold` out of the text call.
   Checks: `16/switch_geometry`.
 - `ctx.ui` switch, not measured: the text is left out when the room before the capsule is 0 or less, and with a note
-  of odd height the note box takes the extra pixel. With a skin, focus picks the skin's focused look for the capsule
-  but only the switch's own frame around the whole control is drawn, and a skin's disabled look replaces the dots.
+  of odd height the note box takes the extra pixel. With a skin that has a focused look, focus draws it at the
+  capsule as well as the switch's own frame; with a disabled look, a disabled switch gets no dots.
 - `ctx.ui` images, as measured with the reader's UI library run as a black box: an image button draws its image
   scaled to the box (`invert` only when selected, never for emphasis or focus), then the border rect without a `fill`
   key, the focus frame, the text with no colour of its own, the badge and the dots; focus never fills it. A top-level
@@ -335,14 +334,18 @@ the README.
     is the square 2 px frame 3 px out, drawn after the text, and the outline focus style draws a skin without a
     focused look the same way. A skinned button's `radius` and `border` change nothing.
   - Inside a frame, `ui:skin` draws on the canvas at once, below the controls that `end_frame` paints.
+  - Measured later (oracle scenario s27): a skin without a selected look draws its normal look with `invert = true`
+    and the text in 15 minus the look's text colour, on a button and on a radio cell alike; without a disabled look
+    a disabled button, switch or radio gets its usual look and the dots over the whole control. A skinned switch
+    with focus gets only its own frame around the whole control, after its text; a skinned radio cell with focus
+    gets the square frame 3 px out after its text. A container's skin replaces its background and border, and its
+    divider is still drawn, after the skin and before the children.
   Checks: `16/skins_validation`, `16/skin_nine_slice`.
 - `ctx.ui` skins, not measured:
-  - A skin without a selected look draws its normal look with `invert = true` and keeps that look's text colour.
   - `ui:skin` with `focused` and `enabled = false` on a skin with a disabled look draws that look with the ring.
   - An emphasis look with focus gets the ring like a selected one, also when the skin has a focused look; the ring
     stays square when the button sets a `radius`; the outline focus style uses a skin's focused look as the fill
     style does.
-  - A container's skin replaces its background and border; its divider is still drawn.
   - A skin whose image was released draws nothing of it (the canvas refuses those `g:image` calls) and still gets
     its text (check `16/skin_nine_slice`).
   - A `skins` key that is not a non-empty string, or a skin or variant that is not a table, is `invalid_argument`.
