@@ -9,6 +9,8 @@
   `nil, "invalid_argument"` for a malformed one. 0.2 kept any table.
 - An `image` child of a `ui:layout` spec or a container takes only an image object as `source`; a plain table with
   `width` and `height` is `invalid_argument`.
+- In a package for API 2.14 or earlier, a `row` or `column` that refuses a child keeps the children before it
+  registered (drawn, hit and focusable) and its own `id` taken, as the reader does; 0.2 registered nothing of it.
 
 ### Added
 
