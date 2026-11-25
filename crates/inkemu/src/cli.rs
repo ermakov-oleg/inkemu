@@ -188,11 +188,7 @@ fn client(
         Ok(v) => v,
         Err(e) => return fail(err, &e, 2),
     };
-    let reply: Reply = serde_json::from_value(value.clone()).unwrap_or_else(|_| Reply {
-        ok: value.get("ok").and_then(|v| v.as_bool()),
-        error: value.get("error").map(|e| e.as_str().map(str::to_owned)),
-        ..Reply::default()
-    });
+    let reply = Reply::from_value(value);
     let _ = writeln!(out, "{}", command::format_result(&cmd, &reply));
     if reply.ok != Some(true) {
         let text = match &reply.error {

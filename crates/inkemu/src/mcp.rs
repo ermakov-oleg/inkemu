@@ -29,14 +29,6 @@ fn failure(msg: impl Into<String>) -> Reply {
     }
 }
 
-fn reply_of(value: Value) -> Reply {
-    serde_json::from_value(value.clone()).unwrap_or_else(|_| Reply {
-        ok: value.get("ok").and_then(Value::as_bool),
-        error: value.get("error").map(|e| e.as_str().map(str::to_owned)),
-        ..Reply::default()
-    })
-}
-
 fn post(cmd: &str, args: Value) -> Reply {
     let Some(info) = daemon::read_info(&paths::state_root()) else {
         return failure(NO_DAEMON);
@@ -46,7 +38,7 @@ fn post(cmd: &str, args: Value) -> Reply {
         _ => Map::new(),
     };
     match daemon::post_command(info.port, cmd, &args) {
-        Ok(v) => reply_of(v),
+        Ok(v) => Reply::from_value(v),
         Err(e) => failure(e),
     }
 }
@@ -279,7 +271,7 @@ fn spawn(req: &StartRequest, root: &Path) -> Result<Started, String> {
         }
         std::thread::sleep(POLL);
     }
-    if matches!(child.try_wait(), Ok(None)) {
+    if !matches!(child.try_wait(), Ok(Some(_))) {
         let _ = child.kill();
         let _ = child.wait();
     }
@@ -311,7 +303,7 @@ fn screenshot() -> Result<Vec<u8>, String> {
         .map_err(|e| e.to_string())?
         .into_temp_path();
     let result = post("shot", json!({"path": tmp.to_string_lossy()}));
-    let shot = result.shot.as_deref().is_some_and(|s| !s.is_empty());
+    let shot = matches!(&result.shot, Some(Some(s)) if !s.is_empty());
     if result.ok != Some(true) || !shot {
         return Err(match result.error {
             Some(Some(e)) if !e.is_empty() => e,
@@ -320,8 +312,6 @@ fn screenshot() -> Result<Vec<u8>, String> {
     }
     std::fs::read(&tmp).map_err(|e| e.to_string())
 }
-
-// ---- tools -------------------------------------------------------------------------------------
 
 const START_DOC: &str = "Start the emulator daemon for an app directory: headless by default, or with a window; \
 net replay (default),\nrecord or live. Reuses a running daemon for the same app unless window/net/fresh ask for \
@@ -569,7 +559,7 @@ mod tests {
                 refresh: None,
                 refreshes: vec![],
             }),
-            shot: None,
+            shot: Some(None),
             ..Reply::default()
         }
     }
@@ -643,6 +633,13 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&started).unwrap(),
             r#"{"ok":true,"error":null,"log_tail":[],"pid":7,"port":8}"#
+        );
+        let daemon = json!({"ok": true, "error": null, "texts": [], "log_tail": [], "errors": [],
+            "warnings": [], "shot": null});
+        let a = attach_reply(Reply::from_value(daemon), false, None, None, false);
+        assert_eq!(
+            serde_json::to_string(&a).unwrap(),
+            r#"{"ok":true,"error":null,"texts":[],"log_tail":[],"errors":[],"warnings":[],"shot":null,"already_running":true}"#
         );
         let text = serde_json::to_string_pretty(&failure(NO_DAEMON)).unwrap();
         assert_eq!(

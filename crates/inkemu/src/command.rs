@@ -430,10 +430,25 @@ pub struct Reply {
     pub warnings: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<StatusJson>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub shot: Option<String>,
+    #[serde(
+        default,
+        deserialize_with = "keep_null",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub shot: Option<Option<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub log: Option<Vec<String>>,
+}
+
+impl Reply {
+    /// The daemon's answer, or just its `ok` and `error` if the rest does not fit.
+    pub fn from_value(value: Value) -> Reply {
+        serde_json::from_value(value.clone()).unwrap_or_else(|_| Reply {
+            ok: value.get("ok").and_then(Value::as_bool),
+            error: value.get("error").map(|e| e.as_str().map(str::to_owned)),
+            ..Reply::default()
+        })
+    }
 }
 
 impl From<CmdResult> for Reply {
@@ -446,7 +461,7 @@ impl From<CmdResult> for Reply {
             errors: Some(r.errors),
             warnings: Some(r.warnings),
             status: Some(r.status),
-            shot: r.shot,
+            shot: Some(r.shot),
             log: r.log,
         }
     }
@@ -492,8 +507,12 @@ pub fn texts(s: &Session) -> Vec<Text> {
 /// What the client prints for one command result.
 pub fn format_result(cmd: &str, r: &Reply) -> String {
     match cmd {
-        "shot" if r.shot.as_deref().is_some_and(|s| !s.is_empty()) => {
-            return r.shot.clone().unwrap_or_default();
+        "shot" => {
+            if let Some(Some(path)) = &r.shot {
+                if !path.is_empty() {
+                    return path.clone();
+                }
+            }
         }
         "texts" => {
             let lines: Vec<_> = r
@@ -1011,9 +1030,23 @@ mod tests {
         let text = r#"{"ok":true,"error":null,"texts":[],"log_tail":[],"errors":[],"warnings":[],"shot":null}"#;
         let r: Reply = serde_json::from_str(text).unwrap();
         assert_eq!(r.error, Some(None));
+        assert_eq!(r.shot, Some(None));
+        assert_eq!(serde_json::to_string(&r).unwrap(), text);
+    }
+
+    #[test]
+    fn reply_from_value_keeps_a_null_shot_in_place_and_falls_back_to_ok_and_error() {
+        let daemon = json!({"ok": true, "error": null, "texts": [], "log_tail": [], "errors": [],
+            "warnings": [], "shot": null});
+        let r = Reply::from_value(daemon);
         assert_eq!(
             serde_json::to_string(&r).unwrap(),
-            r#"{"ok":true,"error":null,"texts":[],"log_tail":[],"errors":[],"warnings":[]}"#
+            r#"{"ok":true,"error":null,"texts":[],"log_tail":[],"errors":[],"warnings":[],"shot":null}"#
+        );
+        let r = Reply::from_value(json!({"ok": false, "error": "boom", "texts": "not a list"}));
+        assert_eq!(
+            serde_json::to_string(&r).unwrap(),
+            r#"{"ok":false,"error":"boom"}"#
         );
     }
 
