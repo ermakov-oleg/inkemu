@@ -1,5 +1,5 @@
 //! The daemon half of 0.1 `daemon.py`: `daemon.json`, `POST /cmd`, the serve loop and the HTTP client.
-use std::io;
+use std::io::{self, Read as _};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
@@ -110,17 +110,26 @@ pub fn remove_info(root: &Path) {
 
 /// Sends one command to the daemon on `port`; Err unless an inkemu daemon answers.
 pub fn post_command(port: u16, cmd: &str, args: &Map<String, Value>) -> Result<Value, String> {
-    let body = serde_json::json!({"cmd": cmd, "args": args}).to_string();
+    #[derive(serde::Serialize)]
+    struct Body<'a> {
+        cmd: &'a str,
+        args: &'a Map<String, Value>,
+    }
+    let body = serde_json::to_string(&Body { cmd, args }).map_err(|e| e.to_string())?;
     let agent = ureq::AgentBuilder::new().timeout(CLIENT_TIMEOUT).build();
     let resp = agent
         .post(&format!("http://{HOST}:{port}/cmd"))
         .set("Content-Type", "application/json")
         .send_string(&body);
-    let text = match resp {
-        Ok(r) | Err(ureq::Error::Status(_, r)) => r.into_string(),
+    let resp = match resp {
+        Ok(r) | Err(ureq::Error::Status(_, r)) => r,
         Err(e) => return Err(format!("cannot reach the daemon on port {port}: {e}")),
-    }
-    .map_err(|e| format!("cannot reach the daemon on port {port}: {e}"))?;
+    };
+    // into_string() would refuse bodies over 10 MB
+    let mut text = String::new();
+    resp.into_reader()
+        .read_to_string(&mut text)
+        .map_err(|e| format!("cannot reach the daemon on port {port}: {e}"))?;
     match serde_json::from_str::<Value>(&text) {
         Ok(v) if v.as_object().is_some_and(|o| o.contains_key("ok")) => Ok(v),
         _ => Err(format!(
@@ -143,6 +152,8 @@ fn reply(req: Request, code: u16, body: String) {
     let _ = req.respond(
         Response::from_string(body)
             .with_status_code(code)
+            // keep Content-Length for big replies; tiny_http would switch to chunked at 32 KiB
+            .with_chunked_threshold(usize::MAX)
             .with_header(ct),
     );
 }
@@ -708,6 +719,39 @@ mod tests {
     }
 
     #[test]
+    fn big_replies_keep_content_length() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut s = hello(tmp.path());
+        for i in 0..2000 {
+            s.log_line(&format!("line {i} {}", "x".repeat(40)));
+        }
+        let mut d = Daemon::new(0).unwrap();
+        let port = d.port();
+        let head = pumping(&mut d, &mut s, move || {
+            let body = br#"{"cmd": "log"}"#;
+            let req = format!(
+                "POST /cmd HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+                body.len()
+            );
+            let mut c = TcpStream::connect((HOST, port)).unwrap();
+            c.write_all(req.as_bytes()).unwrap();
+            c.write_all(body).unwrap();
+            let mut out = Vec::new();
+            c.read_to_end(&mut out).unwrap();
+            String::from_utf8(out).unwrap()
+        });
+        let (h, body) = head.split_once("\r\n\r\n").unwrap();
+        let h = h.to_lowercase();
+        assert!(body.len() > 32768, "{}", body.len());
+        assert!(
+            h.contains(&format!("content-length: {}", body.len())),
+            "{h}"
+        );
+        assert!(!h.contains("transfer-encoding"), "{h}");
+        d.close();
+    }
+
+    #[test]
     fn stop_sets_stopped() {
         let tmp = tempfile::tempdir().unwrap();
         let mut s = hello(tmp.path());
@@ -717,6 +761,11 @@ mod tests {
         let (_, v) = pumping(&mut d, &mut s, move || post(port, r#"{"cmd": "nope"}"#));
         assert_eq!(v["ok"], json!(false));
         assert!(!d.stopped(), "a failed stop must not stop");
+        let (_, v) = pumping(&mut d, &mut s, move || {
+            post(port, r#"{"cmd": "stop", "args": {"x": 1}}"#)
+        });
+        assert_eq!(v["ok"], json!(false));
+        assert!(!d.stopped(), "a stop that fails must not stop");
         let (code, v) = pumping(&mut d, &mut s, move || post(port, r#"{"cmd": "stop"}"#));
         assert_eq!((code, &v["ok"]), (200, &json!(true)));
         assert!(d.stopped());
@@ -813,15 +862,17 @@ mod tests {
                 thread::sleep(Duration::from_millis(5));
             }
             let info = read_info(&watch).unwrap();
-            assert_eq!(info.app, "hello");
+            // a command is served while the loop runs; the kill must happen whatever this returns
             let r = post_command(info.port, "state", &Map::new());
-            assert!(r.is_ok(), "{r:?}");
             // SAFETY: the handler is installed before daemon.json appears
             unsafe { libc::kill(libc::getpid(), libc::SIGINT) };
+            (info.app, r.is_ok())
         });
-        // a command is served while the loop runs
-        serve(&mut s, 0).unwrap();
-        h.join().unwrap();
+        let served = serve(&mut s, 0);
+        std::env::remove_var("INKEMU_STATE_ROOT");
+        let (app, replied) = h.join().unwrap();
+        served.unwrap();
+        assert_eq!((app.as_str(), replied), ("hello", true));
         assert!(!root.join("daemon.json").exists());
     }
 }
