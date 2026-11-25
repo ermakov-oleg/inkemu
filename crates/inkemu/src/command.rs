@@ -538,6 +538,26 @@ pub fn format_result(cmd: &str, r: &Reply) -> String {
 
 // ---- screenshots -----------------------------------------------------------------------------------------
 
+/// `str(Path(p))` of Python's pathlib: no `.` components, no repeated or trailing `/`, `.` for nothing.
+pub fn py_path_str(p: &Path) -> String {
+    let text = p.to_string_lossy();
+    let lead = text.len() - text.trim_start_matches('/').len();
+    // POSIX keeps exactly two leading slashes, any other count is one
+    let root = match lead {
+        0 => "",
+        2 => "//",
+        _ => "/",
+    };
+    let parts: Vec<_> = text
+        .split('/')
+        .filter(|c| !c.is_empty() && *c != ".")
+        .collect();
+    if parts.is_empty() && root.is_empty() {
+        return ".".into();
+    }
+    format!("{root}{}", parts.join("/"))
+}
+
 /// `<dir>/NNN.png` after the highest numbered PNG in `dir`.
 pub fn next_shot(dir: &Path) -> PathBuf {
     let max = fs::read_dir(dir)
@@ -581,6 +601,10 @@ fn os_error(e: &io::Error, path: &Path) -> String {
 pub fn save_shot(s: &Session, path: &Path) -> Result<(), String> {
     if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
         fs::create_dir_all(dir).map_err(|e| os_error(&e, dir))?;
+    }
+    // PIL picks the format by the extension; we always write PNG but refuse what PIL refuses
+    if path.extension().is_none_or(|e| e.is_empty()) {
+        return Err("unknown file extension: ".into());
     }
     let (w, h, depth, data) = match s.core().frame_gray() {
         Some(g) => (g.w, g.h, png::BitDepth::Eight, g.gray_bytes()),
@@ -642,14 +666,11 @@ pub fn execute(s: &mut Session, cmd: &str, args: &Map<String, Value>) -> CmdResu
         match cmd {
             "shot" => {
                 let path = match norm.get("path").and_then(Value::as_str) {
-                    Some(p) if !p.is_empty() => PathBuf::from(p),
-                    _ => next_shot(&s.state_dir().join("shots")),
+                    Some(p) if !p.is_empty() => PathBuf::from(py_path_str(Path::new(p))),
+                    _ => PathBuf::from(py_path_str(&next_shot(&s.state_dir().join("shots")))),
                 };
                 save_shot(s, &path)?;
-                shot = Some(match norm.get("path").and_then(Value::as_str) {
-                    Some(p) if !p.is_empty() => p.to_string(),
-                    _ => path.to_string_lossy().into_owned(),
-                });
+                shot = Some(path.to_string_lossy().into_owned());
             }
             "log" => log = Some(s.core().log().to_vec()),
             _ => {}
@@ -714,6 +735,7 @@ pub fn run_steps(
             "'stop' only makes sense against a running daemon".into(),
         ));
     }
+    let out_dir = &PathBuf::from(py_path_str(out_dir));
     fs::create_dir_all(out_dir).map_err(|e| RunError::Step(os_error(&e, out_dir)))?;
     let mut written = Vec::new();
     let failed = run_plan(s, plan, out_dir, out, &mut written);
@@ -996,6 +1018,47 @@ mod tests {
     }
 
     #[test]
+    fn py_path_str_matches_pathlib() {
+        // expected values are `str(Path(p))` from CPython
+        let cases = [
+            ("./a.png", "a.png"),
+            ("a//b/", "a/b"),
+            (".", "."),
+            ("./", "."),
+            ("//x/./y", "//x/y"),
+            ("/x/", "/x"),
+            ("a/./b/../c", "a/b/../c"),
+            ("", "."),
+            ("///x", "/x"),
+            ("/", "/"),
+            ("./out/001.png", "out/001.png"),
+            ("a/.", "a"),
+            ("../a", "../a"),
+        ];
+        for (p, want) in cases {
+            assert_eq!(py_path_str(Path::new(p)), want, "{p:?}");
+        }
+    }
+
+    #[test]
+    fn shot_path_is_normalised_and_needs_an_extension() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut s = hello(tmp.path());
+        let dir = tmp.path().to_str().unwrap();
+        let given = format!("{dir}//sub/./own.png");
+        let r = execute(&mut s, "shot", &args(json!({ "path": given })));
+        assert_eq!(r.shot, Some(format!("{dir}/sub/own.png")));
+        let bare = tmp.path().join("noext");
+        let r = execute(
+            &mut s,
+            "shot",
+            &args(json!({"path": bare.to_str().unwrap()})),
+        );
+        assert_eq!(r.error.as_deref(), Some("unknown file extension: "));
+        assert!(r.shot.is_none() && !bare.exists());
+    }
+
+    #[test]
     fn next_shot_counts_from_the_highest_png() {
         let tmp = tempfile::tempdir().unwrap();
         let d = tmp.path();
@@ -1169,6 +1232,22 @@ mod tests {
         assert!(matches!(r, Err(RunError::Step(_))), "{r:?}");
         assert!(out_dir.join("texts.json").is_file());
         assert!(!out_dir.join("001.png").exists());
+    }
+
+    #[test]
+    fn run_steps_prints_normalised_out_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut s = hello(tmp.path());
+        let dir = tmp.path().to_str().unwrap();
+        let mut out = Vec::new();
+        let messy = PathBuf::from(format!("{dir}/./out/"));
+        let written = run_steps(&mut s, "shot", &messy, &mut out).unwrap();
+        let want = PathBuf::from(format!("{dir}/out/001.png"));
+        assert_eq!(written, vec![want.clone()]);
+        assert_eq!(
+            String::from_utf8(out).unwrap(),
+            format!("{}\n", want.display())
+        );
     }
 
     #[test]
