@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Breaking changes
+
+- `ctx.ui:create` checks `skins` as the contract says (an image object, `edge`/`pad` of 1 to 4 integers 0..255 in CSS
+  order that fit the image, `text_color` 0..15, state variants checked against their own image) and returns
+  `nil, "invalid_argument"` for a malformed one. 0.2 kept any table.
+- An `image` child of a `ui:layout` spec or a container takes only an image object as `source`; a plain table with
+  `width` and `height` is `invalid_argument`.
+
+### Added
+
+- `ctx.ui` covers all of §16. New since 0.2: `switch`, `image`, image buttons, `field` with `ui:editing` and
+  `ui:stop_edit`, `tabs` (with `selected_style`), `stepper`, `pager`, `list` with page turning by the arrow keys,
+  `progress` (solid and stripes), skins with `ui:skin`, and the `grid` and `stack` layouts. As in 0.2, the library
+  follows firmware 26112001 measured as a black box where it differs from the contract; `spec/deviations.md` lists
+  those cases and what was not measured.
+
 ## 0.2.0
 
 inkemu now follows the official InkApp API contract 2.33.1, with firmware 26112001 measured on a reader where the two

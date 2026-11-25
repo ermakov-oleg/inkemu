@@ -223,8 +223,7 @@ Earlier notes got these wrong; do not reintroduce them.
 ## Not emulated
 
 BLE (§31), home screen widgets (§33), native inference `ctx.nn` (§30), `ctx.crypto`, user TTF fonts, and the battery
-and Wi-Fi rules of the lock screen (§15). These are nil or ignored in inkemu. The UI library (§16) is in progress; see
-the README.
+and Wi-Fi rules of the lock screen (§15). These are nil or ignored in inkemu.
 
 ## inkemu choices where the contract is silent
 
