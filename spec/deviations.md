@@ -433,8 +433,8 @@ the README.
     its text (check `16/skin_nine_slice`).
   - A `skins` key that is not a non-empty string, or a skin or variant that is not a table, is `invalid_argument`.
 - `ctx.ui` text fields, as measured with the reader's UI library run as a black box (oracle `s26_field`, API 2.12 and
-  2.26 alike): `ui:field` checks only `x`, `y`, `w`, `h`, `enabled` and `nav`; `text`, `placeholder`, `radius`, the
-  edit options and the callbacks are taken as they are, and `selected`, `badge` and an unknown `skin` are ignored. A
+  2.26 alike): `ui:field` checks only `x`, `y`, `w`, `h`, `enabled` and `nav`; `text`, `placeholder`, the edit
+  options and the callbacks are taken as they are, and `selected`, `badge` and an unknown `skin` are ignored. A
   truthy `multiline` (even `"yes"`) draws the text wrapped by character from the top. Activating a field calls
   `ctx.input:edit` with the text, `placeholder`, `max_chars`, `kind`, `multiline` and `enter` declared in the last
   frame, unchecked, the area inside the 8 px margin as `rect`, and the library's own `on_change` and `on_end` even when
@@ -451,8 +451,14 @@ the README.
   - A secret text is drawn as one `*` per UTF-8 character (per byte when it is not valid UTF-8); a secret text that
     is not a string is drawn as it is.
   - A field 16 px or less wide or high still draws its text box and passes its `rect`, which the host refuses.
-  - `radius` goes to `g:rect` as declared, like a button's, so a value that is not a number (s26 declares `"x"`)
-    fails the frame in inkemu's canvas; what the reader draws for it is not recorded.
+  - `radius` is not checked and goes to `g:rect` as declared, like a button's; a value that is not a number then
+    fails the frame in inkemu's canvas.
   - A field without `text` passes no `text` to `ctx.input:edit` (the host starts from `""`).
   - When the field's own `on_end` raises, no next field edits; when it starts an edit itself, the next field's edit
     is refused as busy while focus still moves there.
+- `ctx.ui` text fields on inkemu's own docked input, where inkemu differs from the contract (host follow-ups):
+  - A field edit option of the wrong type (`multiline = "yes"`, `kind = 5`) makes inkemu's `ctx.input:edit` return
+    `nil, "invalid_argument"`, so `handle_event` gives `id, "activate"`; §16 says `handle_event` raises a Lua error.
+  - While any edit is pending, inkemu sends every pointer and key event to it and none to the app; §4 lets a pointer
+    that goes down outside both the text area and the keyboard, and keys other than Back, reach the app. So re-tapping the
+    edited field or tapping another field during an edit only happens through `handle_event` called by the script.
