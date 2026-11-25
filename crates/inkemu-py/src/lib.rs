@@ -1,4 +1,5 @@
 //! `inkemu._core`: the native `Session` for the Python `Emu` wrapper (`src/inkemu/emu.py`).
+use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -320,6 +321,18 @@ fn parse_duration(s: &str) -> PyResult<i64> {
     inkcore::clock::parse_duration(s).map_err(PyValueError::new_err)
 }
 
+/// The `inkemu` CLI; `args` excludes the program name. Returns the exit code.
+#[pyfunction]
+fn cli_main(py: Python<'_>, args: Vec<String>) -> i32 {
+    py.detach(|| inkemu::cli::main(args.into_iter().map(OsString::from).collect()))
+}
+
+/// The stdio MCP server; `python` is the interpreter its daemon is spawned with.
+#[pyfunction]
+fn mcp_main(py: Python<'_>, python: PathBuf) -> i32 {
+    py.detach(|| inkemu::mcp::main(Some(python)))
+}
+
 #[pymodule]
 fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", inkcore::VERSION)?;
@@ -327,5 +340,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("STORAGE_QUOTA", inkcore::STORAGE_QUOTA)?;
     m.add_class::<Session>()?;
     m.add_function(wrap_pyfunction!(parse_duration, m)?)?;
+    m.add_function(wrap_pyfunction!(cli_main, m)?)?;
+    m.add_function(wrap_pyfunction!(mcp_main, m)?)?;
     Ok(())
 }
