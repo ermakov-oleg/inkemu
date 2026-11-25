@@ -1,0 +1,23 @@
+{
+  "spec": "§16",
+  "about": "tabs split their box into one row of cells by the cumulative cell formula, each drawn like a button: an empty box, text centred; the value cell is filled with paper text, or from 2.16 outlined 3 px or underlined by a 4 px bar min(8, w // 6) in from its sides, and its text is bold unless bold is set; the focus frame never fills; a tap on another cell returns change and on the value cell activate, the gap between cells hits nothing (cell edges, selected styles and the events probe-confirmed; keys move cell by cell)",
+  "expect": {
+    "fill": {"value": true, "spec": "§16"},
+    "outline": {"value": true, "spec": "§16"},
+    "underline": {"value": true, "spec": "§16"},
+    "borderless": {"value": true, "spec": "§16"},
+    "bold_all": {"value": true, "spec": "§16"},
+    "bold_none": {"value": true, "spec": "§16"},
+    "disabled": {"value": true, "spec": "§16"},
+    "selected_style_bold": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "value_out_of_range": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "tap_other_cell": {"value": {"ok": true, "ret": ["t", "change", 4]}, "spec": "§16"},
+    "tap_value_cell": {"value": {"ok": true, "ret": ["t", "activate", 2]}, "spec": "§16"},
+    "tap_gap": {"value": {"ok": true, "ret": [null, null]}, "spec": "§16"},
+    "keys_right": {"value": {"ok": true, "ret": ["t", "focus", 3]}, "spec": "§16"},
+    "ok_down": {"value": {"ok": true, "ret": ["t", "press", 3]}, "spec": "§16"},
+    "ok_up": {"value": {"ok": true, "ret": ["t", "change", 3]}, "spec": "§16"}
+  },
+  "files": {"canvas_log.lua": "canvas_log.util.lua"},
+  "errors": []
+}

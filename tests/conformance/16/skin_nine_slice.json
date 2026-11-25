@@ -1,0 +1,19 @@
+{
+  "spec": "§16",
+  "about": "a skin is cut in nine and drawn with g:image src, at most 9 calls: corners keep their size, the top and bottom edges stretch across, the left and right edges down, the middle both ways; a box narrower than both edges shares its width between them (left gets size * left // (left + right)) and blocks of size 0 are left out; a skin whose image was released shows nothing of it (the canvas refuses those calls) and still gets its text",
+  "files": {"canvas_log.lua": "canvas_log.util.lua"},
+  "expect": {
+    "stretched": {"value": {"calls": 9, "images": 9, "first": true, "middle": true}, "spec": "§16"},
+    "shrunk": {"value": true, "spec": "§16"},
+    "released": {"value": {"images": 9, "refused": "invalid_handle", "text": true}, "spec": "§16"}
+  },
+  "pixels": [
+    [100, 100, 1], [101, 100, 0], [115, 100, 0], [128, 100, 0], [129, 100, 1],
+    [100, 101, 0], [100, 115, 0], [100, 128, 0], [100, 129, 1],
+    [101, 101, 1], [115, 115, 1], [128, 128, 1],
+    [129, 115, 0], [115, 129, 0], [129, 129, 1],
+    [200, 100, 1], [200, 101, 1], [201, 100, 0], [199, 100, 0],
+    [300, 100, 0], [359, 129, 0], [330, 101, 0]
+  ],
+  "errors": []
+}

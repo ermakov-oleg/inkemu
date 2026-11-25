@@ -1,0 +1,29 @@
+{
+  "spec": "§16",
+  "about": "stepper, pager and list work as children of row, column and grid: stretched or sized, they are drawn, hit and focused from their laid-out box; a laid-out box that breaks a kind's own box rule (a stepper narrower than 2h, a pager's button_w over w // 2, a list's row_h over h) or a field out of range refuses the container call and nothing is drawn, while a hidden child's box is not held to those rules; ui:layout places such children without them, and a stepper cannot take w = fit (observed on the reader's UI library as a black box, oracle s36)",
+  "expect": {
+    "stretched": {"value": {"ok": true, "ret": []}, "spec": "§16"},
+    "stretched_drawn": {"value": true, "spec": "§16"},
+    "stretched_rows": {"value": "1@0,116,480,40 2@0,156,480,40 3@0,196,480,40", "spec": "§16"},
+    "tap_plus": {"value": {"ok": true, "ret": ["st", "change", 3]}, "spec": "§16"},
+    "sized": {"value": {"ok": true, "ret": []}, "spec": "§16"},
+    "sized_drawn": {"value": true, "spec": "§16"},
+    "sized_rows": {"value": "1@0,116,200,40 2@0,156,200,40 3@0,196,200,40", "spec": "§16"},
+    "grid": {"value": {"ok": true, "ret": []}, "spec": "§16"},
+    "grid_parts": {"value": true, "spec": "§16"},
+    "grid_rows": {"value": "1@0,100,240,40 2@0,140,240,40", "spec": "§16"},
+    "stepper_narrow": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "stepper_narrow_drawn": {"value": "", "spec": "§16"},
+    "pager_button_w": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "pager_button_w_drawn": {"value": "", "spec": "§16"},
+    "list_row_h": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "list_row_h_drawn": {"value": "", "spec": "§16"},
+    "value_out_of_range": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "hidden": {"value": {"ok": true, "ret": []}, "spec": "§16"},
+    "hidden_drawn": {"value": true, "spec": "§16"},
+    "layout_small": {"value": "0,0,480,400 [0,0,80,56 | 0,56,480,30]", "spec": "§16"},
+    "layout_stepper_fit": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"}
+  },
+  "files": {"canvas_log.lua": "canvas_log.util.lua", "layout_box.lua": "layout_box.util.lua"},
+  "errors": []
+}

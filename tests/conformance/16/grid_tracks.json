@@ -1,0 +1,25 @@
+{
+  "spec": "§16",
+  "about": "grid tracks: integer columns are equal fr tracks, { min } counts its columns from the inner width, fixed, fit, fr and percentage tracks, an even split of what a span lacks over its fit tracks, a span over an fr track left out, the leftover put into the gaps by justify_content and align_content, a fitted grid's fr unit from its content, a { min } grid that cannot fit and counts as 0 wide, rows as high as their children at their final widths (probe-confirmed by oracle s25 except fixed_fr_fit, span_over_fit, span_over_fr, fit_both_ways and fr_units, which size their tracks from set widths where the oracle used content widths and so follow the contract text)",
+  "expect": {
+    "equal_columns": {"value": "0,0,480,800 [0,0,160,1 | 160,0,160,1 | 320,0,160,1 | 0,1,160,1]", "spec": "§16"},
+    "auto_rows_gap_padding": {"value": "0,0,480,800 [20,20,140,50 | 170,20,140,50 | 320,20,140,50 | 20,80,140,50]", "spec": "§16"},
+    "min_columns": {"value": "0,0,480,800 [0,0,152,56 | 164,0,152,56 | 328,0,152,56 | 0,68,152,56]", "spec": "§16"},
+    "min_wider_than_box": {"value": "0,0,480,800 [0,0,480,56 | 0,56,480,56]", "spec": "§16"},
+    "fr_and_percent": {"value": "0,0,480,800 [0,0,229,40 | 237,0,115,40 | 360,0,120,40]", "spec": "§16"},
+    "fixed_fr_fit": {"value": "0,0,480,800 [16,16,448,64 | 16,92,364,608 | 392,92,72,608 | 16,712,96,72 | 124,712,256,72 | 392,712,36,72]", "spec": "§16"},
+    "span_over_fit": {"value": "0,0,480,800 [0,0,48,40 | 132,0,96,40 | 312,0,36,40 | 0,40,312,40 | 312,40,36,40]", "spec": "§16"},
+    "span_over_fr": {"value": "0,0,480,800 [0,0,72,40 | 72,0,408,40 | 0,40,400,40]", "spec": "§16"},
+    "space_between_center": {"value": "0,0,480,800 [0,350,100,50 | 380,350,100,50 | 0,400,100,50 | 380,400,100,50]", "spec": "§16"},
+    "space_evenly_end": {"value": "0,0,480,800 [45,750,245,50 | 335,750,100,50]", "spec": "§16"},
+    "tracks_wider_than_grid": {"value": "0,0,480,800!1 [-60,0,300,50 | 240,0,300,50]", "spec": "§16"},
+    "fit_both_ways": {"value": "10,20,130,94 [18,24,36,40 | 84,24,48,40 | 18,70,60,40]", "spec": "§16"},
+    "fr_units": {"value": "10,20,180,40 [10,20,60,40 | 70,20,120,40]", "spec": "§16"},
+    "min_with_fit_width": {"value": "nil,invalid_argument", "spec": "§16"},
+    "min_in_fitted_row": {"value": "0,0,85,40 [0,0,1,40 [0,0,1,1 | 0,1,1,1] | 1,0,84,40]", "spec": "§16"},
+    "row_from_final_width": {"value": true, "spec": "§16"},
+    "content_in_cell": {"value": true, "spec": "§16"}
+  },
+  "files": {"layout_box.lua": "layout_box.util.lua"},
+  "errors": []
+}

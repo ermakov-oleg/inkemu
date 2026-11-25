@@ -142,12 +142,16 @@ no radio and is not the device, so panel timing and network completion were not 
   refused (a bad field of its own, or a box placed past 32767, see D15), the call returns `invalid_argument` there,
   and the container and the children registered before stay: they are drawn, hit and take focus. When the 128 controls
   run out first, the call returns `limit_exceeded` (D9), even if a later child is bad.
-- inkemu does: the same, for a control's own fields and its placed box. Sizing fields are checked for the whole tree
-  before anything is registered.
+- inkemu does: the same, for a control's own fields and its placed box, including the box rules of `stepper`,
+  `pager` and `list`. From 2.15 the sizing fields are checked for the whole tree before anything is registered;
+  before 2.15 the children are walked one by one, so one without an integer `w` or `h` also keeps those before it.
 - Status: measured on 26112001 (the reader's UI library run as a black box) for a bad field on the first child,
-  a bad field on the last child after the limit, and children placed past 32767; a bad field of its own on a child
-  in the middle, after valid ones, was not measured and is inferred from those cases.
-- Checks: `16/layout_limits` (`bad_child.before`, `child_past_32767.before`).
+  a bad field on the last child after the limit, children placed past 32767 and, before 2.15, a child without `w`
+  after valid ones (oracle s36), and, before 2.15, a child in the middle with a bad field, no or a repeated `id`, an
+  unknown `kind` or a broken box rule (oracle s37). From 2.15, a bad field of its own on a child in the middle was
+  not measured and is inferred from those cases.
+- Checks: `16/layout_limits` (`bad_child.before`, `child_past_32767.before`), `16/row_column_before_2_15`
+  (`partial`).
 
 ### D15 - coordinates up to 32767
 
@@ -223,8 +227,7 @@ Earlier notes got these wrong; do not reintroduce them.
 ## Not emulated
 
 BLE (§31), home screen widgets (§33), native inference `ctx.nn` (§30), `ctx.crypto`, user TTF fonts, and the battery
-and Wi-Fi rules of the lock screen (§15). These are nil or ignored in inkemu. The UI library (§16) is in progress; see
-the README.
+and Wi-Fi rules of the lock screen (§15). These are nil or ignored in inkemu.
 
 ## inkemu choices where the contract is silent
 
@@ -268,11 +271,15 @@ the README.
     same cumulative formula in 32-bit integers; the s17 oracle steps in `tests/test_inkui_oracle.py` pin those
     cases.
 - `ctx.ui` containers, not measured:
-  - A frame checks the structure and the sizing fields of the whole tree first (kinds, ids, sizes, the fields a
-    content size reads), so a bad one anywhere refuses the call before anything is registered; only a control's other
-    fields and its placed box are checked one by one (D14). A missing `id` or `kind` was measured only on the first
-    child.
-  - A part inkemu does not implement yet raises only when nothing in that first pass is invalid.
+  - From 2.15 a frame checks the structure and the sizing fields of the whole tree first (kinds, ids, sizes, the
+    fields a content size reads), so a bad one anywhere refuses the call before anything is registered; only a
+    control's other fields and its placed box are checked one by one (D14). A missing `id` or `kind` was measured only
+    on the first child.
+  - Before 2.15 a bad `gap` or too deep a nesting on a later child keeps the children before it registered,
+    including those of a container it stops in, as the measured refusals do (D14).
+  - Before 2.15 a container refused for its own `gap` or `children` still takes its `id` in the frame, at the top
+    level and nested, so a second call with that id is `invalid_argument` too (measured, oracle s38); whether it also
+    spends one of the 128 controls was not measured (inkemu spends one).
   - The 1024 children are counted in frames too.
   - A control declared at top level is held to the same 32767 limits as a child (D15).
   - A whole float that a 32-bit Lua cannot hold as an integer (such as `3e9` or `1e10`) is not an integer: in any
@@ -286,6 +293,30 @@ the README.
   - A rounded halftone block whose radius takes its whole height gets no middle row.
   - The `gap` between `tabs` or `radio` cells is any integer from 0 (the contract gives no upper bound), and their
     1 to 64 `items` are checked the same way in a frame and in `ui:layout`.
+- `ctx.ui` grid and stack, as measured with the reader's UI library run as a black box (oracles `s25_grid_stack`,
+  `s34_grid_more`): tracks, placement, cells, content sizes, appearance, the later child taking the hit and the
+  refusals all come out as the contract gives them. In particular a child spanning rows keeps those cells taken for
+  later children, and the next one starts just after it in its first row; explicit `rows` are tracks even when no
+  child reaches them (a fit one is then 0 high); a spacer takes a grid cell like any child; hidden and `false`
+  children take no cell while a zero-size one does. A `column_span` longer than the number of `{ min }` columns the
+  width gives is `invalid_argument`; inkemu finds it only once the width is laid out, so a frame registers nothing of
+  that container. Checks: `16/grid_tracks`, `16/grid_autoplace_spans`, `16/stack_place`.
+- `ctx.ui` grid and stack, not measured:
+  - `{ min }` columns are not capped at 64.
+  - What a span lacks beyond its tracks is split evenly over its fit tracks with the remainder to the later ones (the
+    oracles show only an even split).
+  - A `columns` table with both `min` and array entries is refused, as is any value (even `false`) of a field that
+    another container kind owns, such as `wrap` or `divider` on a grid.
+  - A child that cannot fit fills its cell from the start even when `max_w` or `max_h` makes it shorter than the
+    cell, whatever its alignment.
+  - A `label`, `button`, `switch` or `tabs` in a grid or stack keeps the minimum height of 1; the one-line minimum
+    is a flexbox rule.
+  - In a stack, a percentage `h` with `aspect_ratio` and no `w` gives the width once the inner height is known; a
+    fitted stack's height takes each child's height at the width it gets in the inner box.
+  - A stack nested in a row or column follows the contract text.
+  - A grid with `columns = { min = … }` asks for 0 px of width when an outer container computes its content size,
+    since its columns are counted from a width it does not have yet: as a `row` child with no `w` and no `grow` it
+    gets a width of 0.
 - `ctx.ui` radio, as measured with the reader's UI library run as a black box: a radio works at every API minor (as
   the other 2.13 and 2.14 controls do), a `nav` on it is accepted and ignored (the contract says composites take no
   `nav`), a 3 px cell draws no dot, and the fallback to the first control lands on item 1 while `ui:focus(id)` without
@@ -304,7 +335,152 @@ the README.
   - A cell `gap` wider than the box counts as the box, a cell never gets a negative size, and the text width after
     the ring is at least 0.
   - A `nav` entry naming a composite whose default part is unavailable falls back to the search by position.
-  - A registered `skin` on a radio raises "not implemented in inkemu yet"; an unregistered one is `invalid_argument`.
-- `ctx.ui` skins, not measured: on a button, a radio and a container child alike, a `skin` that is not a name
-  registered in `create` is `invalid_argument`, as is a button with both `skin` and `image` (the code §16 gives);
-  only a registered skin, which inkemu does not draw yet, raises "not implemented in inkemu yet".
+  - With a skin that has a disabled look, a disabled radio draws each cell in it and gets no dots.
+- `ctx.ui` tabs, as measured with the reader's UI library run as a black box: the cells are one row split by the radio
+  cell formula and each is drawn like a button (box, text centred), with the value cell filled and its text colour 0;
+  focus never fills a cell, only adds the frame (radius + 3 when `radius` is positive); `border = false` leaves out the
+  box of every cell that is not filled; from 2.16 `selected_style` is `fill`, `outline` (a 3 px frame on the cell) or
+  `underline` (a 4 px bar min(8, w // 6) in from each side, fill and text colour as an unselected cell) and anything
+  else is `invalid_argument` (before 2.16 it is ignored), and `bold` unset makes only the selected cell bold, `true`
+  every cell, `false` none. A skin draws as it does on radio cells and ignores `selected_style`. A tap or `ok` acts as
+  on radio: `change` for another cell, `activate` for the value one. Oracle `s28_tabs_looks` also pins the selected
+  outline or underline drawn before the focus frame, the outline taking `radius`, and `font_min` shrinking each cell
+  on its own, measured with its own bold. Checks: `16/tabs`.
+- `ctx.ui` tabs, not measured: a tab text that no font of `font_min` fits stays in the smallest tried.
+- `ctx.ui` stepper and pager, as measured with the reader's UI library run as a black box (oracle `s20_stepper_pager`,
+  `s24_skins`): both are two button-like parts at the ends of the box and a text between them, hit and focused as
+  parts 1 (minus, previous) and 2 (plus, next). A stepper's parts are h by h and carry bars of
+  max(6, min(w, h) * 9 // 20) by 3 px centred in the part (in a skin's text area when it has a skin); a pager's are
+  `button_w` wide (at most w // 2) and carry `<` and `>` through the button text. The middle text is the value, or
+  `page/pages`, tabular unless `tabular = false` from 2.16 (never before), and is left out when empty or when no room
+  is left. A part at its end of the range is drawn as usual with the dots (or a skin's disabled look) right after its
+  content, takes no hit and is skipped by the default part and the arrows; a disabled box gets the dots over the
+  whole box after the text instead. A focused part fills (sign and text turn to paper) or, in the outline style, gets
+  the frame before its sign or text. A tap or `ok` returns `change` with the value clamped to min..max, or the page
+  moved by one; the middle hits nothing. A stepper needs w >= 2 * h and `step` >= 1 (larger than the range is fine).
+  Checks: `16/stepper_pager`.
+- `ctx.ui` stepper and pager, measured later (oracle `s29_stepper_pager_looks`) and followed by inkemu:
+  - A pager whose box is narrower than 2h gets parts of w // 2 (the default `button_w` is h, at most w // 2), the
+    second one ending at the box's right edge, and a middle of the odd pixel or none.
+  - The outline frame of a focused part comes after its box and before its sign or text, on a stepper as on a pager.
+  - With a skin, the ring follows the sign or text, and the dots of an unavailable part (when the skin has no
+    disabled look; with one, the part is drawn in it) follow the ring.
+  - The middle text takes no `font_min` shrink, no `bold` and no `reserve`, and keeps colour 15 inside a skin.
+  - `bold`, `reserve` and `font_min` of any type are accepted on both and have no effect.
+  - A disabled box whose skin has a disabled look draws every part in it and gets no dots; without one, the parts
+    are drawn normally and the dots cover the whole box.
+- `ctx.ui` stepper, not measured: `value ± step` is computed in 32-bit integers, so near the ends of that range it
+  can wrap past `min` or `max` instead of being clamped.
+- `ctx.ui` stepper, pager and list as children of a `row`, `column` or `grid`, as measured with the reader's UI
+  library run as a black box (oracle `s36_composite_children`): stretched or sized, they are drawn, hit and focused
+  from their laid-out box. A laid-out box that breaks the kind's box rule (a stepper narrower than 2h, a pager whose
+  `button_w` is over w // 2, a list whose `row_h` is over h) refuses the call as a bad field does (D14); a hidden
+  child's box is not held to those rules. `ui:layout` places such children without the box rules, and a stepper
+  cannot take `w = "fit"`. Checks: `16/composite_children`.
+- `ctx.ui` stepper, pager and list as children, not measured:
+  - A child laid out with zero width or height is not held to the box rules either, as it is not registered; its own
+    fields are still checked, as a hidden child's are.
+- `ctx.ui` list, as measured with the reader's UI library run as a black box (oracles `s21_list`, `s30_list_order_nav`):
+  a page holds h // row_h rows (row_h 1..h), pages are max(1, ceil(count / rows)) and a page past the last is the
+  last; row parts are the data indexes, a control costs 1 + the rows of its page, and `draw(g, box, index, state)` is
+  called per row at end_frame (state: focused, selected, enabled); with no draw and no skin nothing is drawn, a
+  disabled list gets the dots over its whole box. With a skin the row's look is drawn first and no text. A tap or
+  `ok` on a row returns `activate`, a hold `long_press`, each with the index; a tap below the last row hits
+  nothing. `down` on the last row of a page that is not the last, or `up` on the first row of a page past the first,
+  returns `id, "change", page` (before position or order navigation, on every API minor) and moves focus to the
+  neighbouring row, which the script's next frame shows by turning the page. A kept row that is not on the page gives
+  way to the selected row of the page, else its first row. Checks: `16/list_paging`.
+- `ctx.ui` list, measured later (oracle `s31_list_looks`): with a skin the focus ring of a focused row comes right
+  after the skin's look and before the script's `draw`; a skinned disabled list and `left`/`right` on a page's edge
+  rows (no page turn) are as followed here. Not measured: `selected` has no upper bound (21 of 20 rows is accepted);
+  page turning needs the focused row to be enabled; the skin's text area is not passed to `draw`.
+- `ctx.ui` progress, as measured with the reader's UI library run as a black box (oracles `s22_progress`,
+  `s32_progress_stripes`, `s33_progress_looks`, `s24_skins` step 39) and followed by inkemu: `enabled` is accepted
+  whatever it holds and changes nothing (no dots); an infinite value is clamped like any other; a box with no inner
+  height (h 3 or 4) or width (w 4) gets only its frame. With a skin there is no frame and `style` changes nothing; the
+  leading part is the full-width selected look (or the normal look inverted) cut at the leading width, not that look
+  fitted to it, also inside the left edge or into the right one. A column cut short keeps its share of the source
+  rounded to the nearest pixel, but at least 1. Stripes, in the filled area's own coordinates (the phase follows the
+  bar, not the canvas): band k covers a ≤ u + v ≤ a + 3 with a = 5k − 1, as long as a ≤ fw + H − 2 (the band that
+  would only touch the bottom right corner is dropped). Bands that run along the bottom edge are joined there into
+  polygons of up to 128 points, each starting at its bottom left point; a band that touches neither edge (a narrow
+  bar) is a polygon of its own, drawn as it comes; bands along the top edge start at their top right point and are
+  joined there into polygons of up to 128 points, one drawn as soon as it is full and the last one after the bottom
+  ones. A `progress` child without `w` (or with `w = "fit"`) is `invalid_argument`: it has no content size. Checks:
+  `16/progress`.
+- `ctx.ui` progress, not measured: a `progress` child with its own `w` is checked and drawn like a top-level one.
+- `ctx.ui` switch, as measured with the reader's UI library run as a black box: `selected` is not type-checked (any
+  value but nil and false is on), a `badge` is ignored, a `radius` only shapes the focus frame (radius + 3 when
+  positive), `focus_style` does not change a switch's look, and `bold = false` leaves `bold` out of the text call.
+  Checks: `16/switch_geometry`.
+- `ctx.ui` switch, not measured: the text is left out when the room before the capsule is 0 or less, and with a note
+  of odd height the note box takes the extra pixel. With a skin that has a focused look, focus draws it at the
+  capsule as well as the switch's own frame; with a disabled look, a disabled switch gets no dots.
+- `ctx.ui` images, as measured with the reader's UI library run as a black box: an image button draws its image
+  scaled to the box (`invert` only when selected, never for emphasis or focus), then the border rect without a `fill`
+  key, the focus frame, the text with no colour of its own, the badge and the dots; focus never fills it. A top-level
+  `ui:image` passes any non-nil `source` to the canvas as it is and is neither hit nor focusable; a button `image` and
+  a layout child's `source` must be an image object (a table with only `width` and `height` is not one). Checks:
+  `16/image_button`.
+- `ctx.ui` skins, as measured with the reader's UI library run as a black box (oracle scenario s24) and followed by
+  inkemu:
+  - `create` holds only `edge` to the image (left + right below its width, top + bottom below its height, a variant
+    with its own image and edge); `pad` is any 0..255 in the same CSS forms, even wider than the image. A whole
+    float such as `text_color = 2.0` is taken, and a variant name it does not know (`hover`) is ignored whatever it
+    holds.
+  - `ui:skin` does not type-check the fields of `st`: only `true` sets `focused`, `selected` or `emphasis`
+    (`focused = 1` draws the unfocused look), and only `enabled = false` clears `enabled`. The contract calls them
+    booleans.
+  - The text area after `pad` is at least 1 px wide and tall, also when the box is smaller than the pad; a
+    variant's own `edge` does not move it.
+  - A skin's disabled look replaces the white dots; without one the usual look is covered. A selected look with
+    focus gets the ring even when the skin has a focused look; only the focused look itself goes without. The ring
+    is the square 2 px frame 3 px out, drawn after the text, and the outline focus style draws a skin without a
+    focused look the same way. A skinned button's `radius` and `border` change nothing.
+  - Inside a frame, `ui:skin` draws on the canvas at once, below the controls that `end_frame` paints.
+  - Measured later (oracle scenario s27): a skin without a selected look draws its normal look with `invert = true`
+    and the text in 15 minus the look's text colour, on a button and on a radio cell alike; without a disabled look
+    a disabled button, switch or radio gets its usual look and the dots over the whole control. A skinned switch
+    with focus gets only its own frame around the whole control, after its text; a skinned radio cell with focus
+    gets the square frame 3 px out after its text. A container's skin replaces its background and border, and its
+    divider is still drawn, after the skin and before the children.
+  Checks: `16/skins_validation`, `16/skin_nine_slice`.
+- `ctx.ui` skins, not measured:
+  - `ui:skin` with `focused` and `enabled = false` on a skin with a disabled look draws that look with the ring.
+  - An emphasis look with focus gets the ring like a selected one, also when the skin has a focused look; the ring
+    stays square when the button sets a `radius`; the outline focus style uses a skin's focused look as the fill
+    style does.
+  - A skin whose image was released draws nothing of it (the canvas refuses those `g:image` calls) and still gets
+    its text (check `16/skin_nine_slice`).
+  - A `skins` key that is not a non-empty string, or a skin or variant that is not a table, is `invalid_argument`.
+- `ctx.ui` text fields, as measured with the reader's UI library run as a black box (oracle `s26_field`, API 2.12 and
+  2.26 alike): `ui:field` checks only `x`, `y`, `w`, `h`, `enabled` and `nav`; `text`, `placeholder`, the edit
+  options and the callbacks are taken as they are, and `selected`, `badge` and an unknown `skin` are ignored. A
+  truthy `multiline` (even `"yes"`) draws the text wrapped by character from the top. Activating a field calls
+  `ctx.input:edit` with the text, `placeholder`, `max_chars`, `kind`, `multiline` and `enter` declared in the last
+  frame, unchecked, the area inside the 8 px margin as `rect`, and the library's own `on_change` and `on_end` even when
+  the field sets neither. Switching fields, `ui:stop_edit` and an `end_frame` without the edited field close the edit
+  with `ed:close()`, before the next edit starts or anything is painted. Checks: `16/field_edit` (on inkemu's own
+  docked input).
+  - `enter = "next"` goes to the first enabled field after the edited one in the last frame, past disabled fields
+    and other controls (oracle s35).
+- `ctx.ui` text fields, not measured:
+  - After `enter = "next"`, focus moves to the next field even when the host refuses that edit.
+  - The callbacks, `enter` and the options come from the frame the edit started on; an `on_change` or `on_end` that
+    is not a function is left out. Inside the field's own `on_end`, `ui:editing()` is already nil.
+  - At `end_frame` an edit goes on while its id is declared as a field, even a disabled one, and ends when the id is
+    declared as another kind.
+  - A secret text is drawn as one `*` per UTF-8 character (per byte when it is not valid UTF-8); a secret text that
+    is not a string is drawn as it is.
+  - A field 16 px or less wide or high still draws its text box and passes its `rect`, which the host refuses.
+  - `radius` is not checked and goes to `g:rect` as declared, like a button's; a value that is not a number then
+    fails the frame in inkemu's canvas.
+  - A field without `text` passes no `text` to `ctx.input:edit` (the host starts from `""`).
+  - When the field's own `on_end` raises, no next field edits; when it starts an edit itself, the next field's edit
+    is refused as busy while focus still moves there.
+- `ctx.ui` text fields on inkemu's own docked input, where inkemu differs from the contract (host follow-ups):
+  - A field edit option of the wrong type (`multiline = "yes"`, `kind = 5`) makes inkemu's `ctx.input:edit` return
+    `nil, "invalid_argument"`, so `handle_event` gives `id, "activate"`; §16 says `handle_event` raises a Lua error.
+  - While any edit is pending, inkemu sends every pointer and key event to it and none to the app; §4 lets a pointer
+    that goes down outside both the text area and the keyboard, and keys other than Back, reach the app. So re-tapping the
+    edited field or tapping another field during an edit only happens through `handle_event` called by the script.

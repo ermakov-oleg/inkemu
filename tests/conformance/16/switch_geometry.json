@@ -1,0 +1,16 @@
+{
+  "spec": "§16",
+  "about": "a switch is a 2 px capsule at the right edge, centred, at most 34 tall and 2 * height - 4 wide, with an 8 px margin when wider than 32; on fills it with a paper circle on the right, off leaves it hollow with an ink circle on the left; the text runs to 12 px before the capsule (none when no room is left) and is bold from 2.16; a note splits the height into two halves 2 px clear of the middle; a non-string note is invalid (probe-confirmed)",
+  "files": {"canvas_log.lua": "canvas_log.util.lua"},
+  "expect": {
+    "off": {"value": true, "spec": "§16"},
+    "on": {"value": true, "spec": "§16"},
+    "narrow": {"value": true, "spec": "§16"},
+    "short": {"value": true, "spec": "§16"},
+    "note": {"value": true, "spec": "§16"},
+    "note_empty": {"value": true, "spec": "§16"},
+    "note_number": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"}
+  },
+  "pixels": [[420, 111, 1], [405, 128, 1], [435, 128, 0], [380, 128, 0]],
+  "errors": []
+}

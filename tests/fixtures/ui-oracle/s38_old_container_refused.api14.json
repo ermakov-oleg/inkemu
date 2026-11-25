@@ -1,0 +1,18 @@
+{
+ "expect_mismatches":[],
+ "file":"s38_old_container_refused.api14.json",
+ "scenario":"s38_old_container_refused",
+ "title":"before 2.15: a container refused for its own fields",
+ "input":{"api":"2.14","canvas":[480,800],"touch":true,"steps":[
+  {"op":"create"},
+  {"calls":[{"id":"c","m":"column","o":{"children":[{"h":40,"id":"a","kind":"button","text":"a","w":100}],"gap":-1,"h":300,"w":200,"x":0,"y":0}},{"id":"c","m":"column","o":{"children":[{"h":40,"id":"a2","kind":"button","text":"a2","w":100}],"h":300,"w":200,"x":0,"y":0}}],"note":"bad gap, then the same id","op":"frame"},
+  {"calls":[{"id":"d","m":"column","o":{"children":5,"h":300,"w":200,"x":0,"y":0}},{"id":"d","m":"column","o":{"children":[{"h":40,"id":"b2","kind":"button","text":"b2","w":100}],"h":300,"w":200,"x":0,"y":0}}],"note":"children not a table, then the same id","op":"frame"},
+  {"calls":[{"id":"e","m":"column","o":{"children":[{"h":40,"id":"e1","kind":"button","text":"e1","w":100},{"children":[{"h":40,"id":"e2","kind":"button","text":"e2","w":100}],"gap":-1,"h":50,"id":"inner","kind":"row","w":200},{"h":40,"id":"e3","kind":"button","text":"e3","w":100}],"h":300,"w":200,"x":0,"y":0}},{"id":"inner","m":"button","o":{"h":40,"text":"i","w":100,"x":300,"y":0}}],"note":"nested container with a bad gap; is its id taken?","op":"frame"}
+ ]},
+ "output":[
+  {"i":1,"op":"create","ret":"ui object"},
+  {"begin":[],"calls":[{"id":"c","m":"column","ret":[null,"invalid_argument"]},{"id":"c","m":"column","ret":[null,"invalid_argument"]}],"end":[],"focused_after":[null],"i":2,"note":"bad gap, then the same id","op":"frame","op_counts":{},"stream":[]},
+  {"begin":[],"calls":[{"id":"d","m":"column","ret":[null,"invalid_argument"]},{"id":"d","m":"column","ret":[null,"invalid_argument"]}],"end":[],"focused_after":[null],"i":3,"note":"children not a table, then the same id","op":"frame","op_counts":{},"stream":[]},
+  {"begin":[],"calls":[{"id":"e","m":"column","ret":[null,"invalid_argument"]},{"id":"inner","m":"button","ret":[null,"invalid_argument"]}],"end":[],"focused_after":["e1"],"i":4,"note":"nested container with a bad gap; is its id taken?","op":"frame","op_counts":{"rect":1,"text_box":1},"stream":[{"a":[0,0,100,40,{"fill":false,"radius":0}],"op":"rect"},{"a":[0,0,100,40,"e1",{"align":"center","color":15,"font":"@font:medium","overflow":"ellipsis","valign":"middle","wrap":"none"}],"op":"text_box"}]}
+ ]
+}

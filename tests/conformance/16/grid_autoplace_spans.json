@@ -1,0 +1,15 @@
+{
+  "spec": "§16",
+  "about": "grid placement goes in declaration order from just after the previous child, leaving holes behind; a child spanning rows keeps those cells for later children; a spacer takes a cell like any child (its row 0 high when alone in it); hidden and false children take no cell while a zero-size one does; fields of another container or child kind, bad tracks, spans past the columns (also the { min } columns the width gives) and baseline in a grid or stack are refused (probe-confirmed by oracles s25 and s34)",
+  "expect": {
+    "holes_stay": {"value": "0,0,480,800 [0,0,160,40 | 0,40,480,40 | 0,80,160,40 | 160,80,320,40 | 0,120,320,40]", "spec": "§16"},
+    "row_spans": {"value": "0,0,480,800 [0,0,320,40 | 320,0,160,80 | 0,40,160,40 | 0,80,480,80 | 0,160,160,40]", "spec": "§16"},
+    "spacer": {"value": "0,0,480,800 [0,0,480,0 | 0,0,240,1]", "spec": "§16"},
+    "spacer_then_boxes": {"value": "0,0,480,800 [0,0,240,30 | 240,0,240,30 | 0,30,240,30]", "spec": "§16"},
+    "hidden_and_false": {"value": "0,0,480,800 [false | false | 0,0,240,30 | 240,0,0,30 | 0,30,240,30]", "spec": "§16"},
+    "cases": {"value": 26, "spec": "§16"},
+    "not_refused": {"value": [], "spec": "§16"}
+  },
+  "files": {"layout_box.lua": "layout_box.util.lua"},
+  "errors": []
+}

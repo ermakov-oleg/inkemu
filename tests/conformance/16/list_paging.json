@@ -1,0 +1,160 @@
+{
+ "spec": "§16",
+ "about": "a list shows h // row_h rows a page (at least one row per page, a page past the last is the last), its row parts are numbered by data index, and each row of the page is handed to draw(g, box, index, state); an arrow past the page's first or last row returns change with the neighbouring page and keeps focus on the neighbouring row; a kept row off the page gives way to the selected row of the page, else its first row; a row costs one control (looks and keys observed on the reader's UI library as a black box)",
+ "expect": {
+  "page_1": {
+   "value": "1@100/false/false 2@164/false/false 3@228/false/true 4@292/false/false 5@356/false/false 6@420/false/false 7@484/false/false",
+   "spec": "§16"
+  },
+  "page_past_last": {
+   "value": "15@100/false/false 16@164/false/false 17@228/false/false 18@292/false/false 19@356/false/false 20@420/false/false",
+   "spec": "§16"
+  },
+  "leftover_space": {
+   "value": "5@100/false/false 6@200/false/false 7@300/false/false 8@400/false/false",
+   "spec": "§16"
+  },
+  "empty": {
+   "value": 0,
+   "spec": "§16"
+  },
+  "rows_cost": {
+   "value": [
+    "ok",
+    100
+   ],
+   "spec": "§16"
+  },
+  "rows_limit": {
+   "value": "limit_exceeded",
+   "spec": "§16"
+  },
+  "bad_row_h": {
+   "value": "invalid_argument",
+   "spec": "§16"
+  },
+  "bad_selected": {
+   "value": "invalid_argument",
+   "spec": "§16"
+  },
+  "focus_row": {
+   "value": {
+    "ok": true,
+    "ret": []
+   },
+   "spec": "§16"
+  },
+  "down_turns": {
+   "value": {
+    "ok": true,
+    "ret": [
+     "goods",
+     "change",
+     2
+    ]
+   },
+   "spec": "§16"
+  },
+  "page_2_focus": {
+   "value": "8@100/true/false 9@164/false/false 10@228/false/false 11@292/false/false 12@356/false/false 13@420/false/false 14@484/false/false",
+   "spec": "§16"
+  },
+  "up_turns_back": {
+   "value": {
+    "ok": true,
+    "ret": [
+     "goods",
+     "change",
+     1
+    ]
+   },
+   "spec": "§16"
+  },
+  "up_walks": {
+   "value": {
+    "ok": true,
+    "ret": [
+     "goods",
+     "focus",
+     6
+    ]
+   },
+   "spec": "§16"
+  },
+  "focus_off_page": {
+   "value": {
+    "ok": true,
+    "ret": []
+   },
+   "spec": "§16"
+  },
+  "focused_selected": {
+   "value": {
+    "ok": true,
+    "ret": [
+     "goods",
+     10
+    ]
+   },
+   "spec": "§16"
+  },
+  "focus_off_page_2": {
+   "value": {
+    "ok": true,
+    "ret": []
+   },
+   "spec": "§16"
+  },
+  "focused_first": {
+   "value": {
+    "ok": true,
+    "ret": [
+     "goods",
+     8
+    ]
+   },
+   "spec": "§16"
+  },
+  "ok_down": {
+   "value": {
+    "ok": true,
+    "ret": [
+     "goods",
+     "press",
+     8
+    ]
+   },
+   "spec": "§16"
+  },
+  "ok_up": {
+   "value": {
+    "ok": true,
+    "ret": [
+     "goods",
+     "activate",
+     8
+    ]
+   },
+   "spec": "§16"
+  },
+  "focus_last": {
+   "value": {
+    "ok": true,
+    "ret": []
+   },
+   "spec": "§16"
+  },
+  "down_leaves": {
+   "value": {
+    "ok": true,
+    "ret": [
+     "bottom",
+     "focus"
+    ]
+   },
+   "spec": "§16"
+  }
+ },
+ "files": {},
+ "errors": []
+}

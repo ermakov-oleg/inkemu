@@ -9,6 +9,8 @@ local AXES = {
   down = { "y", "h", "x", "w", 1 },
 }
 
+local PAGE_KEYS = { up = true, down = true }
+
 local FORWARD = { down = true, right = true }
 
 local function moved(st, t)
@@ -109,6 +111,14 @@ function navigate(st, dir)
       return nil, nil
     end
     return moved(st, first)
+  end
+  local c = cur.owner
+  if c and c.kind.turn and cur.enabled and PAGE_KEYS[dir] then
+    local page, part = c.kind.turn(c, cur.part, dir)
+    if page then
+      set_focus(st, cur.id, part)
+      return event_result(cur.id, "change", page)
+    end
   end
   local t
   if api_at_least(13) then
