@@ -516,22 +516,19 @@ kinds.list = composite({
       return c.page - 1, n - 1
     end
   end,
-  -- per row: the skin's look when there is a skin, then the script's `draw` (box, row, state), then the skin's focus
-  -- ring; no text
+  -- per row: the skin's look and focus ring when there is a skin, then the script's `draw` (box, row, state); no text
   paint = function(g, c, look)
     for _, t in ipairs(part_targets(c)) do
       local focused = look.focused and look.part == t.part
       local st = { focused = focused, selected = t.part == c.selected, enabled = c.enabled }
-      local ring
       if c.skin then
-        local _, _, _, _, _, r = skin_face(g, c.skin, t.x, t.y, t.w, t.h, st)
-        ring = r
+        local _, _, _, _, _, ring = skin_face(g, c.skin, t.x, t.y, t.w, t.h, st)
+        if ring then
+          skin_ring(g, t.x, t.y, t.w, t.h)
+        end
       end
       if c.draw then
         c.draw(g, { x = t.x, y = t.y, w = t.w, h = t.h }, t.part, st)
-      end
-      if ring then
-        skin_ring(g, t.x, t.y, t.w, t.h)
       end
     end
     if c.skin then

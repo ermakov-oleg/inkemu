@@ -348,9 +348,10 @@ the README.
   returns `id, "change", page` (before position or order navigation, on every API minor) and moves focus to the
   neighbouring row, which the script's next frame shows by turning the page. A kept row that is not on the page gives
   way to the selected row of the page, else its first row. Checks: `16/list_paging`.
-- `ctx.ui` list, not measured: `selected` is any integer from 1 (no upper bound); the skin's focus ring is drawn after
-  the row's `draw`, and the dots of a skinned disabled list after the rows; page turning needs the focused row to be
-  enabled; the skin's text area is not passed to `draw`; `left` and `right` never turn a page.
+- `ctx.ui` list, measured later (oracle `s31_list_looks`): with a skin the focus ring of a focused row comes right
+  after the skin's look and before the script's `draw`; a skinned disabled list and `left`/`right` on a page's edge
+  rows (no page turn) are as followed here. Not measured: `selected` has no upper bound (21 of 20 rows is accepted);
+  page turning needs the focused row to be enabled; the skin's text area is not passed to `draw`.
 - `ctx.ui` switch, as measured with the reader's UI library run as a black box: `selected` is not type-checked (any
   value but nil and false is on), a `badge` is ignored, a `radius` only shapes the focus frame (radius + 3 when
   positive), `focus_style` does not change a switch's look, and `bold = false` leaves `bold` out of the text call.
