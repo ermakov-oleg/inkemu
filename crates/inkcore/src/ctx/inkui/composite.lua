@@ -64,30 +64,20 @@ end
 
 local ALIGN = { left = true, center = true, right = true }
 
--- The one line of a cell in the box `x y w h`: the font of `o` (or a smaller one from c.font_min that fits the width),
--- cut with an ellipsis. `o` holds align, color, font, bold and tabular.
-local function cell_text(g, c, text, x, y, w, h, o)
-  local f = shrink(o.font, c.font_min, function(f)
-    return f:measure(text, { bold = o.bold, tabular = o.tabular }) <= w
-  end)
-  g:text_box(x, y, w, h, text, {
-    align = o.align, color = o.color, font = f, overflow = "ellipsis", valign = "middle", wrap = "none",
-    bold = o.bold, tabular = o.tabular,
-  })
-end
-
 local function skinned_radio(g, c, look, font)
   for _, t in ipairs(part_targets(c)) do
     local focused = look.focused and look.part == t.part
     local st = { focused = focused, selected = t.part == c.value, enabled = c.enabled }
     local tc, tx, ty, tw, th, ring = skin_face(g, c.skin, t.x, t.y, t.w, t.h, st)
     local item = c.items[t.part]
-    cell_text(g, c, item, tx, ty, tw, th, { align = c.align or "left", color = tc, font = font, bold = c.bold })
+    one_line(g, item, tx, ty, tw, th, {
+      align = c.align or "left", color = tc, font = font, font_min = c.font_min, bold = c.bold,
+    })
     if ring then
       skin_ring(g, t.x, t.y, t.w, t.h)
     end
   end
-  skin_dots(g, c.skin, c)
+  dots(g, c)
 end
 
 kinds.radio = composite({
@@ -153,11 +143,11 @@ kinds.radio = composite({
         g:circle(cx, cy, (s - 10) // 2, { fill = true })
       end
       local item, tw = c.items[t.part], math.max(0, t.w - s - 8)
-      cell_text(g, c, item, t.x + s + 8, t.y, tw, t.h, {
-        align = c.align or "left", color = 15, font = font, bold = c.bold,
+      one_line(g, item, t.x + s + 8, t.y, tw, t.h, {
+        align = c.align or "left", color = 15, font = font, font_min = c.font_min, bold = c.bold,
       })
       if look.focused and look.part == t.part then
-        g:rect(t.x - 3, t.y - 3, t.w + 6, t.h + 6, { line_width = 2, radius = 0 })
+        focus_frame(g, t.x, t.y, t.w, t.h, 0)
       end
     end
     dots(g, c)
@@ -237,8 +227,8 @@ kinds.tabs = composite({
       if c.skin then
         local st = { focused = focused, selected = selected, enabled = c.enabled }
         local tc, tx, ty, tw, th, ring = skin_face(g, c.skin, t.x, t.y, t.w, t.h, st)
-        cell_text(g, c, c.items[t.part], tx, ty, tw, th, {
-          align = c.align or "center", color = tc, font = font, bold = bold,
+        one_line(g, c.items[t.part], tx, ty, tw, th, {
+          align = c.align or "center", color = tc, font = font, font_min = c.font_min, bold = bold,
         })
         if ring then
           skin_ring(g, t.x, t.y, t.w, t.h)
@@ -255,20 +245,14 @@ kinds.tabs = composite({
           g:rect(t.x + inset, t.y + t.h - 4, t.w - 2 * inset, 4, { fill = true })
         end
         if focused then
-          g:rect(t.x - 3, t.y - 3, t.w + 6, t.h + 6, {
-            line_width = 2, radius = type(r) == "number" and r > 0 and r + 3 or 0,
-          })
+          focus_frame(g, t.x, t.y, t.w, t.h, r)
         end
-        cell_text(g, c, c.items[t.part], t.x, t.y, t.w, t.h, {
-          align = c.align or "center", color = fill and 0 or 15, font = font, bold = bold,
+        one_line(g, c.items[t.part], t.x, t.y, t.w, t.h, {
+          align = c.align or "center", color = fill and 0 or 15, font = font, font_min = c.font_min, bold = bold,
         })
       end
     end
-    if c.skin then
-      skin_dots(g, c.skin, c)
-    else
-      dots(g, c)
-    end
+    dots(g, c)
   end,
 })
 
@@ -317,23 +301,15 @@ local function paint_ends(g, c, look, middle, face)
     local p = end_part(c, t, t.part == 1 and "<" or ">")
     face(p, { focused = look.focused and look.part == t.part, outline = look.outline }, t)
     if c.enabled and not t.enabled then
-      if c.skin then
-        skin_dots(g, c.skin, { x = t.x, y = t.y, w = t.w, h = t.h, enabled = false })
-      else
-        dots(g, { x = t.x, y = t.y, w = t.w, h = t.h, enabled = false })
-      end
+      dots(g, { x = t.x, y = t.y, w = t.w, h = t.h, enabled = false, skin = c.skin })
     end
   end
   if middle.w > 0 and middle.text ~= "" then
-    cell_text(g, c, middle.text, middle.x, middle.y, middle.w, middle.h, {
+    one_line(g, middle.text, middle.x, middle.y, middle.w, middle.h, {
       align = "center", color = 15, font = c.font or host.fonts.medium, tabular = c.tabular,
     })
   end
-  if c.skin then
-    skin_dots(g, c.skin, c)
-  else
-    dots(g, c)
-  end
+  dots(g, c)
 end
 
 -- the plus or minus sign centred in the area `t` of a part (the part, or its skin's text area): a bar of at
@@ -549,11 +525,7 @@ kinds.list = composite({
         c.draw(g, { x = t.x, y = t.y, w = t.w, h = t.h }, t.part, st)
       end
     end
-    if c.skin then
-      skin_dots(g, c.skin, c)
-    else
-      dots(g, c)
-    end
+    dots(g, c)
   end,
 })
 

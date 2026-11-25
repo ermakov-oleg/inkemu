@@ -16,7 +16,6 @@
 --                                           focus ring goes around it. It draws no text, no ring and no dots: the
 --                                           ring comes after the content, so the caller draws it with skin_ring.
 --   skin_ring(g, x, y, w, h)                the 2 px focus ring 3 px outside the box
---   skin_dots(g, skin, c)                   the white dots over disabled `c`, unless the skin has a disabled look
 --   skin_pad(skin) -> t, r, b, l
 --   nine_slice(g, look, x, y, w, h, invert, cut)
 --                                           the look's image cut in nine and stretched over the box; with `cut`,
@@ -187,13 +186,7 @@ function skin_bar(g, skin, x, y, w, h, lead)
 end
 
 function skin_ring(g, x, y, w, h)
-  g:rect(x - 3, y - 3, w + 6, h + 6, { line_width = 2, radius = 0 })
-end
-
-function skin_dots(g, skin, c)
-  if skin.disabled == nil then
-    dots(g, c)
-  end
+  focus_frame(g, x, y, w, h, 0)
 end
 
 -- A button with a skin: the look, the text in the area after `pad`, then the focus ring. `radius` and `border` have

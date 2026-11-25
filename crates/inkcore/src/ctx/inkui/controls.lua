@@ -58,11 +58,7 @@ kinds.button = {
       button_face(g, c, look)
     end
     badge(g, c)
-    if c.skin then
-      skin_dots(g, c.skin, c)
-    else
-      dots(g, c)
-    end
+    dots(g, c)
   end,
 }
 
@@ -141,16 +137,9 @@ kinds.switch = {
       end
     end
     if look.focused then
-      local r = c.radius
-      g:rect(c.x - 3, c.y - 3, c.w + 6, c.h + 6, {
-        line_width = 2, radius = type(r) == "number" and r > 0 and r + 3 or 0,
-      })
+      focus_frame(g, c.x, c.y, c.w, c.h, c.radius)
     end
-    if c.skin then
-      skin_dots(g, c.skin, c)
-    else
-      dots(g, c)
-    end
+    dots(g, c)
   end,
 }
 
