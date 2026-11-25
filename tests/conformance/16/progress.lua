@@ -4,11 +4,12 @@ local L = require("canvas_log")
 -- a 3 x 3 checkerboard: black corners and middle, white edges
 local PNG = "\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00\x00\x00\x0d\x49\x48\x44\x52\x00\x00\x00\x03\x00\x00\x00\x03\x08\x00\x00\x00\x00\x73\x43\xea\x63\x00\x00\x00\x0f\x49\x44\x41\x54\x78\xda\x63\x60\xf8\xcf\x00\x44\x60\x02\x00\x17\xf4\x03\xfd\x5c\x20\x9c\x4b\x00\x00\x00\x00\x49\x45\x4e\x44\xae\x42\x60\x82"
 
-local ui, img, canvas
+local ui, img, sel, canvas
 
 function on_load(ctx)
   img = assert(ctx.image:decode(PNG))
-  ui = ctx.ui:create({ skins = { check = { image = img, edge = 1 } } })
+  sel = assert(ctx.image:decode(PNG))
+  ui = ctx.ui:create({ skins = { check = { image = img, edge = 1, selected = { image = sel } } } })
 end
 
 -- the calls end_frame draws for one progress bar `o` (the box is added)
@@ -84,15 +85,15 @@ function on_draw(ctx, g)
   end
   T.value("stripe_432", { calls = #log, within = within })
 
-  -- a skin without a selected look: the whole bar in the normal look, then its first 15 px (30 * 0.5) inverted;
-  -- the middle column is cut to 14 of its 28 px and keeps that share of its source pixel
+  -- the whole bar in the normal look, then the first 15 px (30 * 0.5) of the full-width selected look: the middle
+  -- column is cut to 14 of its 28 px and keeps that share of its source pixel, the right column is left out
   log = drawn(g, { x = 100, y = 300, w = 30, h = 30, value = 0.5, skin = "check" })
   T.value("skin", {
     calls = #log,
-    lead_corner = log[10] == L.call("image", img, 100, 300,
-      { h = 1, invert = true, src = { h = 1, w = 1, x = 0, y = 0 }, w = 1 }),
-    lead_middle = log[11] == L.call("image", img, 101, 300,
-      { h = 1, invert = true, src = { h = 1, w = 1, x = 1, y = 0 }, w = 14 }),
+    lead_corner = log[10] == L.call("image", sel, 100, 300,
+      { h = 1, invert = false, src = { h = 1, w = 1, x = 0, y = 0 }, w = 1 }),
+    lead_middle = log[11] == L.call("image", sel, 101, 300,
+      { h = 1, invert = false, src = { h = 1, w = 1, x = 1, y = 0 }, w = 14 }),
   })
 
   try("nan", { x = 0, y = 0, w = 100, h = 20, value = 0 / 0 })

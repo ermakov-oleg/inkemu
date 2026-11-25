@@ -366,7 +366,7 @@ the README.
   (s24 only has cuts where rounding up gives the same); a leading part inside the left edge or reaching into the
   right edge, and the inverted look, follow the same cut; `style = "stripe"` with a skin draws only the skin; a top
   polygon that reaches 128 points is drawn as soon as it is full, before the bottom ones; a box 4 px tall (inner
-  height 0) gets no fill.
+  height 0) gets no fill; a `progress` child of a container is checked and drawn like a top-level one.
 - `ctx.ui` switch, as measured with the reader's UI library run as a black box: `selected` is not type-checked (any
   value but nil and false is on), a `badge` is ignored, a `radius` only shapes the focus frame (radius + 3 when
   positive), `focus_style` does not change a switch's look, and `bold = false` leaves `bold` out of the text call.
