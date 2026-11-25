@@ -71,13 +71,14 @@ HOST_REFUSES: dict[tuple[str, int], list[str]] = {
     # label text {} and true reach g:text_box unchanged, which takes only strings and numbers
     ("s16_edge_inputs.api12", 16): LABEL_TEXT_REFUSED,
     ("s16_edge_inputs.api26", 16): LABEL_TEXT_REFUSED,
-    # a button or label, at top level or as a child, hands a table or boolean text to g:text_box the same way
+    # a button, switch or label, at top level or as a child, hands a table or boolean text to g:text_box the same way
     **{
         (f"s17_layout_edges.api{minor}", step): refused
         for minor in (15, 26)
         for step, refused in (
             (12, LABEL_TEXT_REFUSED[:1]),
-            (18, LABEL_TEXT_REFUSED[:1]),
+            (16, LABEL_TEXT_REFUSED[:1]),
+            (18, LABEL_TEXT_REFUSED[:1] * 2),
             (37, LABEL_TEXT_REFUSED[1:]),
             (41, LABEL_TEXT_REFUSED[:1]),
         )

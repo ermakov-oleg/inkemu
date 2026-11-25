@@ -305,6 +305,12 @@ the README.
     the ring is at least 0.
   - A `nav` entry naming a composite whose default part is unavailable falls back to the search by position.
   - A registered `skin` on a radio raises "not implemented in inkemu yet"; an unregistered one is `invalid_argument`.
+- `ctx.ui` switch, as measured with the reader's UI library run as a black box: `selected` is not type-checked (any
+  value but nil and false is on), a `badge` is ignored, a `radius` only shapes the focus frame (radius + 3 when
+  positive), `focus_style` does not change a switch's look, and `bold = false` leaves `bold` out of the text call.
+  Checks: `16/switch_geometry`.
+- `ctx.ui` switch, not measured: the text is left out when the room before the capsule is 0 or less, and with a note
+  of odd height the note box takes the extra pixel. A registered `skin` still raises "not implemented in inkemu yet".
 - `ctx.ui` skins, not measured: on a button, a radio and a container child alike, a `skin` that is not a name
   registered in `create` is `invalid_argument`, as is a button with both `skin` and `image` (the code §16 gives);
   only a registered skin, which inkemu does not draw yet, raises "not implemented in inkemu yet".

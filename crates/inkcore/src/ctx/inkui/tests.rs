@@ -125,10 +125,10 @@ fn dot_calls_and_stubs_raise_at_the_app_line() {
         "{err}"
     );
     let err = core
-        .lua_exec("local ui = ctx.ui:create()\nui:switch('ok', {})")
+        .lua_exec("local ui = ctx.ui:create()\nui:image('ok', {})")
         .unwrap_err();
     assert!(
-        err.starts_with("lua_exec:2: ui:switch is not implemented in inkemu yet"),
+        err.starts_with("lua_exec:2: ui:image is not implemented in inkemu yet"),
         "{err}"
     );
 }
@@ -883,8 +883,8 @@ fn layout_run(api: &str, code: &str) -> String {
 fn containers_raise_what_inkemu_does_not_implement_at_the_app_line() {
     let cases = [
         (
-            "ui:begin_frame(g)\nui:column('c', {x = 0, y = 0, w = 100, h = 100, children = {{kind = 'switch', id = 's'}}})",
-            "index.lua:3: ui:switch is not implemented in inkemu yet",
+            "ui:begin_frame(g)\nui:column('c', {x = 0, y = 0, w = 100, h = 100, children = {{kind = 'tabs', id = 's', items = {'a'}}}})",
+            "index.lua:3: ui:tabs is not implemented in inkemu yet",
         ),
         (
             "ui:begin_frame(g)\nui:row('c', {x = 0, y = 0, w = 100, h = 100, skin = 'iron', children = {}})",

@@ -25,7 +25,7 @@ end
 -- every method of §16 exists from the start; the files that implement one replace its stub
 for _, name in ipairs({
   "begin_frame", "end_frame", "handle_event", "focus", "focused", "layout", "skin", "editing", "stop_edit",
-  "label", "button", "switch", "image", "field", "region",
+  "label", "button", "image", "field", "region",
   "tabs", "radio", "stepper", "pager", "list", "progress",
   "row", "column", "grid", "stack",
 }) do
