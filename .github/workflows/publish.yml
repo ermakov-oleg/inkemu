@@ -1,9 +1,12 @@
 name: Publish
 
 # Tag push `vX.Y.Z` -> PyPI. Manual run -> TestPyPI (a version can be uploaded there only once).
+# A pull request into main builds and checks the same files without uploading them.
 on:
   push:
     tags: ["v*"]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -48,7 +51,8 @@ jobs:
           - {name: macos-arm64, os: macos-latest, target: aarch64-apple-darwin}
           - {name: macos-x86_64, os: macos-latest, target: x86_64-apple-darwin}
           - {name: manylinux-x86_64, os: ubuntu-latest, target: x86_64-unknown-linux-gnu}
-          - {name: manylinux-aarch64, os: ubuntu-latest, target: aarch64-unknown-linux-gnu}
+          # native: ring's assembly does not build with the manylinux2014 cross gcc (no __ARM_ARCH)
+          - {name: manylinux-aarch64, os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu}
     steps:
       - uses: actions/checkout@v7
       - run: scripts/vendor-lua.sh
