@@ -440,9 +440,10 @@ and Wi-Fi rules of the lock screen (§15). These are nil or ignored in inkemu.
   the field sets neither. Switching fields, `ui:stop_edit` and an `end_frame` without the edited field close the edit
   with `ed:close()`, before the next edit starts or anything is painted. Checks: `16/field_edit` (on inkemu's own
   docked input).
+  - `enter = "next"` goes to the first enabled field after the edited one in the last frame, past disabled fields
+    and other controls (oracle s35).
 - `ctx.ui` text fields, not measured:
-  - `enter = "next"` goes to the first enabled field after the edited one in the last frame, past other controls;
-    focus moves there even when the host refuses that edit.
+  - After `enter = "next"`, focus moves to the next field even when the host refuses that edit.
   - The callbacks, `enter` and the options come from the frame the edit started on; an `on_change` or `on_end` that
     is not a function is left out. Inside the field's own `on_end`, `ui:editing()` is already nil.
   - At `end_frame` an edit goes on while its id is declared as a field, even a disabled one, and ends when the id is
