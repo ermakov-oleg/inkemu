@@ -118,7 +118,15 @@ While a daemon runs, the same verbs work as client commands (`inkemu tap-text 'T
 `lock`, `unlock`, `reload`, `restart`, `shot [PATH]`, `texts`, `log`, `state`, `resume`, `stop`.
 
 `tap-text` taps the last drawn occurrence of the text; if it is not on screen it fails and lists the visible texts.
-Every input advances virtual time by 350 ms. Daemon discovery goes through `<state root>/daemon.json`.
+Every input advances virtual time by 350 ms. `shot` and `run` write PNG whatever the extension of the path;
+`inkemu window` (still Python, Pillow) writes the format the extension names.
+
+Daemon discovery goes through `<state root>/daemon.json` (`{"port":7480,"pid":1234,"app":"hello","window":false}`).
+The client sends `POST /cmd` to `127.0.0.1:PORT` with `Content-Type: application/json` and a body such as
+`{"cmd": "tap", "args": {"x": 10, "y": 20}}`. `args` is an object (or absent/`null`) with typed values: integers for
+`x`, `y` and `ms`, strings for `text`, `path`, `direction` and `key`, `true`/`false` or `"yes"`/`"no"` for `answer`,
+and a string like `"61s"` or an integer of milliseconds for `duration`. The reply is the command's result as JSON
+(`ok`, `error`, `texts`, `log_tail`, `errors`, `warnings`, `status`, `shot`, plus `log` for `log`).
 
 An open dialog (`ctx.dialog:confirm`, `ctx.input:text`/`edit`, the host's "Leave app?") is drawn as a plate with its
 title, text or field and `Yes`/`No` or `OK`/`Cancel`, so it shows in shots and `texts`. While it is open, input does
@@ -185,6 +193,33 @@ and `/AppFiles/<app_id>/`); inkemu keeps the §9 quota (128 MiB, 512 files) on `
 `.emu/` in the working directory, or `$INKEMU_STATE_ROOT`. `--fresh` wipes the app state first, both file directories
 included, then seeds `files/` from `<fixtures dir>/files/`. A file added, edited or removed in `files/` or
 `appfiles/` while an `Emu` runs is what the app sees from its next call on, and the app's own saves leave it alone.
+
+## Breaking changes in 0.3
+
+The CLI, the command daemon and the MCP server are Rust now and drop the Python quirks of 0.2 (the daemon of
+`inkemu window` stays Python, and lenient, until the window moves to Rust):
+
+- `POST /cmd` arguments are typed. 0.2 took `"12"`, `12.7` (truncated) and `"1_000"` for an integer and turned any
+  value into text; now `x`, `y` and `ms` take JSON integers only, `text` and `path` strings only, and `duration` a
+  string or an integer of milliseconds. Errors show the value as JSON (`'tap': x must be an integer, got "a"`).
+  Command-line words are unchanged: `inkemu tap 10 20`, `--steps "tap 10 20"`.
+- `args` in `POST /cmd`: 0.2 took every falsy value (`[]`, `""`, `0`, `false`) as no arguments; now only an object or
+  `null` is accepted, anything else is a 400 `bad request: args must be an object`.
+- Paths: 0.2 printed shot paths, `--out`, `--state` and `--fixtures` normalised like Python's `pathlib`
+  (`./out/` → `out`); now they are printed as given. A relative `inkemu shot PATH` is still made absolute against the
+  client's working directory.
+- Shots: 0.2 refused a path without an extension (`unknown file extension: `); `serve`, `run` and `shot` now write
+  PNG whatever the extension.
+- `daemon.json`: 0.2 wrote `{"port": 7480, "pid": 1, ...}` and read string ports and pids; now it is compact JSON
+  and `port`, `pid` must be positive integers, `app` a string, `window` a bool (default false).
+- Long options: 0.2 took unique prefixes (`--fre` for `--fresh`); now only full names work. `inkemu help` is gone,
+  `-h`/`--help` stay.
+- A missing app directory: 0.2 `run`/`serve` started the app and failed with exit 1 and a Lua error; now they exit 2
+  with `inkemu: no such app directory: PATH`.
+- A failed client command whose reply has no `error`: 0.2 printed `inkemu: None`, now
+  `inkemu: the daemon reported an error`.
+- MCP `emu_start`: refusals said `window=False`, `fresh=True`, `net=None` and `not 'wifi'`; now `window=false`,
+  `fresh=true`, `net=null` and `got "wifi"`.
 
 ## Breaking changes in 0.2
 
