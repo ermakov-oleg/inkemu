@@ -1,6 +1,6 @@
 {
   "spec": "§16",
-  "about": "a stack places every child in its whole inner box by justify_self and align_self, percentages of the inner box, a size from aspect_ratio not stretched; a fitted label and a button keep their content size; a fitted stack is its padding plus the largest child each way; the later child covers the earlier one and takes the tap where they overlap (the rules oracle s25 shows; the aspect_ratio child follows the contract text)",
+  "about": "a stack places every child in its whole inner box by justify_self and align_self, percentages of the inner box, a size from aspect_ratio not stretched; a fitted label and a button keep their content size; a fitted stack is its padding plus the largest child each way; the later child covers the earlier one and takes the tap where they overlap (probe-confirmed by oracle s25 except the aspect_ratio child and the fit record, whose children have set sizes where the oracle used content sizes, which follow the contract text)",
   "expect": {
     "place": {"value": "40,120,400,300 [190,358,100,50 | 392,132,36,24 | 52,132,376,276 | 240,339,188,69 | 52,255,60,30]", "spec": "§16"},
     "fit_label": {"value": true, "spec": "§16"},

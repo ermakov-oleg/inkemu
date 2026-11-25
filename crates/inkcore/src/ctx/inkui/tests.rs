@@ -1001,12 +1001,17 @@ fn layout_run(api: &str, code: &str) -> String {
 
 #[test]
 fn containers_raise_what_inkemu_does_not_implement_at_the_app_line() {
-    let code = "ui:begin_frame(g)\nui:column('c', {x = 0, y = 0, w = 100, h = 100, children = {{kind = 'field', id = 's', w = 10, h = 10}}})";
-    let err = layout_run("2.26", code);
-    assert!(
-        err.starts_with("index.lua:3: ui:field is not implemented in inkemu yet"),
-        "{code}: {err}"
-    );
+    for kind in ["column", "grid", "stack"] {
+        let code = format!(
+            "ui:begin_frame(g)\nui:{kind}('c', {{x = 0, y = 0, w = 100, h = 100, columns = {cols}, children = {{{{kind = 'field', id = 's', w = 10, h = 10}}}}}})",
+            cols = if kind == "grid" { "1" } else { "nil" }
+        );
+        let err = layout_run("2.26", &code);
+        assert!(
+            err.starts_with("index.lua:3: ui:field is not implemented in inkemu yet"),
+            "{code}: {err}"
+        );
+    }
     // an invalid field anywhere in the tree wins over a part inkemu lacks; ui:layout takes a registered container
     // skin and draws nothing
     assert_eq!(
