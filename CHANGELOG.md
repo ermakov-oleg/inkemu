@@ -9,7 +9,8 @@ changes in 0.3" has each one with the old and new behaviour.
 
 - `POST /cmd` arguments are typed JSON: `x`, `y` and `ms` are integers (no strings, floats or bools), `text` and
   `path` are strings, `duration` is a string such as `"61s"` or an integer of milliseconds. Errors show the value as
-  JSON: `'tap': x must be an integer, got "a"`. CLI words and `--steps` work as before.
+  JSON: `'tap': x must be an integer, got "a"`. CLI words and `--steps` work as before, except that an integer word
+  is a sign and digits only (no `1_000`, no padding).
 - `args` in `POST /cmd` must be an object or `null`; `[]`, `""`, `0` and `false` are a 400 `bad request: args must be
   an object`.
 - Shot paths, `--out`, `--state` and `--fixtures` are printed as given, without Python's path normalisation.
@@ -31,8 +32,6 @@ changes in 0.3" has each one with the old and new behaviour.
   ends the 0.2.0 known limit; `mcp` is no longer a runtime dependency. `inkemu window` is still Python (Tk).
 - `inkemu window` still writes the image format its shot path's extension names (Pillow), while `serve` and `run`
   always write PNG.
-- Ctrl-C stops `inkemu` client commands and `inkemu-mcp` at once. `inkemu serve` stops with exit 2 if its HTTP server
-  stops accepting connections, instead of running on deaf. "cannot reach the daemon" names only the OS error.
 
 ## 0.2.0
 

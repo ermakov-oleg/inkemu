@@ -414,15 +414,16 @@ fn serve_on(s: &mut Session, mut d: Daemon, root: &Path) -> Result<(), String> {
         d.close();
         return Err(format!("cannot write daemon.json: {e}"));
     }
-    let mut failure = None;
-    while !d.stopped() && !SIGINT.load(Ordering::SeqCst) {
-        d.pump(s);
-        failure = d.failure();
-        if failure.is_some() {
-            break;
+    let failure = loop {
+        if let Some(e) = d.failure() {
+            break Some(e);
         }
+        if d.stopped() || SIGINT.load(Ordering::SeqCst) {
+            break None;
+        }
+        d.pump(s);
         thread::sleep(Duration::from_millis(20));
-    }
+    };
     s.leave();
     remove_info(root);
     d.close();

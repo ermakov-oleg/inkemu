@@ -202,7 +202,8 @@ The CLI, the command daemon and the MCP server are Rust now and drop the Python 
 - `POST /cmd` arguments are typed. 0.2 took `"12"`, `12.7` (truncated) and `"1_000"` for an integer and turned any
   value into text; now `x`, `y` and `ms` take JSON integers only, `text` and `path` strings only, and `duration` a
   string or an integer of milliseconds. Errors show the value as JSON (`'tap': x must be an integer, got "a"`).
-  Command-line words are unchanged: `inkemu tap 10 20`, `--steps "tap 10 20"`.
+  Command-line words are unchanged (`inkemu tap 10 20`, `--steps "tap 10 20"`), except that an integer word is a
+  sign and digits only: 0.2 also took `1_000` and padded words.
 - `args` in `POST /cmd`: 0.2 took every falsy value (`[]`, `""`, `0`, `false`) as no arguments; now only an object or
   `null` is accepted, anything else is a 400 `bad request: args must be an object`.
 - Paths: 0.2 printed shot paths, `--out`, `--state` and `--fixtures` normalised like Python's `pathlib`
