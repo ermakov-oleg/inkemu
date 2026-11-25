@@ -11,6 +11,11 @@ function is_side(v)
   return is_integral(v) and v >= 1
 end
 
+-- an image or layer object the core made; a table that merely has a width and a height is not one
+function is_image(v)
+  return host.is_image(v)
+end
+
 -- the largest coordinate and size the reader takes (it refuses a child placed past it and a wider ui:layout rect)
 MAX_COORD = 32767
 

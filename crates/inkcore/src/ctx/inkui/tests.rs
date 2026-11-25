@@ -125,10 +125,10 @@ fn dot_calls_and_stubs_raise_at_the_app_line() {
         "{err}"
     );
     let err = core
-        .lua_exec("local ui = ctx.ui:create()\nui:image('ok', {})")
+        .lua_exec("local ui = ctx.ui:create()\nui:field('ok', {})")
         .unwrap_err();
     assert!(
-        err.starts_with("lua_exec:2: ui:image is not implemented in inkemu yet"),
+        err.starts_with("lua_exec:2: ui:field is not implemented in inkemu yet"),
         "{err}"
     );
 }
@@ -174,6 +174,12 @@ fn library(api: &str, extra: &'static str) -> (Lua, Table) {
     let ctx = lua.create_table().unwrap();
     let manifest = format!(r#"{{"app_id": "testapp", "api": "{api}"}}"#);
     let host = host(&lua, &ctx, &app_files(&manifest, "")).unwrap();
+    // a table with `_img = true` stands for an image object here
+    let is_image = lua
+        .load("return function(v) return type(v) == 'table' and v._img == true end")
+        .eval::<Function>()
+        .unwrap();
+    host.set("is_image", is_image).unwrap();
     let mut files = FILES.to_vec();
     files.push(("probe.lua", extra));
     let env = load(&lua, &files, host).unwrap();
@@ -313,7 +319,7 @@ local function show(v)
 end
 return function(log)
   local g = {}
-  for _, op in ipairs({ "rect", "text_box", "pattern", "circle" }) do
+  for _, op in ipairs({ "rect", "text_box", "pattern", "circle", "image" }) do
     g[op] = function(self, ...)
       local args = table.pack(...)
       for i = 1, args.n do args[i] = show(args[i]) end
@@ -334,6 +340,12 @@ fn fixed_library(api: &str) -> Lua {
     ctx.set("input", lua.create_table().unwrap()).unwrap();
     let manifest = format!(r#"{{"app_id": "testapp", "api": "{api}"}}"#);
     let host = host(&lua, &ctx, &app_files(&manifest, "")).unwrap();
+    // a table with `_img = true` stands for an image object here
+    let is_image = lua
+        .load("return function(v) return type(v) == 'table' and v._img == true end")
+        .eval::<Function>()
+        .unwrap();
+    host.set("is_image", is_image).unwrap();
     let mut files = FILES.to_vec();
     files.push(("probe.lua", "function state(ui) return objects[ui] end"));
     let env = load(&lua, &files, host).unwrap();
@@ -540,22 +552,88 @@ fn font_min_takes_the_largest_system_font_that_fits() {
 }
 
 #[test]
-fn button_image_and_registered_skin_raise_at_the_app_line() {
-    for (field, want) in [
-        (
-            "image = {}",
-            "index.lua:3: ui:button image is not implemented in inkemu yet",
+fn registered_button_skin_raises_at_the_app_line() {
+    let code = "ui:begin_frame(g)\nui:button('a', {x = 0, y = 0, w = 10, h = 10, skin = 'iron'})";
+    let err = layout_run("2.26", code);
+    assert!(
+        err.starts_with("index.lua:3: ui:button skin is not implemented in inkemu yet"),
+        "{err}"
+    );
+}
+
+const PIC: &str = "local pic = {_img = true, name = 'pic', width = 48, height = 48}\n";
+
+#[test]
+fn an_image_button_draws_the_image_then_border_focus_frame_and_text() {
+    let lua = fixed_library("2.26");
+    let img = |y: i32, invert: bool| format!("image(@pic,10,{y},{{h=56,invert={invert},w=200}})");
+    let decl = |id: &str, y: i32, more: &str| {
+        format!("ui:button('{id}', {{x = 10, y = {y}, w = 200, h = 56, image = pic, {more}}})\n")
+    };
+    let body = [
+        decl("n", 0, "border = false"),
+        decl("sel", 70, "selected = true, text = 'B', border = false"),
+        decl("emp", 140, "emphasis = true, border = false"),
+        decl("r8", 210, "radius = 8"),
+    ]
+    .concat();
+    let plain_text = "text_box(10,70,200,56,B,{align=center,font=@medium,overflow=ellipsis,valign=middle,wrap=none})";
+    assert_eq!(
+        frame(&lua, "nil", PIC, &body),
+        [
+            img(0, false),
+            img(70, true),
+            plain_text.to_string(),
+            img(140, false),
+            img(210, false),
+            "rect(10,210,200,56,{radius=8})".to_string(),
+        ]
+    );
+    // focus rings the box with no fill, whatever the style; the image keeps `selected` as its only inversion
+    let log = frame(
+        &lua,
+        "nil",
+        &format!("{PIC}st.keys = true"),
+        &format!(
+            "{}ui:focus('f')",
+            decl("f", 0, "radius = 8, border = false")
         ),
-        (
-            "skin = 'iron'",
-            "index.lua:3: ui:button skin is not implemented in inkemu yet",
+    );
+    assert_eq!(log[0], img(0, false));
+    assert_eq!(log[1], "rect(7,-3,206,62,{line_width=2,radius=11})");
+}
+
+#[test]
+fn an_image_control_draws_its_source_and_is_not_focusable() {
+    let lua = fixed_library("2.26");
+    let log = frame(
+        &lua,
+        "nil",
+        PIC,
+        "ui:image('i', {x = 10, y = 20, w = 100, h = 50, source = pic})\n\
+         ui:image('o', {x = 0, y = 0, w = 1, h = 1})\n\
+         assert(select('#', ui:image('z', {x = 0, y = 0, w = 0, h = 1, source = pic})) == 2)\n\
+         assert(ui:focused() == nil)",
+    );
+    assert_eq!(log, ["image(@pic,10,20,{h=50,w=100})"]);
+}
+
+#[test]
+fn only_an_image_object_is_an_image_for_a_button_and_a_layout_child() {
+    let out = layout_run(
+        "2.26",
+        &format!(
+            "{PIC}local function try(f) ui:begin_frame(g) local a, b = f() ui:end_frame() return tostring(a) .. ':' .. tostring(b) end\n\
+             return try(function() return ui:button('a', {{x = 0, y = 0, w = 10, h = 10, image = 5}}) end),\n\
+               try(function() return ui:button('a', {{x = 0, y = 0, w = 10, h = 10, image = {{width = 10, height = 10}}}}) end),\n\
+               try(function() return ui:button('a', {{x = 0, y = 0, w = 10, h = 10, image = pic}}) end),\n\
+               try(function() return ui:row('r', {{x = 0, y = 0, w = 10, h = 10, children = {{{{kind = 'image', source = {{}}}}}}}}) end)"
         ),
-    ] {
-        let code =
-            format!("ui:begin_frame(g)\nui:button('a', {{x = 0, y = 0, w = 10, h = 10, {field}}})");
-        let err = layout_run("2.26", &code);
-        assert!(err.starts_with(want), "{err}");
-    }
+    );
+    assert_eq!(
+        out,
+        "nil:invalid_argument,nil:invalid_argument,nil:nil,nil:invalid_argument"
+    );
 }
 
 #[test]
@@ -1334,11 +1412,6 @@ fn whole_floats_past_32_bits_are_invalid_arguments() {
         for _, k in ipairs({'line_width', 'color', 'inset'}) do\n\
           add('divider.' .. k, function(v)\n\
             return layout(R, {kind = 'column', divider = {[k] = v}, children = {{grow = 1}, {grow = 1}}})\n\
-          end)\n\
-        end\n\
-        for _, k in ipairs({'width', 'height'}) do\n\
-          add('source.' .. k, function(v)\n\
-            return layout(R, {kind = 'row', children = {{kind = 'image', source = with({width = 5, height = 5}, k, v)}}})\n\
           end)\n\
         end\n\
         for _, k in ipairs({'gap', 'value', 'columns'}) do\n\

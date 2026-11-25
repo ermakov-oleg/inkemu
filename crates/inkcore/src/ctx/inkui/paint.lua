@@ -59,6 +59,33 @@ function button_face(g, c, look)
   })
 end
 
+-- A button whose face is an image scaled to the box: inverted when selected, the border and the focus frame over it,
+-- the text on top. Focus never fills.
+function image_face(g, c, look)
+  local r = c.radius or 0
+  g:image(c.image, c.x, c.y, { w = c.w, h = c.h, invert = c.selected })
+  if c.border then
+    g:rect(c.x, c.y, c.w, c.h, { radius = r })
+  end
+  if look.focused then
+    local outer = type(r) == "number" and r > 0 and r + 3 or 0
+    g:rect(c.x - 3, c.y - 3, c.w + 6, c.h + 6, { line_width = 2, radius = outer })
+  end
+  if c.text == nil or c.text == "" then
+    return
+  end
+  local font = c.font or host.fonts.medium
+  if type(c.text) == "string" then
+    font = shrink(font, c.font_min, function(f)
+      return f:measure(c.text, measure_opts(c)) <= c.w
+    end)
+  end
+  g:text_box(c.x, c.y, c.w, c.h, c.text, {
+    align = c.align or "center", font = font, overflow = "ellipsis", valign = "middle", wrap = "none",
+    bold = c.bold, tabular = c.tabular,
+  })
+end
+
 -- white dots over a disabled control; a canvas without `pattern` (the capability is off) gets none
 function dots(g, c)
   if not c.enabled and g.pattern ~= nil then

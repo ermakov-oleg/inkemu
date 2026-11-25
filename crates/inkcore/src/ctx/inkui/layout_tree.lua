@@ -181,9 +181,10 @@ local function check_sizing(cx, n, o)
     if o.image ~= nil and o.skin ~= nil then
       return fail(cx, INVALID)
     end
-    if o.image ~= nil then
-      not_implemented(cx, "ui:button image")
+    if o.image ~= nil and not is_image(o.image) then
+      return fail(cx, INVALID)
     end
+    n.image = o.image
     tree_skin(cx, n, o.skin, "ui:button")
   elseif k == "switch" then
     if not (optional(o.note, "string") and (not api_at_least(16) or optional(o.bold, "boolean"))) then
@@ -207,11 +208,10 @@ local function check_sizing(cx, n, o)
     end
     tree_skin(cx, n, o.skin, "ui:" .. k)
   elseif k == "image" then
-    local s = o.source
-    if type(s) ~= "table" or not is_side(s.width) or not is_side(s.height) then
+    if not is_image(o.source) then
       return fail(cx, INVALID)
     end
-    n.source = s
+    n.source = o.source
   end
 end
 

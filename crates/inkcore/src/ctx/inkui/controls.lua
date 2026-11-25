@@ -42,18 +42,36 @@ kinds.button = {
     if not ok then
       return false, unsupported
     end
-    if o.image ~= nil then
-      return false, "ui:button image is not implemented in inkemu yet"
+    if o.image ~= nil and not is_image(o.image) then
+      return false
     end
+    c.image = o.image
     c.emphasis = o.emphasis == true
     c.border = o.border ~= false
     c.text, c.font, c.radius, c.align = o.text, o.font, o.radius, o.align
     return true
   end,
   paint = function(g, c, look)
-    button_face(g, c, look)
+    if c.image ~= nil then
+      image_face(g, c, look)
+    else
+      button_face(g, c, look)
+    end
     badge(g, c)
     dots(g, c)
+  end,
+}
+
+-- the source is passed on as it is: the canvas decides about one that is not an image
+kinds.image = {
+  check = function(c, o)
+    c.source = o.source
+    return true
+  end,
+  paint = function(g, c)
+    if c.source ~= nil then
+      g:image(c.source, c.x, c.y, { w = c.w, h = c.h })
+    end
   end,
 }
 
@@ -143,6 +161,6 @@ kinds.region = {
 -- a layout child that only takes space
 kinds.spacer = { cost = 0, check = function() return true end }
 
-for _, name in ipairs({ "label", "button", "switch", "region" }) do
+for _, name in ipairs({ "label", "button", "image", "switch", "region" }) do
   methods[name] = control_method(name)
 end

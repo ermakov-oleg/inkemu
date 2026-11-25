@@ -1,0 +1,14 @@
+{
+  "spec": "§16",
+  "about": "a button with an image draws it scaled to the box, inverted when selected, with the text centred over it and no colour of its own; an image control draws its source scaled to its box; a button image that is a number or a table that merely has a width and a height is invalid",
+  "files": {"canvas_log.lua": "canvas_log.util.lua"},
+  "expect": {
+    "plain": {"value": true, "spec": "§16"},
+    "selected": {"value": true, "spec": "§16"},
+    "text": {"value": true, "spec": "§16"},
+    "image_control": {"value": true, "spec": "§16"},
+    "not_an_image": {"value": {"number": "invalid_argument", "table": "invalid_argument"}, "spec": "§16"}
+  },
+  "pixels": [[70, 150, 1], [10, 150, 0]],
+  "errors": []
+}

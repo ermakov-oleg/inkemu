@@ -311,6 +311,12 @@ the README.
   Checks: `16/switch_geometry`.
 - `ctx.ui` switch, not measured: the text is left out when the room before the capsule is 0 or less, and with a note
   of odd height the note box takes the extra pixel. A registered `skin` still raises "not implemented in inkemu yet".
+- `ctx.ui` images, as measured with the reader's UI library run as a black box: an image button draws its image
+  scaled to the box (`invert` only when selected, never for emphasis or focus), then the border rect without a `fill`
+  key, the focus frame, the text with no colour of its own, the badge and the dots; focus never fills it. A top-level
+  `ui:image` passes any non-nil `source` to the canvas as it is and is neither hit nor focusable; a button `image` and
+  a layout child's `source` must be an image object (a table with only `width` and `height` is not one). Checks:
+  `16/image_button`.
 - `ctx.ui` skins, not measured: on a button, a radio and a container child alike, a `skin` that is not a name
   registered in `create` is `invalid_argument`, as is a button with both `skin` and `image` (the code §16 gives);
   only a registered skin, which inkemu does not draw yet, raises "not implemented in inkemu yet".

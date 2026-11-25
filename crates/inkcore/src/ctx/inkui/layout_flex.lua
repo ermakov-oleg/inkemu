@@ -87,7 +87,11 @@ content_w = function(n)
   if k == "label" then
     v = widest_line(n.font, n.text, n.mopts)
   elseif k == "button" then
-    v = width_of(n.font, n.text, n.mopts) + 24
+    if n.image and n.text == "" then
+      v = math.tointeger(n.image.width)
+    else
+      v = width_of(n.font, n.text, n.mopts) + 24
+    end
   elseif k == "switch" then
     local note = n.note and width_of(host.fonts.small, n.note) or 0
     v = 8 + math.max(width_of(n.font, n.text, n.mopts), note) + 12 + 64 + 8
@@ -126,6 +130,8 @@ content_h = function(n, w)
       local _, height = n.font:layout(n.text, w, 32767, n.mopts)
       v = math.tointeger(height) or 0
     end
+  elseif k == "button" and n.image and n.text == "" then
+    v = math.tointeger(n.image.height)
   elseif k == "button" or k == "tabs" then
     v = lh + 16
   elseif k == "switch" then
@@ -512,6 +518,8 @@ baseline = function(c, w, h)
       off = h - block
     end
     return off + c.font.ascent
+  elseif k == "button" and c.image and c.text == "" then
+    return h
   elseif k == "button" or k == "tabs" then
     return (h - c.font.line_height) // 2 + c.font.ascent
   elseif k == "switch" then
