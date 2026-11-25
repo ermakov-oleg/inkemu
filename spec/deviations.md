@@ -312,10 +312,10 @@ the README.
   `underline` (a 4 px bar min(8, w // 6) in from each side, fill and text colour as an unselected cell) and anything
   else is `invalid_argument` (before 2.16 it is ignored), and `bold` unset makes only the selected cell bold, `true`
   every cell, `false` none. A skin draws as it does on radio cells and ignores `selected_style`. A tap or `ok` acts as
-  on radio: `change` for another cell, `activate` for the value one. Checks: `16/tabs`.
-- `ctx.ui` tabs, not measured: the order of the selected outline or underline against the focus frame (outline or bar
-  first), the `radius` of the outline, a tab text that no font of `font_min` fits stays in the smallest tried, and
-  each cell is shrunk on its own, measured with its own bold.
+  on radio: `change` for another cell, `activate` for the value one. Oracle `s28_tabs_looks` also pins the selected
+  outline or underline drawn before the focus frame, the outline taking `radius`, and `font_min` shrinking each cell
+  on its own, measured with its own bold. Checks: `16/tabs`.
+- `ctx.ui` tabs, not measured: a tab text that no font of `font_min` fits stays in the smallest tried.
 - `ctx.ui` switch, as measured with the reader's UI library run as a black box: `selected` is not type-checked (any
   value but nil and false is on), a `badge` is ignored, a `radius` only shapes the focus frame (radius + 3 when
   positive), `focus_style` does not change a switch's look, and `bold = false` leaves `bold` out of the text call.
