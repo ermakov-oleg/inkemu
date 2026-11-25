@@ -106,6 +106,21 @@ fn every_fresh_lua_state_gets_the_library() {
 }
 
 #[test]
+fn every_method_of_the_contract_is_a_function() {
+    let mut core = boot("");
+    let names = "begin_frame end_frame handle_event focus focused layout skin editing stop_edit label button image \
+                 field region switch tabs radio stepper pager list progress row column grid stack";
+    let code = format!(
+        "local ui, missing = ctx.ui:create(), {{}}\n\
+         for name in string.gmatch('{names}', '%S+') do\n\
+           if type(ui[name]) ~= 'function' then missing[#missing + 1] = name end\n\
+         end\n\
+         return table.concat(missing, ' ')"
+    );
+    assert_eq!(eval(&mut core, &code), json!(""));
+}
+
+#[test]
 fn dot_calls_raise_at_the_app_line() {
     let mut core = boot("");
     let err = core.lua_exec("ctx.ui.create()").unwrap_err();

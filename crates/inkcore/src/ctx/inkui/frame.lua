@@ -3,9 +3,9 @@
 
 MAX_CONTROLS = 128
 
--- control kinds by name, filled by the control files: { check = function(c, o, st) -> ok[, unsupported message],
--- paint = function(g, c, look), focusable = bool, cost = controls counted against MAX_CONTROLS: a number, 1 when
--- nil, or a function of the control record }; composite.lua adds the fields of composite kinds
+-- control kinds by name, filled by the control files: { check = function(c, o, st) -> ok, paint = function(g, c,
+-- look), focusable = bool, cost = controls counted against MAX_CONTROLS: a number, 1 when nil, or a function of the
+-- control record }; composite.lua adds the fields of composite kinds
 kinds = {}
 
 -- a canvas is the frame's g (or a layer's): host objects that cannot be told apart from Lua, so look at the methods
@@ -61,8 +61,8 @@ function reserve(f, n)
 end
 
 -- A control declared at top level by `ui:<name>(id, o)`: checked, counted, then registered for painting. Returns
--- nothing, or nil and the error code. `level` is error()'s level of the app's call; callers must not tail-call this.
-function declare(st, name, id, o, level)
+-- nothing, or nil and the error code.
+function declare(st, name, id, o)
   local f = st.frame
   local kind = kinds[name]
   if f == nil or type(id) ~= "string" or id == "" or f.ids[id] or type(o) ~= "table" then
@@ -72,11 +72,7 @@ function declare(st, name, id, o, level)
     return nil, INVALID
   end
   local c = { kind = kind, id = id, x = o.x, y = o.y, w = o.w, h = o.h }
-  local ok, unsupported = kind.check(c, o, st)
-  if unsupported then
-    error(unsupported, level)
-  end
-  if not (ok and in_range(c)) then
+  if not (kind.check(c, o, st) and in_range(c)) then
     return nil, INVALID
   end
   if not reserve(f, cost_of(c)) then
@@ -89,7 +85,7 @@ end
 -- `ui:<name>(id, o)` for the control kind `name`
 function control_method(name)
   return function(self, id, o)
-    local _, err = declare(state_of(self, name), name, id, o, 3)
+    local _, err = declare(state_of(self, name), name, id, o)
     if err then
       return nil, err
     end

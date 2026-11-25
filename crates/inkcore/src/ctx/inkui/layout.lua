@@ -80,15 +80,10 @@ end
 -- what end_frame keeps for a container: it takes no focus and paints only its own look
 local CONTAINER_KIND = { paint = paint_container }
 
--- The control record of node `n`, checked by its kind's own rules: the record, or nil and the error code, or nil,
--- nil and the message of a part inkemu does not implement.
+-- The control record of node `n`, checked by its kind's own rules: the record, or nil and the error code.
 local function control_of(st, n)
   local c = { kind = kinds[n.kind], id = n.id }
-  local ok, unsupported = c.kind.check(c, n.o, st)
-  if unsupported then
-    return nil, nil, unsupported
-  end
-  if not ok then
+  if not c.kind.check(c, n.o, st) then
     return nil, INVALID
   end
   return c
@@ -99,23 +94,22 @@ local function check_only(st, n)
   if CONTAINERS[n.kind] then
     for _, child in ipairs(n.nodes or n.children) do
       if child then
-        local _, err, unsupported = check_only(st, child)
-        if err or unsupported then
-          return nil, err, unsupported
+        local _, err = check_only(st, child)
+        if err then
+          return nil, err
         end
       end
     end
   elseif CONTROLS[n.kind] then
-    local _, err, unsupported = control_of(st, n)
-    return nil, err, unsupported
+    local _, err = control_of(st, n)
+    return nil, err
   end
 end
 
 -- Registers the placed tree `n` in frame `f` in declaration order, containers before their children, checking each
 -- control's own fields and box as it comes, as the reader does. A hidden node, or one with no width or no height, is
 -- left out with everything in it, but its controls are still checked. Stops at the first refusal, keeping what was
--- registered before. Returns nothing, or nil and the error code, or nil, nil and the message of a part inkemu does
--- not implement.
+-- registered before. Returns nothing, or nil and the error code.
 local function register(st, f, n)
   if n.hidden or n.w <= 0 or n.h <= 0 then
     return check_only(st, n)
@@ -130,9 +124,9 @@ local function register(st, f, n)
     f.list[#f.list + 1] = { kind = CONTAINER_KIND, id = n.id, node = n }
     for _, child in ipairs(n.nodes or n.children) do
       if child then
-        local _, err, unsupported = register(st, f, child)
-        if err or unsupported then
-          return nil, err, unsupported
+        local _, err = register(st, f, child)
+        if err then
+          return nil, err
         end
       end
     end
@@ -141,9 +135,9 @@ local function register(st, f, n)
   if not CONTROLS[n.kind] then
     return
   end
-  local c, err, unsupported = control_of(st, n)
+  local c, err = control_of(st, n)
   if c == nil then
-    return nil, err, unsupported
+    return nil, err
   end
   -- placed first: what a control costs may depend on its box
   c.x, c.y, c.w, c.h = n.x, n.y, n.w, n.h
@@ -182,8 +176,8 @@ local function lay_out(root, x, y, w, h)
 end
 
 -- `ui:row(id, o)`, `ui:column(id, o)`, `ui:grid(id, o)` and `ui:stack(id, o)` (2.15). Returns nothing, or nil and
--- the error code. `level` is error()'s level of the app's call; callers must not tail-call this.
-local function declare_container(st, kind, id, o, level)
+-- the error code.
+local function declare_container(st, kind, id, o)
   local f = st.frame
   if f == nil or type(id) ~= "string" or id == "" or f.ids[id] or type(o) ~= "table" then
     return nil, INVALID
@@ -193,23 +187,20 @@ local function declare_container(st, kind, id, o, level)
     return nil, INVALID
   end
   local x, y = math.tointeger(o.x), math.tointeger(o.y)
-  local root, err, unsupported
+  local root, err
   if api_at_least(15) then
-    root, err, unsupported = layout_tree(st, f, id, kind, o, w)
+    root, err = layout_tree(st, f, id, kind, o, w)
     if root then
       local ok
       ok, err = lay_out(root, x, y, w, h)
       root = ok and root
     end
   else
-    root, err, unsupported = old_tree(st, f, id, kind, o, x, y, w, h)
+    root, err = old_tree(st, f, id, kind, o, x, y, w, h)
   end
-  if not unsupported and root then
+  if root then
     local _
-    _, err, unsupported = register(st, f, root)
-  end
-  if unsupported then
-    error(unsupported, level)
+    _, err = register(st, f, root)
   end
   if err then
     return nil, err
@@ -218,7 +209,7 @@ end
 
 for _, name in ipairs({ "row", "column" }) do
   methods[name] = function(self, id, o)
-    local _, err = declare_container(state_of(self, name), name, id, o, 3)
+    local _, err = declare_container(state_of(self, name), name, id, o)
     if err then
       return nil, err
     end
@@ -231,7 +222,7 @@ for _, name in ipairs({ "grid", "stack" }) do
     if not api_at_least(15) then
       return nil, INVALID
     end
-    local _, err = declare_container(st, name, id, o, 3)
+    local _, err = declare_container(st, name, id, o)
     if err then
       return nil, err
     end
@@ -262,10 +253,7 @@ methods.layout = function(self, rect, spec)
   if not (is_coord(rect.x) and is_coord(rect.y) and w and h) then
     return nil, INVALID
   end
-  local root, err, unsupported = layout_tree(st, nil, nil, spec.kind, spec, w)
-  if unsupported then
-    error(unsupported, 2)
-  end
+  local root, err = layout_tree(st, nil, nil, spec.kind, spec, w)
   if not root then
     return nil, err
   end

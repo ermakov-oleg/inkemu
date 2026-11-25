@@ -1,8 +1,7 @@
 -- ctx.ui (§16, 2.15): the fields of containers and their children, checked into a tree of nodes for
 -- layout_flex.lua and layout_grid.lua. After the children are counted, one walk finds the first invalid field or
--- exceeded limit among the structure and the sizing fields; a kind inkemu does not implement is remembered and
--- raised by the caller only when nothing is invalid. In a frame, a control's other fields are checked when it is
--- registered.
+-- exceeded limit among the structure and the sizing fields. In a frame, a control's other fields are checked when it
+-- is registered.
 --
 -- A node: `kind` (nil for a plain box), `o` (the script's table), `id`, sizes `w`/`h` (nil, an integer, FIT or
 -- `{ pct = N }`), bounds `lo_w hi_w lo_h hi_h` (nil `hi` is unlimited), `grow`, `shrink`, `align_self`,
@@ -90,10 +89,6 @@ end
 
 local function fail(cx, code)
   cx.err = cx.err or code
-end
-
-local function not_implemented(cx, what)
-  cx.unsupported = cx.unsupported or (what .. " is not implemented in inkemu yet")
 end
 
 -- A skin field: an unknown name is invalid; a registered one becomes the checked skin, which a container draws and
@@ -415,14 +410,6 @@ end
 
 local node_of
 
--- a control child in a frame: a kind inkemu implements; its own fields are checked when it is registered
-local function check_kind(cx, n)
-  local ctl = kinds[n.kind]
-  if ctl == nil or ctl.check == nil then
-    not_implemented(cx, "ui:" .. n.kind)
-  end
-end
-
 -- the id of a node: a string never used before in this tree (nor in the open frame); required where `need`
 local function check_id(cx, n, id, need)
   if id == nil then
@@ -525,9 +512,6 @@ node_of = function(cx, o, parent, level)
   if cx.err then
     return
   end
-  if cx.frame and CONTROLS[kind] then
-    check_kind(cx, n)
-  end
   if CONTAINERS[kind] then
     check_children(cx, n, o, level + 1)
   end
@@ -536,7 +520,7 @@ end
 
 -- The tree of the outermost container `o` of kind `kind`, `w` wide (an integer, or FIT). `frame` is the open frame
 -- when the container is declared in one as `id` (nil for ui:layout); `st` is the UI object's state. Returns the root
--- node, or nil and the error code, or nil, nil and the message of a part inkemu does not implement.
+-- node, or nil and the error code.
 function layout_tree(st, frame, id, kind, o, w)
   local cx = { st = st, frame = frame, ids = {} }
   if id ~= nil then
@@ -558,9 +542,6 @@ function layout_tree(st, frame, id, kind, o, w)
   end
   if cx.err then
     return nil, cx.err
-  end
-  if cx.unsupported then
-    return nil, nil, cx.unsupported
   end
   return n
 end
@@ -601,8 +582,6 @@ local function old_children(cx, n, o, level)
     end
     if FLEX[kind] then
       old_children(cx, c, item, level + 1)
-    else
-      check_kind(cx, c)
     end
     if cx.err then
       return
@@ -619,9 +598,6 @@ function old_tree(st, frame, id, kind, o, x, y, w, h)
   old_children(cx, n, o, 1)
   if cx.err then
     return nil, cx.err
-  end
-  if cx.unsupported then
-    return nil, nil, cx.unsupported
   end
   return n
 end

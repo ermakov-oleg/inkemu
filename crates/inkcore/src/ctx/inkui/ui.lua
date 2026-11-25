@@ -22,19 +22,6 @@ function state_of(self, name)
   return s
 end
 
--- every method of §16 exists from the start; the files that implement one replace its stub
-for _, name in ipairs({
-  "begin_frame", "end_frame", "handle_event", "focus", "focused", "layout", "skin",
-  "label", "button", "image", "region",
-  "radio",
-  "row", "column", "grid", "stack",
-}) do
-  methods[name] = function(self)
-    state_of(self, name)
-    error("ui:" .. name .. " is not implemented in inkemu yet", 2)
-  end
-end
-
 local FOCUS_STYLES = { fill = true, outline = true }
 
 -- whether the device has a touchscreen, as `ctx.input.pointer` says when the object is created
