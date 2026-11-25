@@ -3,9 +3,6 @@ import os
 import queue
 import socketserver
 import threading
-import time
-import urllib.error
-import urllib.request
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -18,7 +15,6 @@ from .paths import state_root
 DEFAULT_PORT = 7480
 HOST = "127.0.0.1"
 REPLY_TIMEOUT_S = 600
-CLIENT_TIMEOUT_S = REPLY_TIMEOUT_S + 20
 LOG_TAIL = 20
 
 
@@ -123,22 +119,6 @@ def normalize(cmd: str, args: dict) -> dict:
     return out
 
 
-def parse_words(words: list[str]) -> tuple[str, dict]:
-    """`["tap", "1", "2"]` -> ("tap", {"x": 1, "y": 2}); raises UsageError on unknown verb, arity or bad values."""
-    if not words:
-        raise UsageError("empty command")
-    cmd, rest = words[0], words[1:]
-    if cmd not in SPEC:
-        raise _unknown(cmd)
-    usage, fields, _ = SPEC[cmd]
-    lo = sum(1 for _, _, req in fields if req)
-    if not lo <= len(rest) <= len(fields):
-        want = str(lo) if lo == len(fields) else f"{lo}-{len(fields)}"
-        raise UsageError(f"{cmd!r} takes {want} argument(s), got {len(rest)} (usage: {usage})")
-    args = {name: w for (name, _, _), w in zip(fields, rest, strict=False)}
-    return cmd, normalize(cmd, args)
-
-
 def _next_shot(shots: Path) -> Path:
     nums = [int(p.stem) for p in shots.glob("*.png") if p.stem.isdigit()] if shots.is_dir() else []
     return shots / f"{max(nums, default=0) + 1:03d}.png"
@@ -222,36 +202,6 @@ def remove_info(root: Path) -> None:
             info.unlink()
     except (OSError, ValueError, AttributeError):
         pass
-
-
-class DaemonUnreachable(Exception):
-    pass
-
-
-def post_command(port: int, cmd: str, args: dict | None = None) -> dict:
-    """Send one command to the daemon on `port`; raises DaemonUnreachable unless an inkemu daemon answers."""
-    req = urllib.request.Request(
-        f"http://127.0.0.1:{port}/cmd",
-        method="POST",
-        headers={"Content-Type": "application/json"},
-        data=json.dumps({"cmd": cmd, "args": args or {}}).encode("utf-8"),
-    )
-    try:
-        try:
-            with urllib.request.urlopen(req, timeout=CLIENT_TIMEOUT_S) as resp:
-                body = resp.read()
-        except urllib.error.HTTPError as e:
-            with e:
-                body = e.read()
-    except (urllib.error.URLError, OSError) as e:
-        raise DaemonUnreachable(f"cannot reach the daemon on port {port}: {e}") from None
-    try:
-        result = json.loads(body)
-    except ValueError:
-        result = None
-    if not isinstance(result, dict) or "ok" not in result:
-        raise DaemonUnreachable(f"the server on port {port} did not answer like an inkemu daemon")
-    return result
 
 
 # ---- HTTP server ------------------------------------------------------------------------------
@@ -359,25 +309,17 @@ class Daemon:
             reply.put({"ok": False, "error": "the daemon is stopping"})
 
 
-def serve(emu: Emu, port: int = DEFAULT_PORT, window: bool = False) -> None:
-    """Run the daemon (and the Tk window if `window`) until `stop`, Ctrl-C or the window is closed."""
+def serve(emu: Emu, port: int = DEFAULT_PORT) -> None:
+    """Run the daemon and the Tk window until `stop` or the window is closed."""
     root = state_root()
     d = Daemon(emu, port)
-    write_info(root, d.port, emu.app_id, window)
+    write_info(root, d.port, emu.app_id, window=True)
     try:
-        if window:
-            try:
-                from .window import run_window
-            except ImportError as e:
-                raise WindowUnavailable(f"Tk is not available: {e}") from None
-            run_window(emu, d)
-        else:
-            try:
-                while not d.stopped:
-                    d.pump()
-                    time.sleep(0.02)
-            except KeyboardInterrupt:
-                pass
+        try:
+            from .window import run_window
+        except ImportError as e:
+            raise WindowUnavailable(f"Tk is not available: {e}") from None
+        run_window(emu, d)
     finally:
         try:
             emu.leave()

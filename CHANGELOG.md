@@ -1,5 +1,38 @@
 # Changelog
 
+## Unreleased
+
+### Breaking changes
+
+The CLI, the command daemon and the MCP server no longer copy the Python quirks of 0.1 and 0.2. README "Breaking
+changes in 0.3" has each one with the old and new behaviour.
+
+- `POST /cmd` arguments are typed JSON: `x`, `y` and `ms` are integers (no strings, floats or bools), `text` and
+  `path` are strings, `duration` is a string such as `"61s"` or an integer of milliseconds. Errors show the value as
+  JSON: `'tap': x must be an integer, got "a"`. CLI words and `--steps` work as before, except that an integer word
+  is a sign and digits only (no `1_000`, no padding).
+- `args` in `POST /cmd` must be an object or `null`; `[]`, `""`, `0` and `false` are a 400 `bad request: args must be
+  an object`.
+- Shot paths, `--out`, `--state` and `--fixtures` are printed as given, without Python's path normalisation.
+- `serve`, `run` and `shot` always write PNG, whatever the extension; a path without an extension is no longer an
+  error.
+- `daemon.json` is compact JSON, and a `port` or `pid` that is a string makes it unreadable.
+- Long options are no longer abbreviated: `--fre` is an error, not `--fresh`. There is no `inkemu help` subcommand
+  (`-h` and `--help` stay).
+- `run` and `serve` with an app path that is not a directory exit 2 with `inkemu: no such app directory: PATH`
+  before starting anything (0.2: exit 1 and a Lua error).
+- A failed client command whose reply has no `error` prints `inkemu: the daemon reported an error` (0.2:
+  `inkemu: None`).
+- MCP `emu_start` refusals name modes as JSON (`window=false`, `fresh=true`, `net=null`), and an unknown `net` reads
+  `net must be one of replay, record, live, got "wifi"`.
+
+### Changed
+
+- The CLI (`inkemu run`, `serve` and the client verbs), the command daemon and the MCP server are now Rust, which
+  ends the 0.2.0 known limit; `mcp` is no longer a runtime dependency. `inkemu window` is still Python (Tk).
+- `inkemu window` still writes the image format its shot path's extension names (Pillow), while `serve` and `run`
+  always write PNG.
+
 ## 0.2.0
 
 inkemu now follows the official InkApp API contract 2.33.1, with firmware 26112001 measured on a reader where the two

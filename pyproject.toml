@@ -25,7 +25,6 @@ classifiers = [
     "Topic :: System :: Emulators",
 ]
 dependencies = [
-    "mcp>=2.3.0",
     "pillow>=13.0",
 ]
 
@@ -36,7 +35,7 @@ Issues = "https://github.com/ermakov-oleg/inkemu/issues"
 
 [project.scripts]
 inkemu = "inkemu.cli:main"
-inkemu-mcp = "inkemu.mcp_server:main"
+inkemu-mcp = "inkemu.cli:mcp_main"
 
 [build-system]
 requires = ["maturin>=1.7,<2"]
@@ -75,6 +74,7 @@ cache-keys = [
 
 [dependency-groups]
 dev = [
+    "mcp>=2.3.0",
     "pytest>=9.2.0",
     "ruff>=0.17.6",
 ]

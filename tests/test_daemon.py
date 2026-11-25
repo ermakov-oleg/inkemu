@@ -1,78 +1,15 @@
+"""`inkemu serve` and its HTTP protocol, black-box: processes, files and HTTP only."""
+
+import http.client
 import json
-import os
-import threading
-import time
+import signal
+import socket
 import urllib.request
 from pathlib import Path
 
 import pytest
 
-from inkemu import daemon
-from inkemu.daemon import Daemon, UsageError, execute, parse_words, read_info, write_info
-
 HELLO = Path(__file__).resolve().parent.parent / "examples" / "hello"
-
-
-def test_execute_tap_text_hello(emu_factory):
-    emu = emu_factory(HELLO)
-    r = execute(emu, "tap-text", {"text": "Tap me"})
-    assert r["ok"] and r["error"] is None
-    assert any(t["text"] == "Taps: 1" for t in r["texts"])
-    assert r["status"]["paused"] is True and r["shot"] is None
-    assert set(r) >= {"ok", "error", "texts", "log_tail", "errors", "warnings", "status", "shot"}
-
-
-def test_execute_unknown_command(emu_factory):
-    r = execute(emu_factory(HELLO), "jump", {})
-    assert r["ok"] is False and "tap-text" in r["error"]
-
-
-def test_execute_bad_args_and_missing_text(emu_factory):
-    emu = emu_factory(HELLO)
-    r = execute(emu, "tap", {"x": "a", "y": 1})
-    assert not r["ok"] and "integer" in r["error"]
-    r = execute(emu, "tap-text", {"text": "nope"})
-    assert not r["ok"] and "no text" in r["error"] and r["texts"]
-
-
-def test_execute_shot_default_and_path(emu_factory, tmp_path):
-    emu = emu_factory(HELLO)
-    r1 = execute(emu, "shot", {})
-    r2 = execute(emu, "shot", {})
-    assert Path(r1["shot"]).exists() and Path(r2["shot"]).exists() and r1["shot"] != r2["shot"]
-    assert Path(r1["shot"]).parent == emu.state_dir / "shots"
-    target = tmp_path / "sub" / "a.png"
-    assert execute(emu, "shot", {"path": str(target)})["shot"] == str(target) and target.exists()
-
-
-def test_execute_shot_oserror_is_clean(emu_factory, tmp_path):
-    blocker = tmp_path / "file"
-    blocker.write_text("x")
-    r = execute(emu_factory(HELLO), "shot", {"path": str(blocker / "a.png")})
-    assert r["ok"] is False and r["shot"] is None and r["error"]
-
-
-def test_execute_resume_clears_pause(emu_factory):
-    emu = emu_factory(HELLO)
-    assert execute(emu, "texts", {})["status"]["paused"] is True
-    assert execute(emu, "resume", {})["status"]["paused"] is False
-
-
-@pytest.mark.allow_errors
-def test_execute_wait_returns_for_zero_delay_loop(emu_factory, make_app):
-    app = make_app("function on_load(c) local f; f = function() c:after(0, f) end; f() end")
-    r = execute(emu_factory(app), "wait", {"duration": "1m"})
-    assert r["ok"] and any("same virtual instant" in e for e in r["errors"])
-
-
-def test_parse_words():
-    assert parse_words(["tap", "1", "2"]) == ("tap", {"x": 1, "y": 2})
-    assert parse_words(["hold", "1", "2"]) == ("hold", {"x": 1, "y": 2})
-    assert parse_words(["shot"]) == ("shot", {})
-    with pytest.raises(UsageError):
-        parse_words(["tap", "1"])
-    with pytest.raises(UsageError):
-        parse_words([])
 
 
 def post(port, cmd, args=None):
@@ -82,96 +19,12 @@ def post(port, cmd, args=None):
         headers={"Content-Type": "application/json"},
         data=json.dumps({"cmd": cmd, "args": args or {}}).encode(),
     )
-    with urllib.request.urlopen(req, timeout=10) as resp:
+    with urllib.request.urlopen(req, timeout=20) as resp:
         return resp.status, json.load(resp)
 
 
-def test_http_roundtrip(emu_factory):
-    emu = emu_factory(HELLO)
-    d = Daemon(emu, port=0)
-    stop = threading.Event()
-
-    def loop():
-        while not stop.is_set():
-            d.pump()
-            time.sleep(0.005)
-
-    t = threading.Thread(target=loop, daemon=True)
-    t.start()
-    try:
-        status, body = post(d.port, "tap-text", {"text": "Tap me"})
-        assert status == 200 and body["ok"] and body["status"]["paused"] is True
-        assert any(x["text"] == "Taps: 1" for x in body["texts"])
-        status, body = post(d.port, "stop")
-        assert body["ok"] and d.stopped
-        with pytest.raises(urllib.error.HTTPError) as e:
-            urllib.request.urlopen(
-                urllib.request.Request(
-                    f"http://127.0.0.1:{d.port}/cmd",
-                    method="POST",
-                    headers={"Content-Type": "application/json"},
-                    data=b"not json",
-                ),
-                timeout=5,
-            )
-        assert e.value.code == 400
-    finally:
-        stop.set()
-        t.join()
-        d.close()
-
-
-def test_stale_daemon_json_ignored(tmp_path):
-    (tmp_path / "daemon.json").write_text(json.dumps({"port": 7480, "pid": 999999, "app": "x"}))
-    assert read_info(tmp_path) is None
-    (tmp_path / "daemon.json").write_text("garbage")
-    assert read_info(tmp_path) is None
-    assert read_info(tmp_path / "missing") is None
-
-
-def test_daemon_json_live_roundtrip(tmp_path):
-    write_info(tmp_path, 1234, "hello")
-    assert read_info(tmp_path) == {"port": 1234, "pid": os.getpid(), "app": "hello", "window": False}
-    daemon.remove_info(tmp_path)
-    assert read_info(tmp_path) is None
-
-
-def test_port_in_use_clear_error(emu_factory):
-    d1 = Daemon(emu_factory(HELLO), port=0)
-    try:
-        with pytest.raises(OSError) as e:
-            Daemon(emu_factory(HELLO), port=d1.port)
-        assert str(d1.port) in str(e.value)
-    finally:
-        d1.close()
-
-
-def test_serve_headless_stops_and_cleans_up(emu_factory, tmp_path, monkeypatch):
-    monkeypatch.setenv("INKEMU_STATE_ROOT", str(tmp_path / "root"))
-    emu = emu_factory(HELLO)
-    result = {}
-
-    def run():
-        daemon.serve(emu, 0, window=False)
-        result["done"] = True
-
-    t = threading.Thread(target=run, daemon=True)
-    t.start()
-    deadline = time.time() + 10
-    info = None
-    while time.time() < deadline and not info:
-        info = read_info(tmp_path / "root")
-        time.sleep(0.02)
-    assert info and info["app"] == emu.app_id
-    assert post(info["port"], "stop")[1]["ok"]
-    t.join(10)
-    assert result.get("done") and read_info(tmp_path / "root") is None
-
-
 def raw(port, method="POST", path="/cmd", headers=None, body=b'{"cmd": "tap-text", "args": {"text": "Tap me"}}'):
-    import http.client
-
-    c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+    c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
     try:
         c.putrequest(method, path, skip_host=True)
         for k, v in {"Host": f"127.0.0.1:{port}", "Content-Type": "application/json", **(headers or {})}.items():
@@ -185,80 +38,201 @@ def raw(port, method="POST", path="/cmd", headers=None, body=b'{"cmd": "tap-text
         c.close()
 
 
+def untouched(port) -> bool:
+    return any(t["text"] == "Taps: 0" for t in post(port, "state")[1]["texts"])
+
+
+def test_http_roundtrip(serve):
+    status, body = post(serve.port, "tap-text", {"text": "Tap me"})
+    assert status == 200 and body["ok"] is True and body["error"] is None
+    assert body["status"]["paused"] is True and body["shot"] is None
+    assert any(x["text"] == "Taps: 1" for x in body["texts"])
+    assert set(body) >= {"ok", "error", "texts", "log_tail", "errors", "warnings", "status", "shot"}
+
+
+def test_unknown_command(serve):
+    status, r = post(serve.port, "jump")
+    assert status == 200 and r["ok"] is False and "tap-text" in r["error"]
+
+
+def test_bad_args_and_missing_text(serve):
+    r = post(serve.port, "tap", {"x": "a", "y": 1})[1]
+    assert not r["ok"] and r["error"] == "'tap': x must be an integer, got \"a\""
+    r = post(serve.port, "tap-text", {"text": "nope"})[1]
+    assert not r["ok"] and "no text" in r["error"] and r["texts"]
+
+
+def test_shot_default_and_path(serve, tmp_path):
+    r1 = post(serve.port, "shot")[1]
+    r2 = post(serve.port, "shot")[1]
+    assert Path(r1["shot"]).exists() and Path(r2["shot"]).exists() and r1["shot"] != r2["shot"]
+    assert Path(r1["shot"]) == serve.state / "shots" / "001.png"
+    assert Path(r2["shot"]) == serve.state / "shots" / "002.png"
+    target = tmp_path / "sub" / "a.png"
+    assert post(serve.port, "shot", {"path": str(target)})[1]["shot"] == str(target) and target.exists()
+
+
+def test_shot_oserror_is_clean(serve, tmp_path):
+    blocker = tmp_path / "file"
+    blocker.write_text("x")
+    r = post(serve.port, "shot", {"path": str(blocker / "a.png")})[1]
+    assert r["ok"] is False and r["shot"] is None and r["error"]
+
+
+def test_resume_clears_pause(serve):
+    assert post(serve.port, "texts")[1]["status"]["paused"] is True
+    assert post(serve.port, "resume")[1]["status"]["paused"] is False
+    assert post(serve.port, "state")[1]["status"]["paused"] is True
+
+
+def test_log_and_log_tail(start_serve, make_app):
+    s = start_serve(make_app("function on_input(c, ev) c:log('tap') return true end"))
+    r = post(s.port, "log")[1]
+    assert isinstance(r["log"], list) and r["log"]
+    for _ in range(25):
+        post(s.port, "tap", {"x": 1, "y": 1})
+    r = post(s.port, "log")[1]
+    assert len(r["log"]) > 20 and len(r["log_tail"]) == 20
+
+
+def test_wait_returns_for_zero_delay_loop(start_serve, make_app):
+    app = make_app("function on_load(c) local f; f = function() c:after(0, f) end; f() end")
+    s = start_serve(app)
+    r = post(s.port, "wait", {"duration": "1m"})[1]
+    assert r["ok"] and any("same virtual instant" in e for e in r["errors"])
+
+
+def test_daemon_json_format(serve):
+    assert serve.info == {"port": serve.port, "pid": serve.proc.pid, "app": "hello", "window": False}
+    assert isinstance(serve.port, int) and serve.port > 0
+
+
 @pytest.mark.parametrize(
     "headers",
     [
         {"Content-Type": "text/plain"},
         {"Content-Type": None},
-        {"Host": "evil.example:7480"},
+        {"Host": "evil.example:{port}"},
         {"Host": "127.0.0.1"},
         {"Origin": "http://evil.example"},
     ],
 )
-def test_browser_style_requests_are_rejected(emu_factory, headers):
-    emu = emu_factory(HELLO)
-    d = Daemon(emu, port=0)
-    try:
-        status, body = raw(d.port, headers=headers)
-        assert status == 403 and body["ok"] is False and body["error"]
-        assert d.queue.empty() and emu.has_text("Taps: 0")
-    finally:
-        d.close()
+def test_browser_style_requests_are_rejected(serve, headers):
+    headers = {k: v.replace("{port}", str(serve.port)) if v else v for k, v in headers.items()}
+    status, body = raw(serve.port, headers=headers)
+    assert status == 403 and body["ok"] is False and body["error"]
+    assert untouched(serve.port)
 
 
-def test_other_methods_and_paths_rejected_cleanly(emu_factory):
-    d = Daemon(emu_factory(HELLO), port=0)
-    try:
-        assert raw(d.port, "GET", body=b"")[0] == 405
-        assert raw(d.port, "PUT")[0] == 405
-        assert raw(d.port, path="/other")[0] == 404
-        assert d.queue.empty()
-    finally:
-        d.close()
+def test_localhost_host_is_accepted(serve):
+    status, body = raw(serve.port, headers={"Host": f"localhost:{serve.port}"})
+    assert status == 200 and body["ok"] is True
 
 
-def test_daemon_json_records_window_mode(tmp_path):
-    write_info(tmp_path, 1234, "hello", window=True)
-    assert read_info(tmp_path)["window"] is True
-    daemon.remove_info(tmp_path)
+def test_null_args_count_as_no_args(serve):
+    status, reply = raw(serve.port, body=b'{"cmd": "state", "args": null}')
+    assert status == 200 and reply["ok"] is True
 
 
-@pytest.fixture
-def foreign_server():
-    from http.server import BaseHTTPRequestHandler, HTTPServer
-
-    class H(BaseHTTPRequestHandler):
-        def do_POST(self):
-            self.rfile.read(int(self.headers["Content-Length"]))
-            self.send_response(502)
-            self.send_header("Content-Type", "text/html")
-            self.end_headers()
-            self.wfile.write(b"<html>bad gateway</html>")
-
-        def log_message(self, *a):
-            pass
-
-    srv = HTTPServer(("127.0.0.1", 0), H)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    yield srv.server_port
-    srv.shutdown()
-    srv.server_close()
+@pytest.mark.parametrize("args", ["[]", '""', "0", "false", "[1]"])
+def test_args_that_are_not_an_object_are_400(serve, args):
+    status, reply = raw(serve.port, body=f'{{"cmd": "state", "args": {args}}}'.encode())
+    assert status == 400 and reply == {"ok": False, "error": "bad request: args must be an object"}
+    assert untouched(serve.port)
 
 
-def test_post_command_non_json_error_is_clean(foreign_server, capsys):
-    with pytest.raises(daemon.DaemonUnreachable, match="did not answer like an inkemu daemon"):
-        daemon.post_command(foreign_server, "state")
-    from inkemu.cli import main
+@pytest.mark.parametrize(
+    "cmd, args, error",
+    [
+        ("tap", {"x": "5", "y": 1}, "'tap': x must be an integer, got \"5\""),
+        ("tap", {"x": 5.0, "y": 1}, "'tap': x must be an integer, got 5.0"),
+        ("tap", {"x": True, "y": 1}, "'tap': x must be an integer, got true"),
+        ("hold", {"x": 1, "y": 1, "ms": "700"}, "'hold': ms must be an integer, got \"700\""),
+        ("type", {"text": 5}, "'type': text must be a string, got 5"),
+        (
+            "wait",
+            {"duration": -1},
+            "'wait': duration must be milliseconds or a string like 350ms, 61s, 10m or 2h, got -1",
+        ),
+    ],
+)
+def test_untyped_args_are_refused(serve, cmd, args, error):
+    status, reply = post(serve.port, cmd, args)
+    assert status == 200 and reply["ok"] is False and reply["error"] == error
+    assert untouched(serve.port)
 
-    assert main(["state", "--port", str(foreign_server)]) == 2
-    assert "did not answer like an inkemu daemon" in capsys.readouterr().err
+
+def test_wait_takes_milliseconds_or_a_duration_string(serve):
+    before = post(serve.port, "state")[1]["status"]["time"]
+    assert post(serve.port, "wait", {"duration": 60000})[1]["ok"]
+    assert post(serve.port, "wait", {"duration": "1m"})[1]["ok"]
+    assert post(serve.port, "state")[1]["status"]["time"] != before
 
 
-def test_post_command_nobody_listening():
-    import socket
+def test_shot_is_png_whatever_the_extension(serve, tmp_path):
+    for name in ("noext", "a.jpg"):
+        r = post(serve.port, "shot", {"path": str(tmp_path / name)})[1]
+        assert r["ok"] and r["shot"] == str(tmp_path / name)
+        assert (tmp_path / name).read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
 
+
+def test_other_methods_and_paths_rejected_cleanly(serve):
+    for method in ("GET", "PUT", "DELETE"):
+        status, body = raw(serve.port, method, body=b"")
+        assert status == 405 and body["ok"] is False and body["error"]
+    status, body = raw(serve.port, "PUT", headers={"Origin": "http://evil.example", "Content-Type": "text/plain"})
+    assert status == 405
+    status, body = raw(serve.port, path="/other")
+    assert status == 404 and body["ok"] is False and body["error"]
+    assert untouched(serve.port)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [b"not json", b'{"cmd": 1}', b'{"cmd": "state", "args": [1]}', b"{}", b"[]", b'"state"', b"null"],
+)
+def test_bad_requests_are_400(serve, body):
+    status, reply = raw(serve.port, body=body)
+    assert status == 400 and reply["ok"] is False and reply["error"]
+    assert untouched(serve.port)
+
+
+def test_second_serve_is_refused(serve, start_serve):
+    other = start_serve(HELLO, state="other-state", fresh=False, wait=False)
+    assert other.wait_exit() == 2
+    assert "a daemon is already running (pid" in other.errfile.read_text()
+
+
+def test_port_in_use(cli, tmp_path):
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
+        s.listen()
         port = s.getsockname()[1]
-    with pytest.raises(daemon.DaemonUnreachable, match="cannot reach the daemon"):
-        daemon.post_command(port, "state")
+        r = cli("serve", HELLO, "--port", port, "--state", tmp_path / "state", "--fixtures", tmp_path / "fx")
+    assert r.returncode == 2
+    assert str(port) in r.stderr and "cannot listen on" in r.stderr
+
+
+def test_sigint_leaves_the_app_and_cleans_up(start_serve, make_app):
+    app = make_app("function on_leave(c) c.state.left = 'yes' end")
+    s = start_serve(app)
+    s.proc.send_signal(signal.SIGINT)
+    assert s.wait_exit() == 0
+    assert not (s.root / "daemon.json").exists()
+    assert json.loads((s.state / "state.json").read_text(encoding="utf-8"))["left"] == "yes"
+
+
+def test_stop_exits_zero_and_cleans_up(serve):
+    assert post(serve.port, "stop")[1]["ok"]
+    assert serve.wait_exit() == 0
+    assert not (serve.root / "daemon.json").exists()
+
+
+def test_serve_exits_1_with_lua_errors(start_serve, make_app):
+    app = make_app("function on_input(c, ev) error('boom') end")
+    s = start_serve(app)
+    r = post(s.port, "tap", {"x": 1, "y": 1})[1]
+    assert r["errors"]
+    assert post(s.port, "stop")[1]["ok"]
+    assert s.wait_exit() == 1
+    assert not (s.root / "daemon.json").exists()
