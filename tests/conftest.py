@@ -185,25 +185,26 @@ def _kill_daemon_of(root: Path) -> None:
 
 @pytest.fixture
 def start_serve(tmp_path, root) -> Callable[..., Serve]:
-    """`start_serve(app, *extra_args)`: `inkemu serve APP --port 0` with a fresh state; killed at teardown."""
+    """`start_serve(app, *extra_args)`: `inkemu serve APP --port 0` with a fresh state by default; killed at teardown."""
     started: list[subprocess.Popen] = []
 
-    def start(app: Path = HELLO, *extra, wait: bool = True) -> Serve:
-        state = tmp_path / "state"
-        errfile = tmp_path / "serve.err"
-        proc = subprocess.Popen(
-            [sys.executable, "-m", "inkemu", "serve", str(app), "--port", "0", "--state", str(state)]
-            + ["--fixtures", str(tmp_path / "fx"), "--fresh", *map(str, extra)],
-            env={**os.environ, "INKEMU_STATE_ROOT": str(root)},
-            cwd=tmp_path,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=errfile.open("w"),
-        )
+    def start(app: Path = HELLO, *extra, wait: bool = True, state: str = "state", fresh: bool = True) -> Serve:
+        state_dir = tmp_path / state
+        errfile = tmp_path / ("serve.err" if state == "state" else f"{state}.err")
+        args = ["serve", str(app), "--port", "0", "--state", str(state_dir), "--fixtures", str(tmp_path / "fx")]
+        with errfile.open("w") as err:
+            proc = subprocess.Popen(
+                [sys.executable, "-m", "inkemu", *args, *(["--fresh"] if fresh else []), *map(str, extra)],
+                env={**os.environ, "INKEMU_STATE_ROOT": str(root)},
+                cwd=tmp_path,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=err,
+            )
         started.append(proc)
         if wait:
             wait_for_daemon_json(root, proc)
-        return Serve(proc, root, state, errfile)
+        return Serve(proc, root, state_dir, errfile)
 
     yield start
     for proc in started:

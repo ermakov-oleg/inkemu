@@ -38,7 +38,7 @@ def raw(port, method="POST", path="/cmd", headers=None, body=b'{"cmd": "tap-text
         c.close()
 
 
-def taps(port) -> bool:
+def untouched(port) -> bool:
     return any(t["text"] == "Taps: 0" for t in post(port, "state")[1]["texts"])
 
 
@@ -112,17 +112,16 @@ def test_daemon_json_format(serve):
     [
         {"Content-Type": "text/plain"},
         {"Content-Type": None},
-        {"Host": "evil.example:7480"},
+        {"Host": "evil.example:{port}"},
         {"Host": "127.0.0.1"},
         {"Origin": "http://evil.example"},
     ],
 )
 def test_browser_style_requests_are_rejected(serve, headers):
-    if "Host" in headers and ":" in headers["Host"]:
-        headers = {"Host": f"evil.example:{serve.port}"}
+    headers = {k: v.replace("{port}", str(serve.port)) if v else v for k, v in headers.items()}
     status, body = raw(serve.port, headers=headers)
     assert status == 403 and body["ok"] is False and body["error"]
-    assert taps(serve.port)
+    assert untouched(serve.port)
 
 
 def test_localhost_host_is_accepted(serve):
@@ -144,7 +143,7 @@ def test_other_methods_and_paths_rejected_cleanly(serve):
     assert status == 405
     status, body = raw(serve.port, path="/other")
     assert status == 404 and body["ok"] is False and body["error"]
-    assert taps(serve.port)
+    assert untouched(serve.port)
 
 
 @pytest.mark.parametrize(
@@ -154,11 +153,11 @@ def test_other_methods_and_paths_rejected_cleanly(serve):
 def test_bad_requests_are_400(serve, body):
     status, reply = raw(serve.port, body=body)
     assert status == 400 and reply["ok"] is False and reply["error"]
-    assert taps(serve.port)
+    assert untouched(serve.port)
 
 
 def test_second_serve_is_refused(serve, start_serve):
-    other = start_serve(HELLO, wait=False)
+    other = start_serve(HELLO, state="other-state", fresh=False, wait=False)
     assert other.wait_exit() == 2
     assert "a daemon is already running (pid" in other.errfile.read_text()
 
@@ -188,7 +187,6 @@ def test_stop_exits_zero_and_cleans_up(serve):
     assert not (serve.root / "daemon.json").exists()
 
 
-@pytest.mark.allow_errors
 def test_serve_exits_1_with_lua_errors(start_serve, make_app):
     app = make_app("function on_input(c, ev) error('boom') end")
     s = start_serve(app)

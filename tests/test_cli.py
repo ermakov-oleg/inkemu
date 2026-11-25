@@ -63,6 +63,16 @@ def test_run_prints_warnings_and_errors_at_the_end(tmp_path, run, make_app):
     assert errors and "boom" in errors[0]
 
 
+def test_run_prints_warnings(tmp_path, cli, make_app):
+    app = make_app("function on_load(c) end")
+    state = tmp_path / "state"
+    state.mkdir()
+    (state / "state.json").write_text("not json", encoding="utf-8")
+    r = cli("run", app, "--steps", "shot", "--state", state, "--fixtures", tmp_path / "fx", "--out", tmp_path / "out")
+    assert r.returncode == 0, r.stderr
+    assert any(line.startswith("WARN: ") and "unreadable state" in line for line in r.stderr.splitlines())
+
+
 def test_unknown_step_is_usage_error(tmp_path, run):
     r = run(HELLO, "jump 1")
     assert r.returncode == 2
