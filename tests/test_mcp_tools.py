@@ -49,15 +49,17 @@ def test_emu_start_attaches_when_nothing_differs(serve, mcp):
 
 
 @pytest.mark.parametrize(
-    "kw, word", [({"net": "record"}, "net=record"), ({"window": True}, "window=True"), ({"fresh": True}, "fresh=True")]
+    "kw, word", [({"net": "record"}, "net=record"), ({"window": True}, "window=true"), ({"fresh": True}, "fresh=true")]
 )
 def test_emu_start_refuses_a_different_mode(serve, mcp, kw, word):
     r = mcp().payload("emu_start", app=str(HELLO), **kw)
     assert not r["ok"] and word in r["error"] and "emu_stop" in r["error"]
+    assert "(net=replay, window=false)" in r["error"]
 
 
 def test_emu_start_rejects_unknown_net(serve, mcp):
-    assert "net must be one of" in mcp().payload("emu_start", app=str(HELLO), net="wifi")["error"]
+    r = mcp().payload("emu_start", app=str(HELLO), net="wifi")
+    assert r["error"] == 'net must be one of replay, record, live, got "wifi"'
 
 
 def test_emu_start_refuses_another_app(serve, mcp, make_app):

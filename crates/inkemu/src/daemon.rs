@@ -1,12 +1,13 @@
-//! The daemon half of 0.1 `daemon.py`: `daemon.json`, `POST /cmd`, the serve loop and the HTTP client.
+//! The command daemon: `daemon.json`, `POST /cmd`, the serve loop and the HTTP client.
 use std::io::{self, Read as _};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tiny_http::{Header, Method, Request, Response, Server};
 
@@ -20,21 +21,14 @@ pub const CLIENT_TIMEOUT: Duration = Duration::from_secs(620);
 
 // ---- daemon.json -------------------------------------------------------------------------------
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// `daemon.json`, in this key order. The Python window daemon writes the same keys.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Info {
     pub port: u16,
     pub pid: u32,
     pub app: String,
+    #[serde(default)]
     pub window: bool,
-}
-
-/// An integer as Python's `int()` takes it: a JSON number or an int-valued string.
-fn lenient_int(v: &Value) -> Option<i64> {
-    match v {
-        Value::Number(n) => n.as_i64().or_else(|| n.as_f64().map(|f| f.trunc() as i64)),
-        Value::String(s) => s.trim().parse().ok(),
-        _ => None,
-    }
 }
 
 #[cfg(unix)]
@@ -60,37 +54,19 @@ fn alive(_pid: u32) -> bool {
 /// `<root>/daemon.json` if its process is alive, else None.
 pub fn read_info(root: &Path) -> Option<Info> {
     let text = std::fs::read_to_string(root.join("daemon.json")).ok()?;
-    let v: Value = serde_json::from_str(&text).ok()?;
-    let obj = v.as_object()?;
-    let port = u16::try_from(lenient_int(obj.get("port")?)?).ok()?;
-    let pid = u32::try_from(lenient_int(obj.get("pid")?)?).ok()?;
-    if port == 0 || !alive(pid) {
-        return None;
-    }
-    Some(Info {
-        port,
-        pid,
-        app: obj
-            .get("app")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_owned(),
-        window: obj.get("window").and_then(Value::as_bool).unwrap_or(false),
-    })
-}
-
-fn json_str(s: &str) -> String {
-    serde_json::to_string(s).unwrap_or_default()
+    let info: Info = serde_json::from_str(&text).ok()?;
+    (info.port != 0 && info.pid != 0 && alive(info.pid)).then_some(info)
 }
 
 pub fn write_info(root: &Path, port: u16, app: &str, window: bool) -> io::Result<()> {
     std::fs::create_dir_all(root)?;
-    let text = format!(
-        r#"{{"port": {port}, "pid": {}, "app": {}, "window": {window}}}"#,
-        std::process::id(),
-        json_str(app)
-    );
-    std::fs::write(root.join("daemon.json"), text)
+    let info = Info {
+        port,
+        pid: std::process::id(),
+        app: app.to_owned(),
+        window,
+    };
+    std::fs::write(root.join("daemon.json"), serde_json::to_string(&info)?)
 }
 
 /// Deletes `daemon.json` only if it is ours.
@@ -121,15 +97,16 @@ pub fn post_command(port: u16, cmd: &str, args: &Map<String, Value>) -> Result<V
         .post(&format!("http://{HOST}:{port}/cmd"))
         .set("Content-Type", "application/json")
         .send_string(&body);
+    let unreachable = |why: String| format!("cannot reach the daemon on port {port}: {why}");
     let resp = match resp {
         Ok(r) | Err(ureq::Error::Status(_, r)) => r,
-        Err(e) => return Err(format!("cannot reach the daemon on port {port}: {e}")),
+        Err(ureq::Error::Transport(t)) => return Err(unreachable(transport_error(&t))),
     };
     // into_string() would refuse bodies over 10 MB
     let mut text = String::new();
     resp.into_reader()
         .read_to_string(&mut text)
-        .map_err(|e| format!("cannot reach the daemon on port {port}: {e}"))?;
+        .map_err(|e| unreachable(strerror(&e)))?;
     match serde_json::from_str::<Value>(&text) {
         Ok(v) if v.as_object().is_some_and(|o| o.contains_key("ok")) => Ok(v),
         _ => Err(format!(
@@ -138,12 +115,26 @@ pub fn post_command(port: u16, cmd: &str, args: &Map<String, Value>) -> Result<V
     }
 }
 
+/// The OS error under a ureq transport error, else its own message.
+fn transport_error(t: &ureq::Transport) -> String {
+    let mut cause: Option<&(dyn std::error::Error + 'static)> = std::error::Error::source(t);
+    while let Some(e) = cause {
+        if let Some(io) = e.downcast_ref::<io::Error>() {
+            return strerror(io);
+        }
+        cause = e.source();
+    }
+    t.message()
+        .map_or_else(|| t.kind().to_string(), str::to_owned)
+}
+
 // ---- HTTP server -------------------------------------------------------------------------------
 
 type Job = (String, Map<String, Value>, Sender<String>);
 
 fn error_body(msg: &str) -> String {
-    format!(r#"{{"ok": false, "error": {}}}"#, json_str(msg))
+    let msg = serde_json::to_string(msg).unwrap_or_default();
+    format!(r#"{{"ok": false, "error": {msg}}}"#)
 }
 
 fn reply(req: Request, code: u16, body: String) {
@@ -182,24 +173,18 @@ fn forbidden(req: &Request, port: u16) -> Option<&'static str> {
     None
 }
 
-const BAD_SHAPE: &str = "cmd must be a string and args an object";
-
 fn parse_request(raw: &[u8]) -> Result<(String, Map<String, Value>), String> {
     let v: Value = serde_json::from_slice(raw).map_err(|e| e.to_string())?;
     let obj = v.as_object().ok_or("the request must be a JSON object")?;
     let cmd = match obj.get("cmd") {
         None => return Err("missing 'cmd'".into()),
         Some(Value::String(s)) => s.clone(),
-        Some(_) => return Err(BAD_SHAPE.into()),
+        Some(_) => return Err("cmd must be a string".into()),
     };
-    // Python's `req.get("args") or {}`: every falsy value means no arguments
     let args = match obj.get("args") {
-        None | Some(Value::Null) | Some(Value::Bool(false)) => Map::new(),
+        None | Some(Value::Null) => Map::new(),
         Some(Value::Object(m)) => m.clone(),
-        Some(Value::String(s)) if s.is_empty() => Map::new(),
-        Some(Value::Array(a)) if a.is_empty() => Map::new(),
-        Some(Value::Number(n)) if n.as_f64() == Some(0.0) => Map::new(),
-        Some(_) => return Err(BAD_SHAPE.into()),
+        Some(_) => return Err("args must be an object".into()),
     };
     Ok((cmd, args))
 }
@@ -246,8 +231,31 @@ pub struct Daemon {
     port: u16,
     jobs: mpsc::Receiver<Job>,
     closing: Arc<AtomicBool>,
+    failed: Arc<Mutex<Option<String>>>,
     accept: Option<JoinHandle<()>>,
     stopped: bool,
+}
+
+/// Hands every request to `handle` until `next` fails. tiny_http stops accepting after an `accept()` error, so a
+/// failure that `close` did not cause is kept in `failed` for the serve loop.
+fn accept_loop<T>(
+    mut next: impl FnMut() -> io::Result<T>,
+    mut handle: impl FnMut(T),
+    closing: &AtomicBool,
+    failed: &Mutex<Option<String>>,
+) {
+    loop {
+        match next() {
+            Ok(_) if closing.load(Ordering::SeqCst) => return,
+            Ok(req) => handle(req),
+            Err(e) => {
+                if !closing.load(Ordering::SeqCst) {
+                    *failed.lock().unwrap_or_else(|p| p.into_inner()) = Some(strerror(&e));
+                }
+                return;
+            }
+        }
+    }
 }
 
 impl Daemon {
@@ -268,18 +276,17 @@ impl Daemon {
             .map_or(port, |addr| addr.port());
         let (tx, jobs) = mpsc::channel::<Job>();
         let closing = Arc::new(AtomicBool::new(false));
+        let failed = Arc::new(Mutex::new(None));
         let accept = {
-            let (server, closing) = (server.clone(), closing.clone());
+            let (server, closing, failed) = (server.clone(), closing.clone(), failed.clone());
             thread::Builder::new()
                 .name("inkemu-http".into())
                 .spawn(move || {
-                    while let Ok(req) = server.recv() {
-                        if closing.load(Ordering::SeqCst) {
-                            break;
-                        }
+                    let handle_one = |req| {
                         let tx = tx.clone();
                         thread::spawn(move || handle(req, port, tx));
-                    }
+                    };
+                    accept_loop(|| server.recv(), handle_one, &closing, &failed);
                 })
                 .map_err(|e| format!("cannot start the HTTP thread: {e}"))?
         };
@@ -288,6 +295,7 @@ impl Daemon {
             port,
             jobs,
             closing,
+            failed,
             accept: Some(accept),
             stopped: false,
         })
@@ -299,6 +307,14 @@ impl Daemon {
 
     pub fn stopped(&self) -> bool {
         self.stopped
+    }
+
+    /// Why the HTTP server stopped accepting requests, if it did.
+    pub fn failure(&self) -> Option<String> {
+        self.failed
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
     }
 
     /// Runs every queued command on this thread; returns how many ran.
@@ -386,23 +402,34 @@ impl Drop for SigintGuard {
     }
 }
 
-/// Runs the headless daemon until `stop` or Ctrl-C.
+/// Runs the headless daemon until `stop`, Ctrl-C or a failure of the HTTP server.
 pub fn serve(s: &mut Session, port: u16) -> Result<(), String> {
-    let root = paths::state_root();
-    let mut d = Daemon::new(port)?;
+    let d = Daemon::new(port)?;
     let _guard = SigintGuard::install();
-    if let Err(e) = write_info(&root, d.port(), &s.status().app_id, false) {
+    serve_on(s, d, &paths::state_root())
+}
+
+fn serve_on(s: &mut Session, mut d: Daemon, root: &Path) -> Result<(), String> {
+    if let Err(e) = write_info(root, d.port(), &s.status().app_id, false) {
         d.close();
         return Err(format!("cannot write daemon.json: {e}"));
     }
+    let mut failure = None;
     while !d.stopped() && !SIGINT.load(Ordering::SeqCst) {
         d.pump(s);
+        failure = d.failure();
+        if failure.is_some() {
+            break;
+        }
         thread::sleep(Duration::from_millis(20));
     }
     s.leave();
-    remove_info(&root);
+    remove_info(root);
     d.close();
-    Ok(())
+    match failure {
+        Some(e) => Err(format!("the HTTP server stopped: {e}")),
+        None => Ok(()),
+    }
 }
 
 #[cfg(test)]
@@ -502,7 +529,7 @@ mod tests {
         assert_eq!(
             text,
             format!(
-                r#"{{"port": 1234, "pid": {}, "app": "hello", "window": false}}"#,
+                r#"{{"port":1234,"pid":{},"app":"hello","window":false}}"#,
                 std::process::id()
             )
         );
@@ -521,7 +548,7 @@ mod tests {
     }
 
     #[test]
-    fn read_info_rejects_missing_garbage_zero_port_and_dead_pid() {
+    fn read_info_rejects_missing_garbage_zero_port_untyped_values_and_dead_pid() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
         let me = std::process::id();
@@ -535,21 +562,33 @@ mod tests {
             r#"{"port": 5, "pid": 0}"#.into(),
             r#"{"port": 5, "pid": -3}"#.into(),
             r#"{"port": 5, "pid": 4194999}"#.into(),
-            format!(r#"{{"port": null, "pid": {me}}}"#),
+            format!(r#"{{"port": null, "pid": {me}, "app": "a"}}"#),
+            format!(r#"{{"port": "77", "pid": {me}, "app": "a"}}"#),
+            format!(r#"{{"port": 77, "pid": "{me}", "app": "a"}}"#),
+            format!(r#"{{"port": 77.0, "pid": {me}, "app": "a"}}"#),
+            format!(r#"{{"port": 70000, "pid": {me}, "app": "a"}}"#),
+            format!(r#"{{"port": 77, "pid": {me}}}"#),
+            format!(r#"{{"port": 77, "pid": {me}, "app": 1}}"#),
+            format!(r#"{{"port": 77, "pid": {me}, "app": "a", "window": "yes"}}"#),
         ] {
             put(&bad);
             assert!(read_info(root).is_none(), "{bad}");
         }
-        put(&format!(r#"{{"port": "77", "pid": "{me}"}}"#));
+        // the Python window daemon's spacing, and keys we do not know
+        put(&format!(
+            r#"{{"port": 77, "pid": {me}, "app": "a", "window": true, "extra": 1}}"#
+        ));
         assert_eq!(
             read_info(root),
             Some(Info {
                 port: 77,
                 pid: me,
-                app: String::new(),
-                window: false
+                app: "a".into(),
+                window: true
             })
         );
+        put(&format!(r#"{{"port": 77, "pid": {me}, "app": "a"}}"#));
+        assert!(read_info(root).is_some_and(|i| !i.window));
     }
 
     #[test]
@@ -580,14 +619,14 @@ mod tests {
         assert_eq!(v["ok"], json!(true));
         assert_eq!(v["status"]["paused"], json!(true));
         assert!(texts(&v).contains("Taps: 1"), "{v}");
-        // `localhost` and falsy args are accepted
+        // `localhost` and null args are accepted
         let (code, v) = pumping(&mut d, &mut s, move || {
             raw(
                 port,
                 "POST",
                 "/cmd",
                 &[("Host", &format!("localhost:{port}"))],
-                br#"{"cmd": "state", "args": []}"#,
+                br#"{"cmd": "state", "args": null}"#,
             )
         });
         assert_eq!((code, &v["ok"]), (200, &json!(true)));
@@ -699,7 +738,6 @@ mod tests {
         for body in [
             "not json",
             r#"{"cmd": 1}"#,
-            r#"{"cmd": "state", "args": [1]}"#,
             "{}",
             "[]",
             r#""state""#,
@@ -711,6 +749,18 @@ mod tests {
             assert!(
                 v["error"].as_str().unwrap().starts_with("bad request: "),
                 "{v}"
+            );
+        }
+        for args in ["[]", r#""""#, "0", "false", "[1]", r#""x""#] {
+            let body = format!(r#"{{"cmd": "state", "args": {args}}}"#);
+            let (c, v) = post(port, &body);
+            assert_eq!(
+                (c, v),
+                (
+                    400,
+                    json!({"ok": false, "error": "bad request: args must be an object"})
+                ),
+                "{args}"
             );
         }
         assert_eq!(d.pump(&mut s), 0);
@@ -782,10 +832,54 @@ mod tests {
         let r = h.join().unwrap().unwrap();
         assert_eq!(r, json!({"ok": false, "error": "the daemon is stopping"}));
         let err = post_command(port, "state", &Map::new()).unwrap_err();
-        assert!(
-            err.starts_with(&format!("cannot reach the daemon on port {port}: ")),
-            "{err}"
+        assert_eq!(
+            err,
+            format!("cannot reach the daemon on port {port}: Connection refused")
         );
+    }
+
+    #[test]
+    fn accept_loop_keeps_an_accept_error_unless_closing() {
+        let closing = AtomicBool::new(false);
+        let failed = Mutex::new(None);
+        let mut handled = Vec::new();
+        let mut queue = vec![
+            Err(io::Error::from_raw_os_error(libc::EMFILE)),
+            Ok(2),
+            Ok(1),
+        ];
+        accept_loop(
+            || queue.pop().unwrap(),
+            |n| handled.push(n),
+            &closing,
+            &failed,
+        );
+        assert_eq!(handled, [1, 2]);
+        assert_eq!(
+            failed.lock().unwrap().as_deref(),
+            Some("Too many open files")
+        );
+        // the error `close` causes with unblock() is not a failure
+        let failed = Mutex::new(None);
+        closing.store(true, Ordering::SeqCst);
+        let mut queue = vec![Err(io::Error::other("thread unblocked"))];
+        accept_loop(|| queue.pop().unwrap(), |_: ()| {}, &closing, &failed);
+        assert!(failed.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn serve_ends_with_an_error_when_the_http_server_stops() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("root");
+        let mut s = hello(tmp.path());
+        let d = Daemon::new(0).unwrap();
+        *d.failed.lock().unwrap() = Some("Too many open files".into());
+        let r = serve_on(&mut s, d, &root);
+        assert_eq!(
+            r,
+            Err("the HTTP server stopped: Too many open files".into())
+        );
+        assert!(!root.join("daemon.json").exists());
     }
 
     #[test]

@@ -13,8 +13,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
-use crate::command::{py_repr, Reply};
+use crate::command::Reply;
 use crate::{daemon, paths};
+use inkcore::log::py_repr_str;
 
 const START_TIMEOUT: Duration = Duration::from_secs(20);
 const POLL: Duration = Duration::from_millis(100);
@@ -73,9 +74,9 @@ fn attach_reply(
     let have = [
         (
             "net",
-            have_net.as_deref().map_or("None".into(), str::to_owned),
+            have_net.as_deref().map_or("null".into(), str::to_owned),
         ),
-        ("window", py_bool(live_window).to_owned()),
+        ("window", live_window.to_string()),
     ];
     let mut asked = Vec::new();
     if let Some(n) = net {
@@ -85,11 +86,11 @@ fn attach_reply(
     }
     if let Some(w) = window {
         if w != live_window {
-            asked.push(("window", py_bool(w).to_owned()));
+            asked.push(("window", w.to_string()));
         }
     }
     if fresh {
-        asked.push(("fresh", "True".to_owned()));
+        asked.push(("fresh", "true".to_owned()));
     }
     if asked.is_empty() {
         return Attached {
@@ -124,20 +125,12 @@ fn attach_reply(
     }
 }
 
-fn py_bool(b: bool) -> &'static str {
-    if b {
-        "True"
-    } else {
-        "False"
-    }
-}
-
 fn check_net(net: Option<&str>) -> Result<(), String> {
     match net {
         Some(n) if !NET_MODES.contains(&n) => Err(format!(
-            "net must be one of {}, not {}",
+            "net must be one of {}, got {}",
             NET_MODES.join(", "),
-            py_repr(&Value::String(n.to_owned()))
+            Value::String(n.to_owned())
         )),
         _ => Ok(()),
     }
@@ -197,7 +190,7 @@ fn start(req: StartRequest) -> StartReply {
         if live.app != paths::app_id_of(Path::new(&req.app), None) {
             return StartReply::Plain(failure(format!(
                 "a daemon for app {} is already running (pid {}); call emu_stop first",
-                py_repr(&Value::String(live.app)),
+                py_repr_str(&live.app),
                 live.pid
             )));
         }
@@ -582,22 +575,22 @@ mod tests {
     }
 
     #[test]
-    fn refuses_another_mode_in_python_words() {
+    fn refuses_another_mode_in_json_words() {
         let a = attach_reply(state("replay"), false, None, Some("record"), false);
         assert_eq!(a.state.ok, Some(false));
         assert_eq!(
             error_of(&a),
-            "a daemon for this app is already running (net=replay, window=False) and cannot switch to \
+            "a daemon for this app is already running (net=replay, window=false) and cannot switch to \
              net=record; call emu_stop first, then emu_start again"
         );
         let a = attach_reply(state("record"), true, Some(false), Some("live"), true);
         assert!(error_of(&a).contains(
-            "(net=record, window=True) and cannot switch to net=live, window=False, fresh=True;"
+            "(net=record, window=true) and cannot switch to net=live, window=false, fresh=true;"
         ));
         let mut s = state("replay");
         s.status = None;
         let a = attach_reply(s, false, Some(true), None, false);
-        assert!(error_of(&a).contains("(net=None, window=False) and cannot switch to window=True;"));
+        assert!(error_of(&a).contains("(net=null, window=false) and cannot switch to window=true;"));
     }
 
     #[test]
@@ -608,7 +601,7 @@ mod tests {
             log_tail: Some(vec![]),
             ..Reply::default()
         };
-        let msg = "a daemon for this app is already running (net=None, window=False) and cannot switch to \
+        let msg = "a daemon for this app is already running (net=null, window=false) and cannot switch to \
                    net=live; call emu_stop first, then emu_start again";
         let a = attach_reply(small(Some(None)), false, None, Some("live"), false);
         assert_eq!(
@@ -649,10 +642,10 @@ mod tests {
     }
 
     #[test]
-    fn net_is_checked_with_a_python_repr() {
+    fn net_is_checked_and_shown_as_json() {
         assert_eq!(
             check_net(Some("wifi")).unwrap_err(),
-            "net must be one of replay, record, live, not 'wifi'"
+            r#"net must be one of replay, record, live, got "wifi""#
         );
         assert!(check_net(Some("live")).is_ok() && check_net(None).is_ok());
     }

@@ -57,7 +57,7 @@ def test_unknown_command(serve):
 
 def test_bad_args_and_missing_text(serve):
     r = post(serve.port, "tap", {"x": "a", "y": 1})[1]
-    assert not r["ok"] and "integer" in r["error"]
+    assert not r["ok"] and r["error"] == "'tap': x must be an integer, got \"a\""
     r = post(serve.port, "tap-text", {"text": "nope"})[1]
     assert not r["ok"] and "no text" in r["error"] and r["texts"]
 
@@ -129,10 +129,51 @@ def test_localhost_host_is_accepted(serve):
     assert status == 200 and body["ok"] is True
 
 
-@pytest.mark.parametrize("args", ["[]", '""', "0", "false", "null"])
-def test_falsy_args_count_as_no_args(serve, args):
-    status, reply = raw(serve.port, body=f'{{"cmd": "state", "args": {args}}}'.encode())
+def test_null_args_count_as_no_args(serve):
+    status, reply = raw(serve.port, body=b'{"cmd": "state", "args": null}')
     assert status == 200 and reply["ok"] is True
+
+
+@pytest.mark.parametrize("args", ["[]", '""', "0", "false", "[1]"])
+def test_args_that_are_not_an_object_are_400(serve, args):
+    status, reply = raw(serve.port, body=f'{{"cmd": "state", "args": {args}}}'.encode())
+    assert status == 400 and reply == {"ok": False, "error": "bad request: args must be an object"}
+    assert untouched(serve.port)
+
+
+@pytest.mark.parametrize(
+    "cmd, args, error",
+    [
+        ("tap", {"x": "5", "y": 1}, "'tap': x must be an integer, got \"5\""),
+        ("tap", {"x": 5.0, "y": 1}, "'tap': x must be an integer, got 5.0"),
+        ("tap", {"x": True, "y": 1}, "'tap': x must be an integer, got true"),
+        ("hold", {"x": 1, "y": 1, "ms": "700"}, "'hold': ms must be an integer, got \"700\""),
+        ("type", {"text": 5}, "'type': text must be a string, got 5"),
+        (
+            "wait",
+            {"duration": -1},
+            "'wait': duration must be milliseconds or a string like 350ms, 61s, 10m or 2h, got -1",
+        ),
+    ],
+)
+def test_untyped_args_are_refused(serve, cmd, args, error):
+    status, reply = post(serve.port, cmd, args)
+    assert status == 200 and reply["ok"] is False and reply["error"] == error
+    assert untouched(serve.port)
+
+
+def test_wait_takes_milliseconds_or_a_duration_string(serve):
+    before = post(serve.port, "state")[1]["status"]["time"]
+    assert post(serve.port, "wait", {"duration": 60000})[1]["ok"]
+    assert post(serve.port, "wait", {"duration": "1m"})[1]["ok"]
+    assert post(serve.port, "state")[1]["status"]["time"] != before
+
+
+def test_shot_is_png_whatever_the_extension(serve, tmp_path):
+    for name in ("noext", "a.jpg"):
+        r = post(serve.port, "shot", {"path": str(tmp_path / name)})[1]
+        assert r["ok"] and r["shot"] == str(tmp_path / name)
+        assert (tmp_path / name).read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
 
 
 def test_other_methods_and_paths_rejected_cleanly(serve):

@@ -1,5 +1,9 @@
 import json
+import os
+import signal
 import socket
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -112,15 +116,87 @@ def test_shot_write_error_is_exit_1(tmp_path, run):
 def test_run_usage_errors(tmp_path, run):
     r = run(HELLO, "shot", "--net", "wifi")
     assert r.returncode == 2 and r.stderr
-    # a missing app directory is not a usage error: the run goes on and reports the manifest as an ERROR
     r = run(tmp_path / "no-such-app", "shot")
-    assert r.returncode == 1 and "ERROR: manifest.json not found" in r.stderr
+    assert r.returncode == 2 and r.stderr == f"inkemu: no such app directory: {tmp_path / 'no-such-app'}\n"
+    assert not (tmp_path / "out").exists()
     r = run(HELLO, "shot; stop")
     assert r.returncode == 2
     assert r.stderr.startswith("inkemu: ") and "'stop' only makes sense against a running daemon" in r.stderr
     r = run(HELLO, "tap-text 'unclosed")
     assert r.returncode == 2
     assert r.stderr.startswith("inkemu: ") and "cannot parse --steps" in r.stderr
+
+
+def test_serve_without_an_app_directory_is_a_usage_error(cli, root, tmp_path):
+    r = cli("serve", tmp_path / "no-such-app", "--port", 0)
+    assert r.returncode == 2 and r.stderr == f"inkemu: no such app directory: {tmp_path / 'no-such-app'}\n"
+    assert not (root / "daemon.json").exists()
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["run", str(HELLO), "--ste", "shot"],
+        ["run", str(HELLO), "--steps", "shot", "--fre"],
+        ["serve", str(HELLO), "--po", "0"],
+        ["state", "--por", "7"],
+        ["window", str(HELLO), "--fre"],
+    ],
+)
+def test_long_options_are_not_abbreviated(cli, args):
+    r = cli(*args)
+    assert r.returncode == 2 and r.stderr and r.stdout == ""
+
+
+def test_there_is_no_help_subcommand(cli):
+    r = cli("help")
+    assert r.returncode == 2 and "help" in r.stderr
+    assert cli("--help").returncode == 0
+
+
+def test_non_utf8_argument_is_a_usage_error(tmp_path, root):
+    r = subprocess.run(
+        [sys.executable, "-m", "inkemu", "tap-text", b"x\xff"],
+        env={**os.environ, "INKEMU_STATE_ROOT": str(root)},
+        cwd=tmp_path,
+        capture_output=True,
+        timeout=60,
+    )
+    assert r.returncode == 2, r.stderr
+    assert b"Traceback" not in r.stderr and b"no daemon running" not in r.stderr
+    assert b"invalid UTF-8" in r.stderr
+
+
+def test_ctrl_c_stops_a_client_waiting_for_a_silent_daemon(tmp_path, root):
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        listener.settimeout(20)
+        port = listener.getsockname()[1]
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "inkemu", "texts", "--port", str(port)],
+            env={**os.environ, "INKEMU_STATE_ROOT": str(root)},
+            cwd=tmp_path,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        try:
+            conn, _ = listener.accept()
+            with conn:
+                conn.settimeout(20)
+                assert conn.recv(4096).startswith(b"POST /cmd ")
+                proc.send_signal(signal.SIGINT)
+                assert proc.wait(5) != 0
+        finally:
+            proc.kill()
+            proc.wait()
+
+
+def test_ctrl_c_stops_an_idle_mcp_server(mcp):
+    client = mcp()
+    assert client.tools()
+    client.proc.send_signal(signal.SIGINT)
+    client.proc.wait(5)
 
 
 def test_steps_quoted_semicolon_stays_in_the_word(tmp_path, run):

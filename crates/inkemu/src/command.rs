@@ -1,5 +1,5 @@
 //! The command layer: the verb table, argument conversion, one command against a `Session`, the result shapes
-//! and the `run --steps` loop. Behaviour and message texts are 0.1's `daemon.py` and `cli.py`.
+//! and the `run --steps` loop.
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use inkcore::clock::parse_duration;
 use inkcore::log::py_repr_str;
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::{Map, Number, Value};
+use serde_json::{Map, Value};
 
 use crate::steps::split_steps;
 use crate::Session;
@@ -117,173 +117,66 @@ fn find(cmd: &str) -> Result<&'static Verb, String> {
     })
 }
 
-// ---- Python repr and str of JSON values ------------------------------------------------------------------
-
-/// `repr()` of the Python value `json.loads` makes of `v`.
-pub fn py_repr(v: &Value) -> String {
-    match v {
-        Value::Null => "None".into(),
-        Value::Bool(true) => "True".into(),
-        Value::Bool(false) => "False".into(),
-        Value::Number(n) => py_number(n),
-        Value::String(s) => py_repr_str(s),
-        Value::Array(a) => {
-            let items: Vec<_> = a.iter().map(py_repr).collect();
-            format!("[{}]", items.join(", "))
-        }
-        Value::Object(m) => {
-            let items: Vec<_> = m
-                .iter()
-                .map(|(k, v)| format!("{}: {}", py_repr_str(k), py_repr(v)))
-                .collect();
-            format!("{{{}}}", items.join(", "))
-        }
-    }
-}
-
-/// `str()` of the same value.
-pub fn py_str(v: &Value) -> String {
-    match v {
-        Value::String(s) => s.clone(),
-        other => py_repr(other),
-    }
-}
-
-fn py_number(n: &Number) -> String {
-    match n.as_f64() {
-        Some(f) if n.is_f64() => py_float(f),
-        _ => n.to_string(),
-    }
-}
-
-/// `repr(float)`: the shortest round-trip digits, exponent form below 1e-4 and from 1e16.
-fn py_float(f: f64) -> String {
-    if f.is_nan() {
-        return "nan".into();
-    }
-    if f.is_infinite() {
-        return if f < 0.0 { "-inf" } else { "inf" }.into();
-    }
-    let sci = format!("{:e}", f.abs());
-    let (mantissa, exp) = sci.split_once('e').unwrap_or((&sci, "0"));
-    let exp: i32 = exp.parse().unwrap_or(0);
-    let digits: String = mantissa.chars().filter(|c| *c != '.').collect();
-    let sign = if f.is_sign_negative() { "-" } else { "" };
-    if (-4..16).contains(&exp) {
-        let point = exp + 1;
-        let body = if point <= 0 {
-            format!("0.{}{}", "0".repeat((-point) as usize), digits)
-        } else if digits.len() as i32 <= point {
-            format!("{}{}.0", digits, "0".repeat(point as usize - digits.len()))
-        } else {
-            format!(
-                "{}.{}",
-                &digits[..point as usize],
-                &digits[point as usize..]
-            )
-        };
-        return format!("{sign}{body}");
-    }
-    let frac = if digits.len() > 1 {
-        format!("{}.{}", &digits[..1], &digits[1..])
-    } else {
-        digits
-    };
-    format!(
-        "{sign}{frac}e{}{:02}",
-        if exp < 0 { '-' } else { '+' },
-        exp.abs()
-    )
-}
-
 // ---- converters ------------------------------------------------------------------------------------------
 
-fn not_int(v: &Value) -> String {
-    format!("expected an integer, got {}", py_repr(v))
+/// `'tap': x must be an integer, got "a"`: the offending value as JSON.
+fn bad_value(cmd: &str, field: &str, what: &str, got: impl std::fmt::Display) -> String {
+    format!("{}: {field} must be {what}, got {got}", py_repr_str(cmd))
 }
 
-/// Python's `int(v)` of a JSON value (no bools), as an i128 so the caller can range-check.
-fn py_int(v: &Value) -> Result<i128, String> {
-    match v {
-        Value::Number(n) => {
-            if let Some(i) = n.as_i64() {
-                Ok(i128::from(i))
-            } else if let Some(u) = n.as_u64() {
-                Ok(i128::from(u))
-            } else {
-                let f = n.as_f64().unwrap_or(f64::NAN);
-                if f.is_finite() && f.abs() < 1e30 {
-                    Ok(f.trunc() as i128)
-                } else {
-                    Err(not_int(v))
-                }
-            }
-        }
-        Value::String(s) => int_of_str(s).ok_or_else(|| not_int(v)),
-        _ => Err(not_int(v)),
-    }
-}
+const DURATION: &str = "milliseconds or a string like 350ms, 61s, 10m or 2h";
 
-/// `int(str)`: surrounding whitespace, a sign, ASCII digits with single `_` between them.
-fn int_of_str(s: &str) -> Option<i128> {
-    let t = s.trim();
-    let (neg, digits) = match t.strip_prefix('-') {
-        Some(rest) => (true, rest),
-        None => (false, t.strip_prefix('+').unwrap_or(t)),
+fn int_in_range(
+    cmd: &str,
+    f: &Field,
+    n: i128,
+    got: impl std::fmt::Display,
+) -> Result<Value, String> {
+    let fits = match f.conv {
+        Conv::Int32 => i32::try_from(n).is_ok(),
+        _ => i64::try_from(n).is_ok(),
     };
-    let bytes = digits.as_bytes();
-    let well_formed = bytes.first().is_some_and(u8::is_ascii_digit)
-        && bytes.last().is_some_and(u8::is_ascii_digit)
-        && bytes.iter().all(|b| b.is_ascii_digit() || *b == b'_')
-        && !digits.contains("__");
-    if !well_formed {
-        return None;
+    if !fits {
+        let bits = if matches!(f.conv, Conv::Int32) {
+            "a 32-bit"
+        } else {
+            "a 64-bit"
+        };
+        return Err(bad_value(cmd, f.name, &format!("{bits} integer"), got));
     }
-    let mut n: i128 = 0;
-    for b in bytes.iter().filter(|b| **b != b'_') {
-        // far beyond i64: out of range for every caller, whatever the exact value
-        n = n.saturating_mul(10).saturating_add(i128::from(b - b'0'));
-        if n > i128::from(u64::MAX) * 4 {
-            n = i128::from(u64::MAX) * 4;
-        }
-    }
-    Some(if neg { -n } else { n })
+    Ok(Value::from(n as i64))
 }
 
-fn convert(conv: Conv, v: &Value) -> Result<Value, String> {
-    match conv {
+fn convert(cmd: &str, f: &Field, v: &Value) -> Result<Value, String> {
+    let bad = |what: &str| bad_value(cmd, f.name, what, v);
+    match f.conv {
         Conv::Int32 | Conv::Int64 => {
-            if v.is_boolean() {
-                return Err(not_int(v));
-            }
-            let n = py_int(v)?;
-            let ok = match conv {
-                Conv::Int32 => i32::try_from(n).is_ok(),
-                _ => i64::try_from(n).is_ok(),
+            let n = match (v.as_i64(), v.as_u64()) {
+                (Some(i), _) => i128::from(i),
+                (None, Some(u)) => i128::from(u),
+                _ => return Err(bad("an integer")),
             };
-            if !ok {
-                return Err(not_int(v));
-            }
-            Ok(Value::from(n as i64))
+            int_in_range(cmd, f, n, v)
         }
-        Conv::Str => Ok(Value::String(py_str(v))),
+        Conv::Str => match v {
+            Value::String(_) => Ok(v.clone()),
+            _ => Err(bad("a string")),
+        },
         Conv::Choice(options) => match v {
             Value::String(s) if options.contains(&s.as_str()) => Ok(v.clone()),
-            _ => Err(format!(
-                "must be one of {}, got {}",
-                options.join(", "),
-                py_repr(v)
-            )),
+            _ => Err(bad(&format!("one of {}", options.join(", ")))),
         },
         Conv::YesNo => match v {
             Value::Bool(_) => Ok(v.clone()),
             Value::String(s) if s == "yes" || s == "no" => Ok(Value::Bool(s == "yes")),
-            _ => Err("answer takes yes or no".into()),
+            _ => Err(bad("yes or no")),
         },
         Conv::Duration => {
-            let s = py_str(v);
-            parse_duration(&s)?;
-            Ok(Value::String(s))
+            let ms = match v {
+                Value::String(s) => parse_duration(s).ok(),
+                _ => v.as_i64().filter(|ms| *ms >= 0),
+            };
+            ms.map(Value::from).ok_or_else(|| bad(DURATION))
         }
     }
 }
@@ -318,7 +211,7 @@ pub fn normalize(cmd: &str, args: &Map<String, Value>) -> Result<Map<String, Val
                 }
             }
             Some(v) => {
-                out.insert(f.name.into(), convert(f.conv, v)?);
+                out.insert(f.name.into(), convert(cmd, f, v)?);
             }
         }
     }
@@ -346,13 +239,32 @@ pub fn parse_words(words: &[String]) -> Result<(String, Map<String, Value>), Str
             verb.usage
         ));
     }
-    let args = verb
-        .fields
-        .iter()
-        .zip(rest)
-        .map(|(f, w)| (f.name.to_string(), Value::String(w.clone())))
-        .collect();
+    let mut args = Map::new();
+    for (f, w) in verb.fields.iter().zip(rest) {
+        args.insert(f.name.into(), word_value(cmd, f, w)?);
+    }
     Ok((cmd.clone(), normalize(cmd, &args)?))
+}
+
+/// The typed JSON value of a command-line word; a word that does not fit stays a string for `normalize` to refuse.
+fn word_value(cmd: &str, f: &Field, w: &str) -> Result<Value, String> {
+    match f.conv {
+        Conv::Int32 | Conv::Int64 => {
+            let digits = w.strip_prefix(['-', '+']).unwrap_or(w);
+            if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+                return Ok(Value::String(w.into()));
+            }
+            // a word too long for i128 is out of range for every field anyway
+            let n = w.parse::<i128>().unwrap_or(if w.starts_with('-') {
+                i128::MIN
+            } else {
+                i128::MAX
+            });
+            int_in_range(cmd, f, n, w)
+        }
+        Conv::YesNo if w == "yes" || w == "no" => Ok(Value::Bool(w == "yes")),
+        _ => Ok(Value::String(w.into())),
+    }
 }
 
 // ---- results ---------------------------------------------------------------------------------------------
@@ -557,26 +469,6 @@ pub fn format_result(cmd: &str, r: &Reply) -> String {
 
 // ---- screenshots -----------------------------------------------------------------------------------------
 
-/// `str(Path(p))` of Python's pathlib: no `.` components, no repeated or trailing `/`, `.` for nothing.
-pub fn py_path_str(p: &Path) -> String {
-    let text = p.to_string_lossy();
-    let lead = text.len() - text.trim_start_matches('/').len();
-    // POSIX keeps exactly two leading slashes, any other count is one
-    let root = match lead {
-        0 => "",
-        2 => "//",
-        _ => "/",
-    };
-    let parts: Vec<_> = text
-        .split('/')
-        .filter(|c| !c.is_empty() && *c != ".")
-        .collect();
-    if parts.is_empty() && root.is_empty() {
-        return ".".into();
-    }
-    format!("{root}{}", parts.join("/"))
-}
-
 /// `<dir>/NNN.png` after the highest numbered PNG in `dir`.
 pub fn next_shot(dir: &Path) -> PathBuf {
     let max = fs::read_dir(dir)
@@ -596,7 +488,7 @@ pub fn next_shot(dir: &Path) -> PathBuf {
         })
         .max()
         .unwrap_or(0);
-    dir.join(format!("{:03}.png", max + 1))
+    dir.join(format!("{:03}.png", max.saturating_add(1)))
 }
 
 /// An I/O error worded like Python's `OSError`.
@@ -616,14 +508,10 @@ fn os_error(e: &io::Error, path: &Path) -> String {
     }
 }
 
-/// Writes the screen as a PNG: 8-bit grayscale for a gray frame, else 1-bit, as 0.1 `Emu.shot()` did.
+/// Writes the screen as a PNG whatever the extension: 8-bit grayscale for a gray frame, else 1-bit.
 pub fn save_shot(s: &Session, path: &Path) -> Result<(), String> {
     if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
         fs::create_dir_all(dir).map_err(|e| os_error(&e, dir))?;
-    }
-    // PIL picks the format by the extension; we always write PNG but refuse what PIL refuses
-    if path.extension().is_none_or(|e| e.is_empty()) {
-        return Err("unknown file extension: ".into());
     }
     let (w, h, depth, data) = match s.core().frame_gray() {
         Some(g) => (g.w, g.h, png::BitDepth::Eight, g.gray_bytes()),
@@ -662,7 +550,7 @@ fn run(s: &mut Session, cmd: &str, a: &Map<String, Value>) -> Result<(), String>
         "key" => s.key(word(a, "key"))?,
         "type" => s.type_text(word(a, "text"))?,
         "answer" => s.answer(a.get("answer").and_then(Value::as_bool).unwrap_or(false))?,
-        "wait" => s.wait(parse_duration(word(a, "duration"))?)?,
+        "wait" => s.wait(int(a, "duration"))?,
         "lock" => s.lock(),
         "unlock" => s.unlock(),
         "reload" => s.reload(),
@@ -685,8 +573,8 @@ pub fn execute(s: &mut Session, cmd: &str, args: &Map<String, Value>) -> CmdResu
         match cmd {
             "shot" => {
                 let path = match norm.get("path").and_then(Value::as_str) {
-                    Some(p) if !p.is_empty() => PathBuf::from(py_path_str(Path::new(p))),
-                    _ => PathBuf::from(py_path_str(&next_shot(&s.state_dir().join("shots")))),
+                    Some(p) if !p.is_empty() => PathBuf::from(p),
+                    _ => next_shot(&s.state_dir().join("shots")),
                 };
                 save_shot(s, &path)?;
                 shot = Some(path.to_string_lossy().into_owned());
@@ -754,7 +642,6 @@ pub fn run_steps(
             "'stop' only makes sense against a running daemon".into(),
         ));
     }
-    let out_dir = &PathBuf::from(py_path_str(out_dir));
     fs::create_dir_all(out_dir).map_err(|e| RunError::Step(os_error(&e, out_dir)))?;
     let mut written = Vec::new();
     let failed = run_plan(s, plan, out_dir, out, &mut written);
@@ -829,30 +716,6 @@ mod tests {
     }
 
     #[test]
-    fn py_repr_and_str() {
-        let v = json!([1, 1.5, "a'b", true, null, {"a": 1}]);
-        assert_eq!(py_repr(&v), r#"[1, 1.5, "a'b", True, None, {'a': 1}]"#);
-        assert_eq!(py_str(&json!("x")), "x");
-        assert_eq!(py_str(&json!(false)), "False");
-        assert_eq!(py_str(&json!([1, 2])), "[1, 2]");
-        let floats = [
-            (1.0, "1.0"),
-            (-2.5, "-2.5"),
-            (0.1, "0.1"),
-            (1e16, "1e+16"),
-            (1.5e-5, "1.5e-05"),
-            (0.0001, "0.0001"),
-            (123456789012345.0, "123456789012345.0"),
-            (1e22, "1e+22"),
-            (1.2345e20, "1.2345e+20"),
-            (0.0, "0.0"),
-        ];
-        for (f, want) in floats {
-            assert_eq!(py_float(f), want, "{f}");
-        }
-    }
-
-    #[test]
     fn unknown_and_arity_messages() {
         let e = normalize("jump", &Map::new()).unwrap_err();
         assert!(e.starts_with("unknown command 'jump'; verbs: tap X Y; tap-text TEXT;"));
@@ -898,35 +761,65 @@ mod tests {
     }
 
     #[test]
-    fn int_converter() {
+    fn parse_words_types_words_by_field() {
+        let (_, a) = parse_words(&words("type 12")).unwrap();
+        assert_eq!(a["text"], json!("12"));
+        let (_, a) = parse_words(&words("shot 2024")).unwrap();
+        assert_eq!(a["path"], json!("2024"));
+        let (_, a) = parse_words(&words("answer no")).unwrap();
+        assert_eq!(a["answer"], json!(false));
+        let (_, a) = parse_words(&words("wait 350")).unwrap();
+        assert_eq!(a["duration"], json!(350));
+        let (_, a) = parse_words(&words("wait 1.5s")).unwrap();
+        assert_eq!(a["duration"], json!(1500));
+        let err = |line: &str| parse_words(&words(line)).unwrap_err();
+        assert_eq!(err("tap a 2"), r#"'tap': x must be an integer, got "a""#);
+        assert_eq!(
+            err("tap 1_0 2"),
+            r#"'tap': x must be an integer, got "1_0""#
+        );
+        assert_eq!(
+            err("tap 1.5 2"),
+            r#"'tap': x must be an integer, got "1.5""#
+        );
+        assert_eq!(err("tap - 2"), r#"'tap': x must be an integer, got "-""#);
+        assert_eq!(
+            err("tap 2147483648 2"),
+            "'tap': x must be a 32-bit integer, got 2147483648"
+        );
+        assert_eq!(
+            err("hold 1 2 999999999999999999999999999999999999999999"),
+            "'hold': ms must be a 64-bit integer, got 999999999999999999999999999999999999999999"
+        );
+        assert_eq!(
+            err("answer maybe"),
+            r#"'answer': answer must be yes or no, got "maybe""#
+        );
+        assert_eq!(
+            err("wait soon"),
+            r#"'wait': duration must be milliseconds or a string like 350ms, 61s, 10m or 2h, got "soon""#
+        );
+    }
+
+    #[test]
+    fn int_converter_takes_json_integers_only() {
         let ok =
             |v: Value| normalize("tap", &args(json!({"x": v, "y": 0}))).map(|m| m["x"].clone());
         assert_eq!(ok(json!(5)), Ok(json!(5)));
-        assert_eq!(ok(json!(-5.9)), Ok(json!(-5)));
-        assert_eq!(ok(json!(5.9)), Ok(json!(5)));
-        assert_eq!(ok(json!(" 12 ")), Ok(json!(12)));
-        assert_eq!(ok(json!("+1_000")), Ok(json!(1000)));
-        assert_eq!(ok(json!("007")), Ok(json!(7)));
+        assert_eq!(ok(json!(-2147483648_i64)), Ok(json!(-2147483648_i64)));
         let bad = |v: Value| ok(v).unwrap_err();
-        assert_eq!(bad(json!(true)), "expected an integer, got True");
-        assert_eq!(bad(json!("1_")), "expected an integer, got '1_'");
-        assert_eq!(bad(json!("1__0")), "expected an integer, got '1__0'");
-        assert_eq!(bad(json!("_1")), "expected an integer, got '_1'");
-        assert_eq!(bad(json!("")), "expected an integer, got ''");
-        assert_eq!(bad(json!("1.5")), "expected an integer, got '1.5'");
-        assert_eq!(bad(json!("abc")), "expected an integer, got 'abc'");
-        assert_eq!(bad(json!([1, 2])), "expected an integer, got [1, 2]");
-        assert_eq!(bad(json!({"a": 1})), "expected an integer, got {'a': 1}");
+        let not_int = |got: &str| format!("'tap': x must be an integer, got {got}");
+        assert_eq!(bad(json!(true)), not_int("true"));
+        assert_eq!(bad(json!(5.0)), not_int("5.0"));
+        assert_eq!(bad(json!(-5.9)), not_int("-5.9"));
+        assert_eq!(bad(json!("12")), not_int(r#""12""#));
+        assert_eq!(bad(json!("a'b")), not_int(r#""a'b""#));
+        assert_eq!(bad(json!([1, 2])), not_int("[1,2]"));
+        assert_eq!(bad(json!({"a": 1})), not_int(r#"{"a":1}"#));
         assert_eq!(
             bad(json!(2147483648_i64)),
-            "expected an integer, got 2147483648"
+            "'tap': x must be a 32-bit integer, got 2147483648"
         );
-        assert_eq!(bad(json!(1e30)), "expected an integer, got 1e+30");
-        assert_eq!(
-            bad(json!("99999999999999999999999999999999999999999")),
-            "expected an integer, got '99999999999999999999999999999999999999999'"
-        );
-        assert_eq!(ok(json!(-2147483648_i64)), Ok(json!(-2147483648_i64)));
         let ms = normalize("hold", &args(json!({"x": 1, "y": 2, "ms": 4294967296_i64}))).unwrap();
         assert_eq!(ms["ms"], json!(4294967296_i64));
         assert_eq!(
@@ -934,57 +827,59 @@ mod tests {
                 "hold",
                 json!({"x": 1, "y": 2, "ms": 9223372036854775808_u64})
             ),
-            "expected an integer, got 9223372036854775808"
+            "'hold': ms must be a 64-bit integer, got 9223372036854775808"
         );
     }
 
     #[test]
-    fn other_converters() {
-        let one = |cmd: &str, v: Value| {
-            let name = verbs().find(|(n, _)| *n == cmd).map(|_| cmd).unwrap_or("");
-            let field = match name {
-                "swipe" => "direction",
-                "key" => "key",
-                "answer" => "answer",
-                "wait" => "duration",
-                _ => "text",
-            };
-            normalize(cmd, &args(json!({ field: v })))
-        };
+    fn other_converters_take_their_json_type_only() {
+        let one = |cmd: &str, field: &str, v: Value| normalize(cmd, &args(json!({ field: v })));
         assert_eq!(
-            one("swipe", json!("diag")).unwrap_err(),
-            "must be one of left, right, up, down, got 'diag'"
+            one("swipe", "direction", json!("diag")).unwrap_err(),
+            r#"'swipe': direction must be one of left, right, up, down, got "diag""#
         );
         assert_eq!(
-            one("key", json!(3)).unwrap_err(),
-            "must be one of up, down, left, right, ok, back, got 3"
+            one("key", "key", json!(3)).unwrap_err(),
+            "'key': key must be one of up, down, left, right, ok, back, got 3"
         );
-        assert!(one("key", json!("ok")).is_ok());
-        assert_eq!(one("answer", json!("yes")).unwrap()["answer"], json!(true));
-        assert_eq!(one("answer", json!("no")).unwrap()["answer"], json!(false));
-        assert_eq!(one("answer", json!(false)).unwrap()["answer"], json!(false));
+        assert!(one("key", "key", json!("ok")).is_ok());
+        let answer = |v: Value| one("answer", "answer", v);
+        assert_eq!(answer(json!("yes")).unwrap()["answer"], json!(true));
+        assert_eq!(answer(json!("no")).unwrap()["answer"], json!(false));
+        assert_eq!(answer(json!(false)).unwrap()["answer"], json!(false));
         assert_eq!(
-            one("answer", json!("maybe")).unwrap_err(),
-            "answer takes yes or no"
+            answer(json!(1)).unwrap_err(),
+            "'answer': answer must be yes or no, got 1"
         );
+        let wait = |v: Value| one("wait", "duration", v);
+        assert_eq!(wait(json!("61s")).unwrap()["duration"], json!(61000));
+        assert_eq!(wait(json!("350")).unwrap()["duration"], json!(350));
+        assert_eq!(wait(json!(350)).unwrap()["duration"], json!(350));
+        assert_eq!(wait(json!(0)).unwrap()["duration"], json!(0));
+        for bad in [
+            json!("soon"),
+            json!(-1),
+            json!(1.5),
+            json!(true),
+            json!("-5s"),
+        ] {
+            assert_eq!(
+                wait(bad.clone()).unwrap_err(),
+                format!("'wait': duration must be {DURATION}, got {bad}")
+            );
+        }
+        let text = |v: Value| one("type", "text", v);
+        assert_eq!(text(json!("5")).unwrap()["text"], json!("5"));
+        for bad in [json!(5), json!(true), json!([1, 2]), json!(1.5)] {
+            assert_eq!(
+                text(bad.clone()).unwrap_err(),
+                format!("'type': text must be a string, got {bad}")
+            );
+        }
         assert_eq!(
-            one("answer", json!(1)).unwrap_err(),
-            "answer takes yes or no"
+            one("shot", "path", json!(7)).unwrap_err(),
+            "'shot': path must be a string, got 7"
         );
-        assert_eq!(one("wait", json!("61s")).unwrap()["duration"], json!("61s"));
-        assert_eq!(one("wait", json!(350)).unwrap()["duration"], json!("350"));
-        assert_eq!(
-            one("wait", json!("soon")).unwrap_err(),
-            "bad duration 'soon': use 350, 350ms, 61s, 10m or 2h"
-        );
-        assert_eq!(one("type", json!(5)).unwrap()["text"], json!("5"));
-        assert_eq!(one("type", json!(true)).unwrap()["text"], json!("True"));
-        assert_eq!(one("type", json!([1, 2])).unwrap()["text"], json!("[1, 2]"));
-        assert_eq!(
-            one("type", json!({"a": 1})).unwrap()["text"],
-            json!("{'a': 1}")
-        );
-        assert_eq!(one("type", json!(1.5)).unwrap()["text"], json!("1.5"));
     }
 
     fn reply_of(v: Value) -> Reply {
@@ -1051,44 +946,20 @@ mod tests {
     }
 
     #[test]
-    fn py_path_str_matches_pathlib() {
-        // expected values are `str(Path(p))` from CPython
-        let cases = [
-            ("./a.png", "a.png"),
-            ("a//b/", "a/b"),
-            (".", "."),
-            ("./", "."),
-            ("//x/./y", "//x/y"),
-            ("/x/", "/x"),
-            ("a/./b/../c", "a/b/../c"),
-            ("", "."),
-            ("///x", "/x"),
-            ("/", "/"),
-            ("./out/001.png", "out/001.png"),
-            ("a/.", "a"),
-            ("../a", "../a"),
-        ];
-        for (p, want) in cases {
-            assert_eq!(py_path_str(Path::new(p)), want, "{p:?}");
-        }
-    }
-
-    #[test]
-    fn shot_path_is_normalised_and_needs_an_extension() {
+    fn shot_path_is_kept_as_given_and_always_png() {
         let tmp = tempfile::tempdir().unwrap();
         let mut s = hello(tmp.path());
         let dir = tmp.path().to_str().unwrap();
-        let given = format!("{dir}//sub/./own.png");
-        let r = execute(&mut s, "shot", &args(json!({ "path": given })));
-        assert_eq!(r.shot, Some(format!("{dir}/sub/own.png")));
-        let bare = tmp.path().join("noext");
-        let r = execute(
-            &mut s,
-            "shot",
-            &args(json!({"path": bare.to_str().unwrap()})),
-        );
-        assert_eq!(r.error.as_deref(), Some("unknown file extension: "));
-        assert!(r.shot.is_none() && !bare.exists());
+        for given in [
+            format!("{dir}//sub/./own.png"),
+            format!("{dir}/noext"),
+            format!("{dir}/pic.jpg"),
+        ] {
+            let r = execute(&mut s, "shot", &args(json!({ "path": given })));
+            assert_eq!(r.shot.as_deref(), Some(given.as_str()), "{:?}", r.error);
+            let bytes = fs::read(&given).unwrap();
+            assert_eq!(&bytes[..8], b"\x89PNG\r\n\x1a\n", "{given}");
+        }
     }
 
     #[test]
@@ -1157,7 +1028,10 @@ mod tests {
         assert!(r.error.unwrap().starts_with("unknown command 'jump'"));
         assert!(!r.status.paused);
         let r = execute(&mut s, "tap", &args(json!({"x": "abc", "y": 1})));
-        assert_eq!(r.error.as_deref(), Some("expected an integer, got 'abc'"));
+        assert_eq!(
+            r.error.as_deref(),
+            Some(r#"'tap': x must be an integer, got "abc""#)
+        );
         assert!(!r.status.paused);
         let r = execute(&mut s, "tap-text", &Map::new());
         assert_eq!(
@@ -1268,19 +1142,17 @@ mod tests {
     }
 
     #[test]
-    fn run_steps_prints_normalised_out_dir() {
+    fn run_steps_prints_the_out_dir_as_given() {
         let tmp = tempfile::tempdir().unwrap();
         let mut s = hello(tmp.path());
         let dir = tmp.path().to_str().unwrap();
         let mut out = Vec::new();
         let messy = PathBuf::from(format!("{dir}/./out/"));
         let written = run_steps(&mut s, "shot", &messy, &mut out).unwrap();
-        let want = PathBuf::from(format!("{dir}/out/001.png"));
-        assert_eq!(written, vec![want.clone()]);
-        assert_eq!(
-            String::from_utf8(out).unwrap(),
-            format!("{}\n", want.display())
-        );
+        let want = format!("{dir}/./out/001.png");
+        let written: Vec<_> = written.iter().map(|p| p.to_str().unwrap()).collect();
+        assert_eq!(written, [want.as_str()]);
+        assert_eq!(String::from_utf8(out).unwrap(), format!("{want}\n"));
     }
 
     #[test]

@@ -1,4 +1,4 @@
-//! The `inkemu` command line: the parser and the client of the daemon, as 0.1 `cli.py`.
+//! The `inkemu` command line: the parser and the client of the daemon.
 use std::ffi::OsString;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -60,7 +60,7 @@ fn parser() -> Command {
         .about("Emulator of Xteink X4 Pro InkApp Lua apps")
         .subcommand_required(true)
         .arg_required_else_help(false)
-        .infer_long_args(true)
+        .disable_help_subcommand(true)
         .disable_version_flag(true);
     cmd = cmd
         .subcommand(
@@ -172,9 +172,10 @@ fn client(
         Err(e) => return fail(err, &e, 2),
     };
     if cmd == "shot" {
+        // the daemon has another working directory
         if let Some(p) = args.get("path").and_then(|v| v.as_str()) {
-            let abs = paths::absolute(Path::new(&command::py_path_str(Path::new(p))));
-            args.insert("path".into(), command::py_path_str(&abs).into());
+            let abs = paths::absolute(Path::new(p));
+            args.insert("path".into(), abs.to_string_lossy().into());
         }
     }
     let port = match port {
@@ -193,7 +194,7 @@ fn client(
     if reply.ok != Some(true) {
         let text = match &reply.error {
             Some(Some(e)) => e.clone(),
-            _ => "None".to_owned(),
+            _ => "the daemon reported an error".to_owned(),
         };
         return fail(err, &text, 1);
     }
@@ -230,17 +231,18 @@ fn session_command(
             2,
         );
     }
-    let path_opt =
-        |n: &str| opt(sub, n).map(|p| PathBuf::from(command::py_path_str(Path::new(&p))));
+    let app = opt(sub, "app").unwrap_or_default();
+    if !Path::new(&app).is_dir() {
+        return fail(err, &format!("no such app directory: {app}"), 2);
+    }
     let opts = SessionOptions {
-        state_dir: path_opt("state"),
-        fixtures_dir: path_opt("fixtures"),
+        state_dir: opt(sub, "state").map(PathBuf::from),
+        fixtures_dir: opt(sub, "fixtures").map(PathBuf::from),
         net: opt(sub, "net").unwrap_or_default(),
         fresh: sub.get_flag("fresh"),
         start_time: opt(sub, "time"),
         ..SessionOptions::default()
     };
-    let app = opt(sub, "app").unwrap_or_default();
     let mut s = match Session::open(Path::new(&app), opts) {
         Ok(s) => s,
         Err(e) => return fail(err, &e, 2),
@@ -353,14 +355,65 @@ mod tests {
     }
 
     #[test]
-    fn long_option_prefixes_and_equals() {
+    fn long_options_take_equals_but_no_prefixes() {
         let m = parser()
-            .try_get_matches_from(["inkemu", "serve", "app", "--fre", "--ne=live", "--por", "0"])
+            .try_get_matches_from([
+                "inkemu",
+                "serve",
+                "app",
+                "--fresh",
+                "--net=live",
+                "--port",
+                "0",
+            ])
             .unwrap();
         let (_, sub) = m.subcommand().unwrap();
         assert!(sub.get_flag("fresh"));
         assert_eq!(sub.get_one::<String>("net").unwrap(), "live");
         assert_eq!(sub.get_one::<u16>("port"), Some(&0));
+        for args in [
+            &["serve", "app", "--fre"][..],
+            &["serve", "app", "--ne=live"],
+            &["tap", "1", "2", "--por", "7"],
+        ] {
+            let (code, out, err) = cli(args);
+            assert_eq!(code, 2, "{args:?}");
+            assert!(
+                out.is_empty() && err.contains("unexpected argument"),
+                "{err}"
+            );
+        }
+    }
+
+    #[test]
+    fn there_is_no_help_subcommand() {
+        let (code, out, err) = cli(&["help"]);
+        assert_eq!(code, 2);
+        assert!(
+            out.is_empty() && err.contains("unrecognized subcommand 'help'"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn a_missing_app_directory_is_a_usage_error() {
+        let tmp = tempfile::tempdir().unwrap();
+        let missing = tmp.path().join("no-such-app");
+        let file = tmp.path().join("file");
+        fs::write(&file, b"").unwrap();
+        for app in [&missing, &file] {
+            let app = app.to_str().unwrap();
+            for args in [
+                vec!["run", app, "--steps", "shot", "--state", app],
+                vec!["serve", app, "--port", "0", "--state", app],
+            ] {
+                let (code, out, err) = cli(&args);
+                assert_eq!(code, 2, "{args:?}");
+                assert!(out.is_empty());
+                assert_eq!(err, format!("inkemu: no such app directory: {app}\n"));
+            }
+        }
+        assert!(!missing.exists());
     }
 
     #[test]
@@ -415,6 +468,29 @@ mod tests {
         assert_eq!(code, 1);
         assert!(err.starts_with("inkemu: step failed: "), "{err}");
         assert!(tmp.path().join("out/texts.json").exists());
+    }
+
+    #[test]
+    fn a_failure_without_an_error_text_says_so() {
+        use std::io::Read;
+        let l = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = l.local_addr().unwrap().port().to_string();
+        let h = std::thread::spawn(move || {
+            let (mut c, _) = l.accept().unwrap();
+            let mut buf = [0u8; 4096];
+            let _ = c.read(&mut buf);
+            let body = r#"{"ok": false}"#;
+            let _ = write!(
+                c,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = c.read(&mut buf);
+        });
+        let (code, _, err) = cli(&["state", "--port", &port]);
+        h.join().unwrap();
+        assert_eq!(code, 1);
+        assert_eq!(err, "inkemu: the daemon reported an error\n");
     }
 
     #[test]
