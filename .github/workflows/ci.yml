@@ -131,9 +131,23 @@ jobs:
           uv pip install --python "$RUNNER_TEMP/venv/bin/python" target/wheels/*.whl
           cd "$RUNNER_TEMP"
           venv/bin/inkemu --help
-          venv/bin/python -c "import inkemu.mcp_server, inkemu.window, inkemu._core"
+          venv/bin/python -c "import inkemu.window, inkemu._core"
           venv/bin/inkemu run hello --fresh --out run --steps "tap-text 'Tap me'; texts" | tee out.txt
           grep -q "Taps: 1" out.txt
+          export INKEMU_STATE_ROOT="$RUNNER_TEMP/root"
+          venv/bin/inkemu serve hello --port 0 --fresh &
+          for _ in $(seq 100); do [ -f root/daemon.json ] && break; sleep 0.1; done
+          venv/bin/inkemu tap-text 'Tap me'
+          venv/bin/inkemu texts > texts.txt
+          grep -q "Taps: 1" texts.txt
+          venv/bin/inkemu stop
+          wait
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
+            | timeout 20 venv/bin/inkemu-mcp > mcp.txt
+          grep -q emu_start mcp.txt
       - name: build and import the sdist in another clean venv
         run: |
           uv venv "$RUNNER_TEMP/venv-sdist"

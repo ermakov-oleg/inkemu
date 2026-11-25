@@ -58,7 +58,7 @@ Debian/Ubuntu). CI runs on uv-managed Pythons (Tk 9); with the python.org builds
 crash on macOS 26.
 
 The emulator core (Lua, drawing, text, network replay, lock screen) is Rust, the same one the page runs. The CLI, the
-daemon, the MCP server and the window are still Python on top of it, and the window is still Tk.
+daemon and the MCP server are Rust too; only the window is still Python (Tk).
 
 ## Quick start
 
