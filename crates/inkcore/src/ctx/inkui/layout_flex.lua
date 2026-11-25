@@ -112,6 +112,11 @@ content_w = function(n)
     local extra = k == "button" and 24 or 0
     v = math.max(v, width_of(n.font, n.reserve, n.mopts) + extra)
   end
+  -- a skin's left and right pad widen a button, and each cell of tabs
+  if n.skin and (k == "button" or k == "tabs") then
+    local _, r, _, l = skin_pad(n.skin)
+    v = v + (k == "tabs" and #n.items or 1) * (l + r)
+  end
   n.cw = v
   return v
 end
@@ -134,6 +139,10 @@ content_h = function(n, w)
     v = math.tointeger(n.image.height)
   elseif k == "button" or k == "tabs" then
     v = lh + 16
+    if n.skin then
+      local t, _, b = skin_pad(n.skin)
+      v = v + t + b
+    end
   elseif k == "switch" then
     local line = lh
     if n.note then
@@ -521,6 +530,11 @@ baseline = function(c, w, h)
   elseif k == "button" and c.image and c.text == "" then
     return h
   elseif k == "button" or k == "tabs" then
+    -- centred in the text area that the skin's pad leaves, as skin_face gives it
+    if c.skin then
+      local t, _, b = skin_pad(c.skin)
+      return t + (math.max(1, h - t - b) - c.font.line_height) // 2 + c.font.ascent
+    end
     return (h - c.font.line_height) // 2 + c.font.ascent
   elseif k == "switch" then
     if c.note then

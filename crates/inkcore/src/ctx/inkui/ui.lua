@@ -61,7 +61,8 @@ function create(opts)
   elseif not FOCUS_STYLES[focus_style] then
     return nil, "invalid_argument"
   end
-  if opts.skins ~= nil and type(opts.skins) ~= "table" then
+  local skins = check_skins(opts.skins == nil and {} or opts.skins)
+  if skins == nil then
     return nil, "invalid_argument"
   end
   local obj = setmetatable({}, object_meta)
@@ -78,8 +79,8 @@ function create(opts)
     frame = nil,
     targets = {},
     owners = {},
-    -- the skins of `create`, by name
-    skins = opts.skins or {},
+    -- the skins of `create` by name, checked (skin.lua)
+    skins = skins,
   }
   return obj
 end

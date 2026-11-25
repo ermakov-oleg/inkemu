@@ -75,19 +75,14 @@ local function not_implemented(cx, what)
   cx.unsupported = cx.unsupported or (what .. " is not implemented in inkemu yet")
 end
 
--- A skin field: an unknown name is invalid. A container's registered skin is accepted where it is not drawn
--- (ui:layout); a control's changes its content size, which inkemu does not implement.
-local function tree_skin(cx, n, skin, what)
-  if skin == nil then
-    return
-  end
-  if not skin_known(cx.st, skin) then
+-- A skin field: an unknown name is invalid; a registered one becomes the checked skin, which a container draws and
+-- a button's or tabs' content size and baseline take their pad from.
+local function tree_skin(cx, n, skin)
+  local ok, checked = check_skin(cx.st, skin)
+  if not ok then
     return fail(cx, INVALID)
   end
-  n.skin = skin
-  if cx.frame or not CONTAINERS[n.kind] then
-    not_implemented(cx, what .. " skin")
-  end
+  n.skin = checked
 end
 
 -- padding, gaps, alignment, wrap, divider and appearance of a row or column
@@ -152,7 +147,7 @@ local function check_container(cx, n, o)
   n.border = o.border == true
   n.line_width, n.border_color = int_or(o.line_width, 1), int_or(o.border_color, 15)
   n.background, n.radius = int_or(o.background, nil), int_or(o.radius, 0)
-  tree_skin(cx, n, o.skin, "ui:" .. n.kind)
+  tree_skin(cx, n, o.skin)
 end
 
 -- the fields a control's content size reads, checked as that control checks them
@@ -185,7 +180,7 @@ local function check_sizing(cx, n, o)
       return fail(cx, INVALID)
     end
     n.image = o.image
-    tree_skin(cx, n, o.skin, "ui:button")
+    tree_skin(cx, n, o.skin)
   elseif k == "switch" then
     if not (optional(o.note, "string") and (not api_at_least(16) or optional(o.bold, "boolean"))) then
       return fail(cx, INVALID)
@@ -193,7 +188,7 @@ local function check_sizing(cx, n, o)
     n.note = o.note
     -- from 2.16 the text of a switch is bold unless the script says otherwise
     n.mopts = api_at_least(16) and { bold = o.bold ~= false } or nil
-    tree_skin(cx, n, o.skin, "ui:switch")
+    tree_skin(cx, n, o.skin)
   elseif k == "tabs" or k == "radio" then
     if not (check_items(o.items) and check_cell_gap(o.gap)) then
       return fail(cx, INVALID)
@@ -206,7 +201,7 @@ local function check_sizing(cx, n, o)
       -- from 2.16 every cell is measured bold unless the script says otherwise
       n.mopts = api_at_least(16) and { bold = o.bold ~= false } or nil
     end
-    tree_skin(cx, n, o.skin, "ui:" .. k)
+    tree_skin(cx, n, o.skin)
   elseif k == "image" then
     if not is_image(o.source) then
       return fail(cx, INVALID)

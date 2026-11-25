@@ -304,19 +304,41 @@ the README.
   - A cell `gap` wider than the box counts as the box, a cell never gets a negative size, and the text width after
     the ring is at least 0.
   - A `nav` entry naming a composite whose default part is unavailable falls back to the search by position.
-  - A registered `skin` on a radio raises "not implemented in inkemu yet"; an unregistered one is `invalid_argument`.
+  - With a skin, a focused cell gets the square focus ring after its text; a disabled radio draws each cell in the
+    skin's disabled look when it has one (then no dots), else in its usual look covered with dots.
 - `ctx.ui` switch, as measured with the reader's UI library run as a black box: `selected` is not type-checked (any
   value but nil and false is on), a `badge` is ignored, a `radius` only shapes the focus frame (radius + 3 when
   positive), `focus_style` does not change a switch's look, and `bold = false` leaves `bold` out of the text call.
   Checks: `16/switch_geometry`.
 - `ctx.ui` switch, not measured: the text is left out when the room before the capsule is 0 or less, and with a note
-  of odd height the note box takes the extra pixel. A registered `skin` still raises "not implemented in inkemu yet".
+  of odd height the note box takes the extra pixel. With a skin, focus picks the skin's focused look for the capsule
+  but only the switch's own frame around the whole control is drawn, and a skin's disabled look replaces the dots.
 - `ctx.ui` images, as measured with the reader's UI library run as a black box: an image button draws its image
   scaled to the box (`invert` only when selected, never for emphasis or focus), then the border rect without a `fill`
   key, the focus frame, the text with no colour of its own, the badge and the dots; focus never fills it. A top-level
   `ui:image` passes any non-nil `source` to the canvas as it is and is neither hit nor focusable; a button `image` and
   a layout child's `source` must be an image object (a table with only `width` and `height` is not one). Checks:
   `16/image_button`.
-- `ctx.ui` skins, not measured: on a button, a radio and a container child alike, a `skin` that is not a name
-  registered in `create` is `invalid_argument`, as is a button with both `skin` and `image` (the code §16 gives);
-  only a registered skin, which inkemu does not draw yet, raises "not implemented in inkemu yet".
+- `ctx.ui` skins, as measured with the reader's UI library run as a black box (oracle scenario s24) and followed by
+  inkemu:
+  - `create` holds only `edge` to the image (left + right below its width, top + bottom below its height, a variant
+    with its own image and edge); `pad` is any 0..255 in the same CSS forms, even wider than the image. A whole
+    float such as `text_color = 2.0` is taken, and a variant name it does not know (`hover`) is ignored whatever it
+    holds.
+  - `ui:skin` does not type-check the fields of `st`: only `true` sets `focused`, `selected` or `emphasis`
+    (`focused = 1` draws the unfocused look), and only `enabled = false` clears `enabled`. The contract calls them
+    booleans.
+  - The text area after `pad` is at least 1 px wide and tall, also when the box is smaller than the pad; a
+    variant's own `edge` does not move it.
+  - A skin's disabled look replaces the white dots; without one the usual look is covered. A selected or emphasis
+    look with focus gets the ring even when the skin has a focused look; only the focused look itself goes without.
+    The ring is the square 2 px frame 3 px out, drawn after the text, whatever the `radius` or `focus_style`.
+  - Inside a frame, `ui:skin` draws on the canvas at once, below the controls that `end_frame` paints.
+  Checks: `16/skins_validation`, `16/skin_nine_slice`.
+- `ctx.ui` skins, not measured:
+  - A skin without a selected look draws its normal look with `invert = true` and keeps that look's text colour.
+  - `ui:skin` with `focused` and `enabled = false` on a skin with a disabled look draws that look with the ring.
+  - A container's skin replaces its background and border; its divider is still drawn.
+  - A skin whose image was released draws nothing of it (the canvas refuses those `g:image` calls) and still gets
+    its text (check `16/skin_nine_slice`).
+  - A `skins` key that is not a non-empty string, or a skin or variant that is not a table, is `invalid_argument`.

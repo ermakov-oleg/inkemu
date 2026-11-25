@@ -78,16 +78,15 @@ function skin_known(st, skin)
   return type(skin) == "string" and st.skins[skin] ~= nil
 end
 
--- A control's `skin` in a frame: true when unset, false when it is not registered, and false with the message for a
--- registered one, which inkemu does not draw yet.
-function check_skin(st, skin, what)
+-- A control's `skin`: true and the checked skin (nil when unset), or false when it is not a registered name
+function check_skin(st, skin)
   if skin == nil then
-    return true
+    return true, nil
   end
   if not skin_known(st, skin) then
     return false
   end
-  return false, what .. " skin is not implemented in inkemu yet"
+  return true, st.skins[skin]
 end
 
 -- the fields every focusable control takes; false when one has the wrong type

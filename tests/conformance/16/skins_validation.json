@@ -1,0 +1,49 @@
+{
+  "spec": "§16",
+  "about": "create checks its skins: an image is required; edge and pad are one integer 0..255 or 1 to 4 of them in CSS order, pad defaulting to edge; left + right must stay below the image width and top + bottom below its height, while pad is not held to the image; text_color is 0..15; a variant takes the skin's unset fields and is checked with its own image and edge, an unknown one is ignored; a control's skin must be a registered name and a button cannot have both a skin and an image; ui:skin returns the look's text colour and the text area after pad",
+  "expect": {
+    "css_order": {"value": {
+      "four": [15, 4, 1, 94, 46],
+      "three": [15, 2, 1, 96, 46],
+      "two": [15, 2, 1, 96, 48],
+      "one": [15, 5, 5, 90, 40],
+      "number": [15, 5, 5, 90, 40],
+      "from_edge": [7, 0, 1, 100, 48]
+    }, "spec": "§16"},
+    "fit": {"value": {
+      "edge_1": "ok",
+      "left_right_3": "invalid_argument",
+      "top_bottom_3": "invalid_argument",
+      "top_bottom_2": "ok",
+      "big_pad": "ok"
+    }, "spec": "§16"},
+    "bad_values": {"value": {
+      "no_image": "invalid_argument",
+      "not_image": "invalid_argument",
+      "edge_256": "invalid_argument",
+      "edge_neg": "invalid_argument",
+      "edge_frac": "invalid_argument",
+      "edge_empty": "invalid_argument",
+      "edge_five": "invalid_argument",
+      "pad_256": "invalid_argument",
+      "text_color_16": "invalid_argument",
+      "empty_name": "invalid_argument",
+      "not_a_table": "invalid_argument"
+    }, "spec": "§16"},
+    "variants": {"value": {
+      "own_edge_too_wide": "invalid_argument",
+      "inherited_edge_fits": "ok",
+      "not_a_table": "invalid_argument",
+      "bad_image": "invalid_argument",
+      "unknown_ignored": "ok",
+      "text_color": [3, 0, 0, 100, 50]
+    }, "spec": "§16"},
+    "use": {"value": {
+      "unknown": "invalid_argument",
+      "with_image": "invalid_argument",
+      "registered": 0,
+      "ui_skin_unknown": "invalid_argument"
+    }, "spec": "§16"}
+  },
+  "errors": []
+}

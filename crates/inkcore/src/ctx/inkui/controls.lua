@@ -38,14 +38,14 @@ kinds.button = {
     if not (check_font_min(c, o) and check_text_level(c, o)) or (o.image ~= nil and o.skin ~= nil) then
       return false
     end
-    local ok, unsupported = check_skin(st, o.skin, "ui:button")
+    local ok, skin = check_skin(st, o.skin)
     if not ok then
-      return false, unsupported
+      return false
     end
     if o.image ~= nil and not is_image(o.image) then
       return false
     end
-    c.image = o.image
+    c.image, c.skin = o.image, skin
     c.emphasis = o.emphasis == true
     c.border = o.border ~= false
     c.text, c.font, c.radius, c.align = o.text, o.font, o.radius, o.align
@@ -58,7 +58,11 @@ kinds.button = {
       button_face(g, c, look)
     end
     badge(g, c)
-    dots(g, c)
+    if c.skin then
+      skin_dots(g, c.skin, c)
+    else
+      dots(g, c)
+    end
   end,
 }
 
@@ -85,10 +89,11 @@ kinds.switch = {
     if api_at_least(16) and not optional(o.bold, "boolean") then
       return false
     end
-    local ok, unsupported = check_skin(st, o.skin, "ui:switch")
+    local ok, skin = check_skin(st, o.skin)
     if not ok then
-      return false, unsupported
+      return false
     end
+    c.skin = skin
     c.enabled = o.enabled ~= false
     c.selected = o.selected ~= nil and o.selected ~= false
     c.nav = o.nav
@@ -103,11 +108,16 @@ kinds.switch = {
     th = math.min(th, tw)
     local cx = c.x + c.w - p - tw
     local cy = c.y + (c.h - th) // 2
-    g:rect(cx, cy, tw, th, { fill = c.selected, line_width = 2, radius = th // 2 })
-    if c.selected then
-      g:circle(cx + tw - th // 2, cy + th // 2, th // 2 - 5, { color = 0, fill = true })
+    if c.skin then
+      -- the switch's own focus frame goes around the whole control, so the skin's ring is not drawn
+      skin_face(g, c.skin, cx, cy, tw, th, { focused = look.focused, selected = c.selected, enabled = c.enabled })
     else
-      g:circle(cx + th // 2, cy + th // 2, th // 2 - 6, { fill = true })
+      g:rect(cx, cy, tw, th, { fill = c.selected, line_width = 2, radius = th // 2 })
+      if c.selected then
+        g:circle(cx + tw - th // 2, cy + th // 2, th // 2 - 5, { color = 0, fill = true })
+      else
+        g:circle(cx + th // 2, cy + th // 2, th // 2 - 6, { fill = true })
+      end
     end
     local tx = c.x + p
     local room = cx - 12 - tx
@@ -136,7 +146,11 @@ kinds.switch = {
         line_width = 2, radius = type(r) == "number" and r > 0 and r + 3 or 0,
       })
     end
-    dots(g, c)
+    if c.skin then
+      skin_dots(g, c.skin, c)
+    else
+      dots(g, c)
+    end
   end,
 }
 

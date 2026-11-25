@@ -551,13 +551,50 @@ fn font_min_takes_the_largest_system_font_that_fits() {
     assert_eq!(fonts, ["medium", "small", "medium", "medium", "large"]);
 }
 
+/// `bare`: a whole 20 × 20 image (no edges) with text colour 4; `dim` the same with a disabled image.
+const BARE: &str = "{skins = {bare = {image = {_img = true, name = 'bare', width = 20, height = 20}, text_color = 4},\n\
+     dim = {image = {_img = true, name = 'bare', width = 20, height = 20}, text_color = 4,\n\
+       disabled = {image = {_img = true, name = 'off', width = 20, height = 20}}}}}";
+
 #[test]
-fn registered_button_skin_raises_at_the_app_line() {
-    let code = "ui:begin_frame(g)\nui:button('a', {x = 0, y = 0, w = 10, h = 10, skin = 'iron'})";
-    let err = layout_run("2.26", code);
-    assert!(
-        err.starts_with("index.lua:3: ui:button skin is not implemented in inkemu yet"),
-        "{err}"
+fn a_skinned_button_draws_its_look_then_the_text_the_ring_and_the_dots() {
+    let lua = fixed_library("2.26");
+    let look = |name: &str, invert: bool| {
+        format!("image(@{name},10,0,{{h=40,invert={invert},src={{h=20,w=20,x=0,y=0}},w=100}})")
+    };
+    let text = "text_box(10,0,100,40,A,{align=center,color=4,font=@medium,overflow=ellipsis,valign=middle,wrap=none})";
+    let ring = "rect(7,-3,106,46,{line_width=2,radius=0})";
+    let dots = "pattern(10,0,100,40,{color=0,density=50,kind=dot})";
+    let button = |more: &str| {
+        format!("ui:button('a', {{x = 10, y = 0, w = 100, h = 40, text = 'A', radius = 9{more}}})")
+    };
+    assert_eq!(
+        frame(&lua, BARE, "", &button(", skin = 'bare'")),
+        [look("bare", false), text.into()]
+    );
+    // no selected look: the normal one inverted, keeping its text colour
+    assert_eq!(
+        frame(&lua, BARE, "", &button(", skin = 'bare', selected = true")),
+        [look("bare", true), text.into()]
+    );
+    // the ring comes after the text, square whatever the radius
+    assert_eq!(
+        frame(
+            &lua,
+            BARE,
+            "st.focus = 'a' st.keys = true",
+            &button(", skin = 'bare'")
+        ),
+        [look("bare", false), text.into(), ring.into()]
+    );
+    assert_eq!(
+        frame(&lua, BARE, "", &button(", skin = 'bare', enabled = false")),
+        [look("bare", false), text.into(), dots.into()]
+    );
+    // a disabled look replaces the dots
+    assert_eq!(
+        frame(&lua, BARE, "", &button(", enabled = false, skin = 'dim'")),
+        [look("off", false), text.into()]
     );
 }
 
@@ -940,12 +977,17 @@ fn focus_keeps_a_part_until_end_frame() {
     );
 }
 
-/// What `code` (Lua using `ui`, an object made with `skins = {iron = {}}`, and `g`, a recorder) returns as text,
-/// or its error.
+/// Skins for `make`: `iron`, a 40 × 30 image with 10 px edges, text padded 6 and 12, text colour 3 and a selected
+/// image of 40 × 32.
+const IRON: &str = "{iron = {image = {_img = true, name = 'iron', width = 40, height = 30}, edge = 10, pad = {6, 12}, \
+     text_color = 3, selected = {image = {_img = true, name = 'iron_on', width = 40, height = 32}}}}";
+
+/// What `code` (Lua using `ui`, an object made with the [`IRON`] skins, and `g`, a recorder) returns as text, or its
+/// error.
 fn layout_run(api: &str, code: &str) -> String {
     let lua = fixed_library(api);
     let code = format!(
-        "local ui = make({{skins = {{iron = {{}}}}}}) local log = {{}} local g = recorder(log)\n{code}"
+        "local ui = make({{skins = {IRON}}}) local log = {{}} local g = recorder(log)\n{code}"
     );
     match run(&lua, &code) {
         Ok(r) => r
@@ -965,10 +1007,6 @@ fn containers_raise_what_inkemu_does_not_implement_at_the_app_line() {
             "index.lua:3: ui:tabs is not implemented in inkemu yet",
         ),
         (
-            "ui:begin_frame(g)\nui:row('c', {x = 0, y = 0, w = 100, h = 100, skin = 'iron', children = {}})",
-            "index.lua:3: ui:row skin is not implemented in inkemu yet",
-        ),
-        (
             "ui:begin_frame(g)\nui:grid('c', {x = 0, y = 0, w = 100, h = 100, columns = 1})",
             "index.lua:3: ui:grid is not implemented in inkemu yet",
         ),
@@ -976,17 +1014,13 @@ fn containers_raise_what_inkemu_does_not_implement_at_the_app_line() {
             "\nui:layout({x = 0, y = 0, w = 9, h = 9}, {kind = 'row', children = {{kind = 'stack'}}})",
             "index.lua:3: ui:stack is not implemented in inkemu yet",
         ),
-        (
-            "\nui:layout({x = 0, y = 0, w = 9, h = 9}, {kind = 'row', children = {{kind = 'button', w = 'fit', skin = 'iron'}}})",
-            "index.lua:3: ui:button skin is not implemented in inkemu yet",
-        ),
     ];
     for (code, want) in cases {
         let err = layout_run("2.26", code);
         assert!(err.starts_with(want), "{code}: {err}");
     }
-    // an invalid field anywhere in the tree wins over a part inkemu lacks; a registered container skin is only
-    // validated by ui:layout, which draws nothing
+    // an invalid field anywhere in the tree wins over a part inkemu lacks; ui:layout takes a registered container
+    // skin and draws nothing
     assert_eq!(
         layout_run(
             "2.26",
@@ -1227,13 +1261,12 @@ fn radio_checks_its_fields() {
     );
     // `bold` is a 2.16 field
     assert!(layout_run("2.15", code).ends_with(&format!("{ok} {bad}")));
-    let err = layout_run(
-        "2.26",
-        "ui:begin_frame(g)\nui:radio('r', {x = 0, y = 0, w = 9, h = 9, items = {'a'}, skin = 'iron'})",
-    );
-    assert!(
-        err.starts_with("index.lua:3: ui:radio skin is not implemented in inkemu yet"),
-        "{err}"
+    assert_eq!(
+        layout_run(
+            "2.26",
+            "ui:begin_frame(g)\nreturn select('#', ui:radio('r', {x = 0, y = 0, w = 9, h = 9, items = {'a'}, skin = 'iron'}))",
+        ),
+        "0"
     );
 }
 

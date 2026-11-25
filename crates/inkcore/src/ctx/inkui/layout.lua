@@ -41,14 +41,19 @@ local function band(g, x, y, w, h, color, radius)
   end
 end
 
--- the background, the border and the dividers of container node `n`, under its children
+-- the background and the border (or the skin's normal look instead), then the dividers of container node `n`,
+-- under its children
 local function paint_container(g, c)
   local n = c.node
-  if n.background then
-    band(g, n.x, n.y, n.w, n.h, n.background, n.radius)
-  end
-  if n.border then
-    g:rect(n.x, n.y, n.w, n.h, { color = n.border_color, line_width = n.line_width, radius = n.radius })
+  if n.skin then
+    skin_face(g, n.skin, n.x, n.y, n.w, n.h, {})
+  else
+    if n.background then
+      band(g, n.x, n.y, n.w, n.h, n.background, n.radius)
+    end
+    if n.border then
+      g:rect(n.x, n.y, n.w, n.h, { color = n.border_color, line_width = n.line_width, radius = n.radius })
+    end
   end
   local d = n.divider
   if d == nil then

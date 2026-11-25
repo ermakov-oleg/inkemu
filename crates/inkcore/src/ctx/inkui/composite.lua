@@ -63,6 +63,26 @@ end
 
 local ALIGN = { left = true, center = true, right = true }
 
+local function skinned_radio(g, c, look, font)
+  for _, t in ipairs(part_targets(c)) do
+    local focused = look.focused and look.part == t.part
+    local st = { focused = focused, selected = t.part == c.value, enabled = c.enabled }
+    local tc, tx, ty, tw, th, ring = skin_face(g, c.skin, t.x, t.y, t.w, t.h, st)
+    local item = c.items[t.part]
+    local f = shrink(font, c.font_min, function(f)
+      return f:measure(item, measure_opts(c)) <= tw
+    end)
+    g:text_box(tx, ty, tw, th, item, {
+      align = c.align or "left", color = tc, font = f, overflow = "ellipsis", valign = "middle", wrap = "none",
+      bold = c.bold,
+    })
+    if ring then
+      skin_ring(g, t.x, t.y, t.w, t.h)
+    end
+  end
+  skin_dots(g, c.skin, c)
+end
+
 kinds.radio = composite({
   check = function(c, o, st)
     -- `nav` is checked as on other controls, then ignored: a composite takes focus by its parts
@@ -74,10 +94,11 @@ kinds.radio = composite({
       and (o.align == nil or ALIGN[o.align]) and check_font_min(c, o) and check_bold(c, o)) then
       return false
     end
-    local ok, unsupported = check_skin(st, o.skin, "ui:radio")
+    local ok, skin = check_skin(st, o.skin)
     if not ok then
-      return false, unsupported
+      return false
     end
+    c.skin = skin
     c.enabled = o.enabled ~= false
     c.items = table.move(o.items, 1, n, 1, {})
     c.value = o.value and math.tointeger(o.value)
@@ -109,9 +130,13 @@ kinds.radio = composite({
     end
     return "change", n
   end,
-  -- per cell: a ring of diameter s on the left, the dot of the value item, the text after them, the focus frame
+  -- per cell: a ring of diameter s on the left, the dot of the value item, the text after them, the focus frame;
+  -- with a skin, the skin's look in place of the ring and dot, and the text in the area after its pad
   paint = function(g, c, look)
     local font = c.font or host.fonts.medium
+    if c.skin then
+      return skinned_radio(g, c, look, font)
+    end
     for _, t in ipairs(part_targets(c)) do
       local s = math.min(t.h, 32)
       local cx, cy = t.x + s // 2, t.y + t.h // 2

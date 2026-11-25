@@ -18,8 +18,8 @@ Each step is compared in full, except:
 - `PARKED` steps differ from the oracle in a known way that a later task decides. They are checked first, in full, and
   are strict xfails: one that matches, or differs in more than a frame's or a `ui:layout` call's results, fails.
 - An event step that acts on a frame with a control inkemu does not implement yet (the last closed frame had a
-  stubbed call), or a step that starts from a focus an earlier stubbed step left elsewhere than the oracle (the focus recorded by
-  the step before differs), is an xfail while only focus, its event result and the canvas calls differ
+  stubbed call), a step that starts from a focus an earlier stubbed step left elsewhere than the oracle (the focus recorded by
+  the step before differs), or a frame whose focus the oracle puts on a control stubbed in that frame, is an xfail while only focus, its event result and the canvas calls differ
   (`AFTER_STUB`), a failure when anything else does, and an ordinary pass when it matches.
 
 The JSON files hold inputs we wrote and outputs recorded from the reader's library; see the README next to them.
@@ -86,16 +86,11 @@ HOST_REFUSES: dict[tuple[str, int], list[str]] = {
 }
 
 # (scenario, step) -> how inkemu still differs from the oracle there, until a later task decides
-PARKED: dict[tuple[str, int], str] = {
-    (f"s24_skins.api{minor}", step): "create does not check skins yet"
-    for minor in (13, 15, 26)
-    for step in (*range(4, 20), 21)
-}
+PARKED: dict[tuple[str, int], str] = {}
 # the fields a parked step may differ in: what a frame and a ui:layout call show
 PARKED_FIELDS = {
     "frame": {"calls", "focused_after", "op_counts", "stream", "stream_count"},
     "layout": {"result"},
-    "create": {"ret"},
 }
 
 # step fields that are notes or inputs, not results
@@ -279,8 +274,13 @@ def test_step(scenario: str, i: int, tmp: Path):
         pytest.xfail(f"parked: {parked}")
     if stubbed(got):
         diff = differences(want, got, partial=True)
-        reason = after_stub(oracle(scenario)["output"], ours, i) or (
-            any(stubbed(ours[k]) for k in range(i - 1)) and "focus may differ after earlier steps not implemented yet"
+        reason = (
+            after_stub(oracle(scenario)["output"], ours, i)
+            or (
+                any(stubbed(ours[k]) for k in range(i - 1))
+                and "focus may differ after earlier steps not implemented yet"
+            )
+            or focus_on_stub(want, got)
         )
         if diff and reason and {f for f, _ in diff} <= AFTER_STUB:
             pytest.xfail(reason)
@@ -300,6 +300,15 @@ def test_step(scenario: str, i: int, tmp: Path):
     if diff and reason and {f for f, _ in diff} <= AFTER_STUB:
         pytest.xfail(reason)
     assert not diff, message
+
+
+def focus_on_stub(want: dict, got: dict) -> str | None:
+    """Why a frame with a stubbed call may draw focus on another control: the oracle's focus is on the stubbed one."""
+    focus = (want.get("focused_after") or [None])[0]
+    for call in got.get("calls", []):
+        if focus is not None and call.get("id") == focus and stubbed(call):
+            return f"focus falls on {focus}, a control not implemented yet, so it is drawn elsewhere here"
+    return None
 
 
 def focus_record(step: dict):

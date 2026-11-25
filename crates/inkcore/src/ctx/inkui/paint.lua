@@ -31,9 +31,30 @@ function measure_opts(c)
   end
 end
 
--- A button-like box `c` (x y w h radius border selected emphasis text font font_min align bold tabular): the box,
--- the focus ring and the single-line text. Filled when selected, emphasized or focused in the fill style.
+-- The single line of a button-like box `c` (text font font_min align bold tabular) in the text area `x y w h`,
+-- shrunk to fit its width; `color` nil leaves the colour to the canvas.
+function face_text(g, c, x, y, w, h, color)
+  if c.text == nil or c.text == "" then
+    return
+  end
+  local font = c.font or host.fonts.medium
+  if type(c.text) == "string" then
+    font = shrink(font, c.font_min, function(f)
+      return f:measure(c.text, measure_opts(c)) <= w
+    end)
+  end
+  g:text_box(x, y, w, h, c.text, {
+    align = c.align or "center", color = color, font = font, overflow = "ellipsis", valign = "middle",
+    wrap = "none", bold = c.bold, tabular = c.tabular,
+  })
+end
+
+-- A button-like box `c` (x y w h radius border selected emphasis skin, and the text fields): the box, the focus ring
+-- and the single-line text. Filled when selected, emphasized or focused in the fill style; a skin draws it instead.
 function button_face(g, c, look)
+  if c.skin then
+    return skin_button(g, c, look)
+  end
   local fill = c.selected or c.emphasis or (look.focused and not look.outline)
   local ring = look.focused and (c.selected or c.emphasis or look.outline)
   local r = c.radius or 0
@@ -44,19 +65,7 @@ function button_face(g, c, look)
     local outer = type(r) == "number" and r > 0 and r + 3 or 0
     g:rect(c.x - 3, c.y - 3, c.w + 6, c.h + 6, { line_width = 2, radius = outer })
   end
-  if c.text == nil or c.text == "" then
-    return
-  end
-  local font = c.font or host.fonts.medium
-  if type(c.text) == "string" then
-    font = shrink(font, c.font_min, function(f)
-      return f:measure(c.text, measure_opts(c)) <= c.w
-    end)
-  end
-  g:text_box(c.x, c.y, c.w, c.h, c.text, {
-    align = c.align or "center", color = fill and 0 or 15, font = font, overflow = "ellipsis",
-    valign = "middle", wrap = "none", bold = c.bold, tabular = c.tabular,
-  })
+  face_text(g, c, c.x, c.y, c.w, c.h, fill and 0 or 15)
 end
 
 -- A button whose face is an image scaled to the box: inverted when selected, the border and the focus frame over it,
@@ -71,19 +80,7 @@ function image_face(g, c, look)
     local outer = type(r) == "number" and r > 0 and r + 3 or 0
     g:rect(c.x - 3, c.y - 3, c.w + 6, c.h + 6, { line_width = 2, radius = outer })
   end
-  if c.text == nil or c.text == "" then
-    return
-  end
-  local font = c.font or host.fonts.medium
-  if type(c.text) == "string" then
-    font = shrink(font, c.font_min, function(f)
-      return f:measure(c.text, measure_opts(c)) <= c.w
-    end)
-  end
-  g:text_box(c.x, c.y, c.w, c.h, c.text, {
-    align = c.align or "center", font = font, overflow = "ellipsis", valign = "middle", wrap = "none",
-    bold = c.bold, tabular = c.tabular,
-  })
+  face_text(g, c, c.x, c.y, c.w, c.h, nil)
 end
 
 -- white dots over a disabled control; a canvas without `pattern` (the capability is off) gets none
