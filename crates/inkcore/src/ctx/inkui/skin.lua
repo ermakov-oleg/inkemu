@@ -9,8 +9,9 @@
 -- What the controls use:
 --   check_skins(skins) -> table|nil         the skins of `create` by name, checked; nil when one is invalid
 --   skin_face(g, skin, x, y, w, h, state) -> tc, tx, ty, tw, th, ring
---                                           draws the look for `state` ({ focused, selected, enabled, emphasis },
---                                           only `true` sets one, only `enabled == false` clears that one) and
+--                                           draws the look for `state` (a table, `{}` for the normal look:
+--                                           { focused, selected, enabled, emphasis }, only `true` sets one, only
+--                                           `enabled == false` clears that one) and
 --                                           returns its text colour, the text area after `pad` and whether the
 --                                           focus ring goes around it. It draws no text, no ring and no dots: the
 --                                           ring comes after the content, so the caller draws it with skin_ring.

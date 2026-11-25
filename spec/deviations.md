@@ -330,14 +330,18 @@ the README.
     booleans.
   - The text area after `pad` is at least 1 px wide and tall, also when the box is smaller than the pad; a
     variant's own `edge` does not move it.
-  - A skin's disabled look replaces the white dots; without one the usual look is covered. A selected or emphasis
-    look with focus gets the ring even when the skin has a focused look; only the focused look itself goes without.
-    The ring is the square 2 px frame 3 px out, drawn after the text, whatever the `radius` or `focus_style`.
+  - A skin's disabled look replaces the white dots; without one the usual look is covered. A selected look with
+    focus gets the ring even when the skin has a focused look; only the focused look itself goes without. The ring
+    is the square 2 px frame 3 px out, drawn after the text, and the outline focus style draws a skin without a
+    focused look the same way. A skinned button's `radius` and `border` change nothing.
   - Inside a frame, `ui:skin` draws on the canvas at once, below the controls that `end_frame` paints.
   Checks: `16/skins_validation`, `16/skin_nine_slice`.
 - `ctx.ui` skins, not measured:
   - A skin without a selected look draws its normal look with `invert = true` and keeps that look's text colour.
   - `ui:skin` with `focused` and `enabled = false` on a skin with a disabled look draws that look with the ring.
+  - An emphasis look with focus gets the ring like a selected one, also when the skin has a focused look; the ring
+    stays square when the button sets a `radius`; the outline focus style uses a skin's focused look as the fill
+    style does.
   - A container's skin replaces its background and border; its divider is still drawn.
   - A skin whose image was released draws nothing of it (the canvas refuses those `g:image` calls) and still gets
     its text (check `16/skin_nine_slice`).

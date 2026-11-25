@@ -1270,6 +1270,66 @@ fn radio_checks_its_fields() {
     );
 }
 
+/// The nine `image` calls of a skin `name` (`iw` × `ih`, the same edge `e` all round) on a box at least `2e` both ways.
+fn slices(
+    name: &str,
+    (iw, ih): (i32, i32),
+    e: i32,
+    (x, y, w, h): (i32, i32, i32, i32),
+) -> Vec<String> {
+    let cols = [
+        (x, e, 0, e),
+        (x + e, w - 2 * e, e, iw - 2 * e),
+        (x + w - e, e, iw - e, e),
+    ];
+    let rows = [
+        (y, e, 0, e),
+        (y + e, h - 2 * e, e, ih - 2 * e),
+        (y + h - e, e, ih - e, e),
+    ];
+    rows.iter()
+        .flat_map(|&(dy, dh, sy, sh)| {
+            cols.iter().map(move |&(dx, dw, sx, sw)| {
+                format!("image(@{name},{dx},{dy},{{h={dh},invert=false,src={{h={sh},w={sw},x={sx},y={sy}}},w={dw}}})")
+            })
+        })
+        .collect()
+}
+
+#[test]
+fn a_skinned_radio_and_switch_draw_the_skin_in_place_of_circles_and_capsule() {
+    let lua = fixed_library("2.26");
+    let opts = format!("{{skins = {IRON}}}");
+    // each cell gets the skin, selected for the value item, and its text in the area after the pad
+    let cell = |x: i32, text: &str| {
+        format!("text_box({},86,206,88,{text},{{align=left,color=3,font=@medium,overflow=ellipsis,valign=middle,wrap=none}})", x + 12)
+    };
+    let want = [
+        slices("iron_on", (40, 32), 10, (10, 80, 230, 100)),
+        vec![cell(10, "x")],
+        slices("iron", (40, 30), 10, (240, 80, 230, 100)),
+        vec![cell(240, "y")],
+    ]
+    .concat();
+    let decl = "ui:radio('rd', {x = 10, y = 80, w = 460, h = 100, columns = 2, items = {'x', 'y'}, value = 1, skin = 'iron'})";
+    assert_eq!(frame(&lua, &opts, "", decl), want);
+    // the skin takes the capsule's box (64 × 34, 8 px from the right, centred), the text keeps its place
+    let want = [
+        slices("iron", (40, 30), 10, (338, 711, 64, 34)),
+        vec!["text_box(18,700,308,56,Sw,{bold=true,font=@medium,overflow=ellipsis,valign=middle,wrap=none})".into()],
+    ]
+    .concat();
+    let decl = "ui:switch('sw', {x = 10, y = 700, w = 400, h = 56, text = 'Sw', skin = 'iron'})";
+    assert_eq!(frame(&lua, &opts, "", decl), want);
+    let on = frame(
+        &lua,
+        &opts,
+        "",
+        &decl.replace("skin", "selected = true, skin"),
+    );
+    assert_eq!(on[..9], slices("iron_on", (40, 32), 10, (338, 711, 64, 34)));
+}
+
 #[test]
 fn a_radio_child_splits_the_box_its_container_gives_it() {
     let lua = fixed_library("2.26");
