@@ -6,6 +6,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+clap = { version = "4", features = ["string"] }
 inkcore = { path = "../inkcore" }
 # raw_value: a big integer secret keeps its digits (only this crate; arbitrary_precision would change ctx.json)
 serde = { version = "1", features = ["derive"] }
