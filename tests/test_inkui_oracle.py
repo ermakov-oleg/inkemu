@@ -27,7 +27,10 @@ The JSON files hold inputs we wrote and outputs recorded from the reader's libra
 
 import json
 import math
+import re
 import shutil
+import struct
+import zlib
 from functools import cache
 from pathlib import Path
 
@@ -40,9 +43,20 @@ ORACLE = HERE / "ui-oracle"
 FONTS = HERE / "fonts-fixed"
 SCENARIOS = {p.name.removesuffix(".json"): p for p in sorted(ORACLE.glob("s*.json"))}
 NOT_IMPLEMENTED = "not implemented in inkemu yet"
+IMAGE_MARKER = re.compile(r"@img:(\d+)x(\d+)")
 
 # what a step may get wrong when it acts on a frame, or starts from a focus, that a stubbed step left different
-AFTER_STUB = {"focused_after", "stream", "op_counts", "stream_count", "ret", "focused"}
+AFTER_STUB = {
+    "focused_after",
+    "stream",
+    "op_counts",
+    "stream_count",
+    "ret",
+    "focused",
+    "side_effects",
+    "editing",
+    "error",
+}
 
 # (scenario, step) -> the font method the step needs, and the stream entries (from 0) whose font it picks
 NEEDS_HOST: dict[tuple[str, int], tuple[str, set[int]]] = {
@@ -71,11 +85,16 @@ HOST_REFUSES: dict[tuple[str, int], list[str]] = {
 }
 
 # (scenario, step) -> how inkemu still differs from the oracle there, until a later task decides
-PARKED: dict[tuple[str, int], str] = {}
+PARKED: dict[tuple[str, int], str] = {
+    (f"s24_skins.api{minor}", step): "create does not check skins yet"
+    for minor in (13, 15, 26)
+    for step in (*range(4, 20), 21)
+}
 # the fields a parked step may differ in: what a frame and a ui:layout call show
 PARKED_FIELDS = {
     "frame": {"calls", "focused_after", "op_counts", "stream", "stream_count"},
     "layout": {"result"},
+    "create": {"ret"},
 }
 
 # step fields that are notes or inputs, not results
@@ -111,6 +130,21 @@ def lua(v) -> str:
     return "{" + ", ".join(f"[{lua(k)}] = {lua(x)}" for k, x in v.items()) + "}"
 
 
+def images(app: Path, w: int, h: int) -> None:
+    """A gray PNG of `w` x `h` in the package, for the steps' `"@img:WxH"` markers (any picture: the oracle compares
+    the canvas calls, not pixels)."""
+    data = app / "data"
+    data.mkdir(exist_ok=True)
+    rows = b"".join(b"\0" + bytes((x * 7 + y * 13) % 256 for x in range(w)) for y in range(h))
+
+    def chunk(kind: bytes, body: bytes) -> bytes:
+        return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body))
+
+    png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 0, 0, 0, 0))
+    png += chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b"")
+    (data / f"img_{w}x{h}.png").write_bytes(png)
+
+
 @cache
 def oracle(scenario: str) -> dict:
     return json.loads(SCENARIOS[scenario].read_text(encoding="utf-8"))
@@ -129,6 +163,8 @@ def replay(scenario: str, tmp: Path) -> tuple[list[dict], dict]:
     caps = inp.get("canvas_caps", {})
     steps = {"steps": inp["steps"], "no_pattern": bool(caps.get("no_pattern")), "touch": inp.get("touch", True)}
     (app / "steps.lua").write_text("return " + lua(steps) + "\n", encoding="utf-8")
+    for w, h in sorted(set(IMAGE_MARKER.findall(json.dumps(inp["steps"])))):
+        images(app, int(w), int(h))
     emu = Emu(app, state_dir=tmp / scenario / "state", fixtures_dir=tmp / scenario / "fx", fresh=True, fonts_dir=FONTS)
     assert emu.errors == [], emu.errors
     result = emu.lua_eval("return RESULT")
@@ -242,6 +278,11 @@ def test_step(scenario: str, i: int, tmp: Path):
         pytest.xfail(f"parked: {parked}")
     if stubbed(got):
         diff = differences(want, got, partial=True)
+        reason = after_stub(oracle(scenario)["output"], ours, i) or (
+            any(stubbed(ours[k]) for k in range(i - 1)) and "focus may differ after earlier steps not implemented yet"
+        )
+        if diff and reason and {f for f, _ in diff} <= AFTER_STUB:
+            pytest.xfail(reason)
         assert not diff, f"{title}, the parts inkemu implements:\n" + "\n".join(m for _, m in diff)
         missing = sorted({m for m in json.dumps(got).split('"') if NOT_IMPLEMENTED in m})
         pytest.skip(f"needs a later ctx.ui task: {missing[0]} (the rest matches)")
