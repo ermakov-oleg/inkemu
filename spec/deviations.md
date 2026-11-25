@@ -277,6 +277,9 @@ and Wi-Fi rules of the lock screen (§15). These are nil or ignored in inkemu.
     on the first child.
   - Before 2.15 a bad `gap` or too deep a nesting on a later child keeps the children before it registered,
     including those of a container it stops in, as the measured refusals do (D14).
+  - Before 2.15 a container refused for its own `gap` or `children` still takes its `id` in the frame, at the top
+    level and nested, so a second call with that id is `invalid_argument` too (measured, oracle s38); whether it also
+    spends one of the 128 controls was not measured (inkemu spends one).
   - The 1024 children are counted in frames too.
   - A control declared at top level is held to the same 32767 limits as a child (D15).
   - A whole float that a 32-bit Lua cannot hold as an integer (such as `3e9` or `1e10`) is not an integer: in any
