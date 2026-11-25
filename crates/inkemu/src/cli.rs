@@ -106,10 +106,15 @@ fn parser() -> Command {
 pub fn main(args: Vec<OsString>) -> i32 {
     let out = std::io::stdout();
     let err = std::io::stderr();
-    run_cli(args, &mut out.lock(), &mut err.lock())
+    run_cli(args, &paths::state_root(), &mut out.lock(), &mut err.lock())
 }
 
-pub fn run_cli(args: Vec<OsString>, out: &mut dyn Write, err: &mut dyn Write) -> i32 {
+pub fn run_cli(
+    args: Vec<OsString>,
+    state_root: &Path,
+    out: &mut dyn Write,
+    err: &mut dyn Write,
+) -> i32 {
     let mut argv = vec![OsString::from("inkemu")];
     argv.extend(args);
     let matches = match parser().try_get_matches_from(argv) {
@@ -129,13 +134,20 @@ pub fn run_cli(args: Vec<OsString>, out: &mut dyn Write, err: &mut dyn Write) ->
         return 2;
     };
     match name {
-        "window" | "serve" | "run" => session_command(name, sub, out, err),
+        "window" | "serve" | "run" => session_command(name, sub, state_root, out, err),
         verb => {
             let words = sub
                 .get_many::<String>("words")
                 .map(|w| w.cloned().collect())
                 .unwrap_or_default();
-            client(verb, words, sub.get_one::<u16>("port").copied(), out, err)
+            client(
+                verb,
+                words,
+                sub.get_one::<u16>("port").copied(),
+                state_root,
+                out,
+                err,
+            )
         }
     }
 }
@@ -149,6 +161,7 @@ fn client(
     verb: &str,
     words: Vec<String>,
     port: Option<u16>,
+    state_root: &Path,
     out: &mut dyn Write,
     err: &mut dyn Write,
 ) -> i32 {
@@ -166,7 +179,7 @@ fn client(
     }
     let port = match port {
         Some(p) => p,
-        None => match daemon::read_info(&paths::state_root()) {
+        None => match daemon::read_info(state_root) {
             Some(info) => info.port,
             None => return fail(err, NO_DAEMON, 2),
         },
@@ -195,9 +208,15 @@ fn opt(sub: &ArgMatches, name: &str) -> Option<String> {
     sub.get_one::<String>(name).cloned()
 }
 
-fn session_command(name: &str, sub: &ArgMatches, out: &mut dyn Write, err: &mut dyn Write) -> i32 {
+fn session_command(
+    name: &str,
+    sub: &ArgMatches,
+    state_root: &Path,
+    out: &mut dyn Write,
+    err: &mut dyn Write,
+) -> i32 {
     if name != "run" {
-        if let Some(live) = daemon::read_info(&paths::state_root()) {
+        if let Some(live) = daemon::read_info(state_root) {
             return fail(
                 err,
                 &format!(
@@ -261,8 +280,10 @@ mod tests {
 
     fn cli(args: &[&str]) -> (i32, String, String) {
         let (mut out, mut err) = (Vec::new(), Vec::new());
+        let root = tempfile::tempdir().unwrap();
         let code = run_cli(
             args.iter().map(OsString::from).collect(),
+            root.path(),
             &mut out,
             &mut err,
         );
@@ -310,7 +331,13 @@ mod tests {
         use std::os::unix::ffi::OsStringExt;
         let (mut out, mut err) = (Vec::new(), Vec::new());
         let bad = OsString::from_vec(vec![b'x', 0xff]);
-        let code = run_cli(vec!["tap-text".into(), bad], &mut out, &mut err);
+        let root = tempfile::tempdir().unwrap();
+        let code = run_cli(
+            vec!["tap-text".into(), bad],
+            root.path(),
+            &mut out,
+            &mut err,
+        );
         assert_eq!(code, 2);
     }
 
