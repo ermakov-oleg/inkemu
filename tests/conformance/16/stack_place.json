@@ -1,0 +1,14 @@
+{
+  "spec": "§16",
+  "about": "a stack places every child in its whole inner box by justify_self and align_self, percentages of the inner box, a size from aspect_ratio not stretched; a fitted label and a button keep their content size; a fitted stack is its padding plus the largest child each way; the later child covers the earlier one and takes the tap where they overlap (the rules oracle s25 shows; the aspect_ratio child follows the contract text)",
+  "expect": {
+    "place": {"value": "40,120,400,300 [190,358,100,50 | 392,132,36,24 | 52,132,376,276 | 240,339,188,69 | 52,255,60,30]", "spec": "§16"},
+    "fit_label": {"value": true, "spec": "§16"},
+    "centred_button": {"value": true, "spec": "§16"},
+    "fit": {"value": "0,0,240,70 [6,5,84,40 | 6,5,228,24 | 6,5,30,60 | 6,5,228,60]", "spec": "§16"},
+    "overlap": {"value": {"ok": true, "ret": ["over", "activate"]}, "spec": "§16"},
+    "earlier_elsewhere": {"value": {"ok": true, "ret": ["under", "activate"]}, "spec": "§16"}
+  },
+  "files": {"layout_box.lua": "layout_box.util.lua"},
+  "errors": []
+}

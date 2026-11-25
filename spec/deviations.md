@@ -286,6 +286,28 @@ the README.
   - A rounded halftone block whose radius takes its whole height gets no middle row.
   - The `gap` between `tabs` or `radio` cells is any integer from 0 (the contract gives no upper bound), and their
     1 to 64 `items` are checked the same way in a frame and in `ui:layout`.
+- `ctx.ui` grid and stack, as measured with the reader's UI library run as a black box (oracle `s25_grid_stack`):
+  tracks, placement, cells, content sizes, appearance, the later child taking the hit and the refusals all come out
+  as the contract gives them. A spacer takes a grid cell like any child, and its row is 0 high when nothing else is
+  in it. Checks: `16/grid_tracks`, `16/grid_autoplace_spans`, `16/stack_place`.
+- `ctx.ui` grid and stack, not measured (the s25 steps meant for some of these are refused for their ids or a
+  `w = 0`):
+  - A child spanning rows keeps those cells taken for later children, and the next child starts just after it in
+    its first row, as CSS auto-placement does.
+  - A `column_span` longer than the number of `{ min }` columns is cut to that number, since the count is known only
+    with the width; `{ min }` columns are not capped at 64.
+  - Explicit `rows` are tracks even when no child reaches them.
+  - What a span lacks beyond its tracks is split evenly over its fit tracks with the remainder to the later ones (s25
+    shows only an even split).
+  - A `columns` table with both `min` and array entries is refused, as is any value (even `false`) of a field that
+    another container kind owns, such as `wrap` or `divider` on a grid.
+  - A child that cannot fit fills its cell from the start even when `max_w` or `max_h` makes it shorter than the
+    cell, whatever its alignment.
+  - A `label`, `button`, `switch` or `tabs` in a grid or stack keeps the minimum height of 1; the one-line minimum
+    is a flexbox rule.
+  - In a stack, a percentage `h` with `aspect_ratio` and no `w` gives the width once the inner height is known; a
+    fitted stack's height takes each child's height at the width it gets in the inner box.
+  - Hidden and `false` children of a grid, and a stack nested in a row or column, follow the contract text.
 - `ctx.ui` radio, as measured with the reader's UI library run as a black box: a radio works at every API minor (as
   the other 2.13 and 2.14 controls do), a `nav` on it is accepted and ignored (the contract says composites take no
   `nav`), a 3 px cell draws no dot, and the fallback to the first control lands on item 1 while `ui:focus(id)` without

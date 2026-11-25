@@ -1,6 +1,7 @@
--- ctx.ui (§16): `row` and `column` in a frame, `ui:layout`, `grid`/`stack` before 2.15, and how a container is
--- drawn. A package for API 2.15 or later gets the flex layout (layout_tree.lua, layout_flex.lua); an older one the
--- earlier rules, where every child is sized and they follow each other.
+-- ctx.ui (§16): `row`, `column`, `grid` and `stack` in a frame, `ui:layout`, and how a container is drawn. A
+-- package for API 2.15 or later gets the 2.15 layout (layout_tree.lua, layout_flex.lua, layout_grid.lua); an older
+-- one the earlier rules for a row or column, where every child is sized and they follow each other, and no grid or
+-- stack.
 
 -- An integer from the corner of a fill row `dy` of a rounded box of radius `r`: round(sqrt(r² − (r − dy − 0.5)²)),
 -- computed on integers as the k with (2k − 1)² <= 4r² − (2r − 2dy − 1)² < (2k + 1)².
@@ -167,7 +168,7 @@ local function outer_side(v)
   end
 end
 
--- `ui:row(id, o)` and `ui:column(id, o)`. Returns nothing, or nil and the error code. `level` is error()'s level of
+-- `ui:row(id, o)`, `ui:column(id, o)`, `ui:grid(id, o)` and `ui:stack(id, o)` (2.15). Returns nothing, or nil and the error code. `level` is error()'s level of
 -- the app's call; callers must not tail-call this.
 local function declare_container(st, kind, id, o, level)
   local f = st.frame
@@ -181,7 +182,7 @@ local function declare_container(st, kind, id, o, level)
   local x, y = math.tointeger(o.x), math.tointeger(o.y)
   local root, err, unsupported
   if api_at_least(15) then
-    root, err, unsupported = layout_tree(st, f, id, kind, o)
+    root, err, unsupported = layout_tree(st, f, id, kind, o, w)
     if root then
       place(root, x, y, root_size(root, w, h))
     end
@@ -210,12 +211,15 @@ for _, name in ipairs({ "row", "column" }) do
 end
 
 for _, name in ipairs({ "grid", "stack" }) do
-  methods[name] = function(self)
-    state_of(self, name)
+  methods[name] = function(self, id, o)
+    local st = state_of(self, name)
     if not api_at_least(15) then
       return nil, INVALID
     end
-    error("ui:" .. name .. " is not implemented in inkemu yet", 2)
+    local _, err = declare_container(st, name, id, o, 3)
+    if err then
+      return nil, err
+    end
   end
 end
 
@@ -243,7 +247,7 @@ methods.layout = function(self, rect, spec)
   if not (is_coord(rect.x) and is_coord(rect.y) and w and h) then
     return nil, INVALID
   end
-  local root, err, unsupported = layout_tree(st, nil, nil, spec.kind, spec)
+  local root, err, unsupported = layout_tree(st, nil, nil, spec.kind, spec, w)
   if unsupported then
     error(unsupported, 2)
   end

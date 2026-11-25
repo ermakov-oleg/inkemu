@@ -21,6 +21,7 @@ const FILES: &[(&str, &str)] = &[
     ("progress.lua", include_str!("progress.lua")),
     ("layout_tree.lua", include_str!("layout_tree.lua")),
     ("layout_flex.lua", include_str!("layout_flex.lua")),
+    ("layout_grid.lua", include_str!("layout_grid.lua")),
     ("layout.lua", include_str!("layout.lua")),
 ];
 

@@ -1001,24 +1001,12 @@ fn layout_run(api: &str, code: &str) -> String {
 
 #[test]
 fn containers_raise_what_inkemu_does_not_implement_at_the_app_line() {
-    let cases = [
-        (
-            "ui:begin_frame(g)\nui:column('c', {x = 0, y = 0, w = 100, h = 100, children = {{kind = 'field', id = 's', w = 10, h = 10}}})",
-            "index.lua:3: ui:field is not implemented in inkemu yet",
-        ),
-        (
-            "ui:begin_frame(g)\nui:grid('c', {x = 0, y = 0, w = 100, h = 100, columns = 1})",
-            "index.lua:3: ui:grid is not implemented in inkemu yet",
-        ),
-        (
-            "\nui:layout({x = 0, y = 0, w = 9, h = 9}, {kind = 'row', children = {{kind = 'stack'}}})",
-            "index.lua:3: ui:stack is not implemented in inkemu yet",
-        ),
-    ];
-    for (code, want) in cases {
-        let err = layout_run("2.26", code);
-        assert!(err.starts_with(want), "{code}: {err}");
-    }
+    let code = "ui:begin_frame(g)\nui:column('c', {x = 0, y = 0, w = 100, h = 100, children = {{kind = 'field', id = 's', w = 10, h = 10}}})";
+    let err = layout_run("2.26", code);
+    assert!(
+        err.starts_with("index.lua:3: ui:field is not implemented in inkemu yet"),
+        "{code}: {err}"
+    );
     // an invalid field anywhere in the tree wins over a part inkemu lacks; ui:layout takes a registered container
     // skin and draws nothing
     assert_eq!(
@@ -1511,6 +1499,14 @@ fn whole_floats_past_32_bits_are_invalid_arguments() {
           add('radio.' .. k, function(v) return framed('radio', 'r', with(with(R, 'items', {'a', 'b'}), k, v)) end)\n\
         end\n\
         add('button.font_min', function(v) return framed('button', 'b', with(R, 'font_min', v)) end)\n\
+        add('grid.columns', function(v) return layout(R, {kind = 'grid', columns = v}) end)\n\
+        add('grid.min', function(v) return layout(R, {kind = 'grid', columns = {min = v}}) end)\n\
+        add('grid.track', function(v) return layout(R, {kind = 'grid', columns = {v}}) end)\n\
+        add('grid.rows', function(v) return layout(R, {kind = 'grid', columns = 1, rows = {v}}) end)\n\
+        add('grid.auto_rows', function(v) return layout(R, {kind = 'grid', columns = 1, auto_rows = v}) end)\n\
+        for _, k in ipairs({'column_span', 'row_span'}) do\n\
+          add('grid.' .. k, function(v) return layout(R, {kind = 'grid', columns = 2, children = {{[k] = v}}}) end)\n\
+        end\n\
         add('focus.part', function(v) return make():focus('a', v) end)\n\
         return check()";
     assert_eq!(layout_run("2.26", &format!("{SWEEP}{new_rules}")), "");
@@ -1525,4 +1521,29 @@ fn whole_floats_past_32_bits_are_invalid_arguments() {
         end\n\
         return check()";
     assert_eq!(layout_run("2.14", &format!("{SWEEP}{old_rules}")), "");
+}
+
+#[test]
+fn grid_choices_the_oracle_does_not_pin() {
+    let out = layout_run(
+        "2.26",
+        "local function boxes(b)\n\
+           local out = {}\n\
+           for i = 1, #b do out[i] = b[i].x .. ',' .. b[i].y .. ',' .. b[i].w .. ',' .. b[i].h end\n\
+           return table.concat(out, ' ')\n\
+         end\n\
+         local R = {x = 0, y = 0, w = 300, h = 'fit'}\n\
+         local spans = ui:layout(R, {kind = 'grid', columns = 3, auto_rows = 10, children = {\n\
+           {column_span = 2}, {row_span = 2}, {}, {column_span = 3, row_span = 2}, {}}})\n\
+         local cut = ui:layout({x = 0, y = 0, w = 480, h = 10}, {kind = 'grid', columns = {min = 200},\n\
+           children = {{column_span = 3}}})\n\
+         local rows = ui:layout(R, {kind = 'grid', columns = 1, rows = {50, 50}, children = {{}}})\n\
+         return boxes(spans), boxes(cut), rows.h",
+    );
+    // a row span keeps its rows taken for later children; a span longer than the `{ min }` columns is cut to them;
+    // explicit rows count even when no child reaches them
+    assert_eq!(
+        out,
+        "0,0,200,10 200,0,100,20 0,10,100,10 0,20,300,20 0,40,100,10,0,0,480,1,100"
+    );
 }

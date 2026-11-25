@@ -1,13 +1,14 @@
 -- ctx.ui (§16, 2.15): the flex layout of the nodes layout_tree.lua builds: content sizes, the main axis (base,
 -- hypothetical size, line breaking, the freeze loop, justify_content), the cross axis, baselines and overflow.
--- Everything is in integers; the splits use cumulative rounding.
+-- Everything is in integers; the splits use cumulative rounding. The helpers layout_grid.lua shares are globals
+-- of the library's environment; a grid's or stack's sizes and boxes come from there.
 
 -- the main and the cross axis of a row and a column
 local MAIN = { row = "w", column = "h" }
 local CROSS = { row = "h", column = "w" }
 local SPACE = { ["space-between"] = true, ["space-around"] = true, ["space-evenly"] = true }
 
-local function ceil_div(a, b)
+function ceil_div(a, b)
   return -((-a) // b)
 end
 
@@ -21,7 +22,7 @@ local function clamp(v, lo, hi)
   return v
 end
 
-local function bound(n, axis, v)
+function bound(n, axis, v)
   if axis == "w" then
     return clamp(v, n.lo_w, n.hi_w)
   end
@@ -29,7 +30,7 @@ local function bound(n, axis, v)
 end
 
 -- a container's own padding along `axis`, 0 for any other node
-local function pad(n, axis)
+function pad(n, axis)
   if not CONTAINERS[n.kind] then
     return 0
   end
@@ -39,7 +40,7 @@ local function pad(n, axis)
   return n.pad_t + n.pad_b
 end
 
-local function round(v)
+function round(v)
   return math.floor(v + 0.5)
 end
 
@@ -67,7 +68,7 @@ local function widest_line(font, text, opts)
   end
 end
 
-local content_w, content_h, arrange, main_content, column_content_w
+local arrange, main_content, column_content_w
 
 -- the size a child's main or cross axis contributes to its container's content size: `c` is the child, `axis` the
 -- direction, `other` its resolved size the other way (a width when `axis` is "h") or nil
@@ -107,6 +108,10 @@ content_w = function(n)
     v = main_content(n, nil)
   elseif k == "column" then
     v = column_content_w(n)
+  elseif k == "grid" then
+    v = grid_content_w(n)
+  elseif k == "stack" then
+    v = stack_content_w(n)
   end
   if n.reserve and (k == "label" or k == "button") then
     local extra = k == "button" and 24 or 0
@@ -156,6 +161,10 @@ content_h = function(n, w)
     v = cross + pad(n, "h")
   elseif k == "column" then
     v = main_content(n, math.max(0, w - pad(n, "w")))
+  elseif k == "grid" then
+    v = grid_content_h(n, w)
+  elseif k == "stack" then
+    v = stack_content_h(n, w)
   end
   n.ch[w] = v
   return v
@@ -170,7 +179,7 @@ local function align_of(n, c)
 end
 
 -- the length of size `s` (an integer or `{ pct }`) against reference length `ref`, nil when it cannot be known
-local function length(s, ref)
+function length(s, ref)
   if type(s) == "number" then
     return s
   end
@@ -343,7 +352,7 @@ local function distribute(line, avail)
 end
 
 -- the n + 1 slots `free` is split into by `mode` (a justify_content value), from slot 0 before the first item
-local function slots(mode, free, n)
+function slots(mode, free, n)
   if free < 0 and SPACE[mode] then
     mode = "start"
   end
@@ -497,10 +506,15 @@ arrange = function(n, M, L)
   return items, total
 end
 
--- The boxes of the children of flex container `n` whose box is `w` × `h`, relative to its top-left corner:
--- `{ node, index, x, y, w, h }` in declaration order.
+-- The boxes of the children of container `n` whose box is `w` × `h`, relative to its top-left corner:
+-- `{ node, index, x, y, w, h }` in declaration order, and its inner width and height.
 local function boxes(n, w, h)
   local iw, ih = math.max(0, w - pad(n, "w")), math.max(0, h - pad(n, "h"))
+  if n.kind == "grid" then
+    return grid_boxes(n, iw, ih), iw, ih
+  elseif n.kind == "stack" then
+    return stack_boxes(n, iw, ih), iw, ih
+  end
   local row = n.kind == "row"
   local items = arrange(n, row and iw or ih, row and ih or iw)
   local out = {}
