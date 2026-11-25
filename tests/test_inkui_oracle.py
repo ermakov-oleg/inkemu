@@ -192,6 +192,15 @@ def differences(want: dict, got: dict) -> list[tuple[str, str]]:
             continue
         if not same(w, g):
             out.append((key, f"{key}: {json.dumps(g)}, expected {json.dumps(w)}"))
+    # A result only inkemu gives is a difference too. The oracle records a frame's canvas calls either in full or as
+    # counts, while the runner gives both: the one the oracle left out is not compared.
+    counted = "stream" not in want and ("op_counts" in want or "stream_count" in want)
+    for key, g in got.items():
+        if key in want or key in IGNORED:
+            continue
+        if (key == "stream" and counted) or (key == "stream_count" and "stream" in want):
+            continue
+        out.append((key, f"{key}: {json.dumps(g)}, not in the oracle"))
     return out
 
 
