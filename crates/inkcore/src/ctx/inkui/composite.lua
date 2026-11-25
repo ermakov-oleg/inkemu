@@ -64,19 +64,25 @@ end
 
 local ALIGN = { left = true, center = true, right = true }
 
+-- The one line of a cell in the box `x y w h`: the font of `o` (or a smaller one from c.font_min that fits the width),
+-- cut with an ellipsis. `o` holds align, color, font, bold and tabular.
+local function cell_text(g, c, text, x, y, w, h, o)
+  local f = shrink(o.font, c.font_min, function(f)
+    return f:measure(text, { bold = o.bold, tabular = o.tabular }) <= w
+  end)
+  g:text_box(x, y, w, h, text, {
+    align = o.align, color = o.color, font = f, overflow = "ellipsis", valign = "middle", wrap = "none",
+    bold = o.bold, tabular = o.tabular,
+  })
+end
+
 local function skinned_radio(g, c, look, font)
   for _, t in ipairs(part_targets(c)) do
     local focused = look.focused and look.part == t.part
     local st = { focused = focused, selected = t.part == c.value, enabled = c.enabled }
     local tc, tx, ty, tw, th, ring = skin_face(g, c.skin, t.x, t.y, t.w, t.h, st)
     local item = c.items[t.part]
-    local f = shrink(font, c.font_min, function(f)
-      return f:measure(item, measure_opts(c)) <= tw
-    end)
-    g:text_box(tx, ty, tw, th, item, {
-      align = c.align or "left", color = tc, font = f, overflow = "ellipsis", valign = "middle", wrap = "none",
-      bold = c.bold,
-    })
+    cell_text(g, c, item, tx, ty, tw, th, { align = c.align or "left", color = tc, font = font, bold = c.bold })
     if ring then
       skin_ring(g, t.x, t.y, t.w, t.h)
     end
@@ -147,13 +153,7 @@ kinds.radio = composite({
         g:circle(cx, cy, (s - 10) // 2, { fill = true })
       end
       local item, tw = c.items[t.part], math.max(0, t.w - s - 8)
-      local f = shrink(font, c.font_min, function(f)
-        return f:measure(item, measure_opts(c)) <= tw
-      end)
-      g:text_box(t.x + s + 8, t.y, tw, t.h, item, {
-        align = c.align or "left", color = 15, font = f, overflow = "ellipsis", valign = "middle", wrap = "none",
-        bold = c.bold,
-      })
+      cell_text(g, c, item, t.x + s + 8, t.y, tw, t.h, { align = c.align or "left", color = 15, font = font, bold = c.bold })
       if look.focused and look.part == t.part then
         g:rect(t.x - 3, t.y - 3, t.w + 6, t.h + 6, { line_width = 2, radius = 0 })
       end
@@ -175,18 +175,6 @@ local function tab_bold(c, selected)
     return c.bold or nil
   end
   return selected or nil
-end
-
--- the text of cell `t`, shrunk to its width in `tw`
-local function tab_text(g, c, t, x, y, tw, th, color, bold, font)
-  local item = c.items[t.part]
-  local f = shrink(font, c.font_min, function(f)
-    return f:measure(item, { bold = bold }) <= tw
-  end)
-  g:text_box(x, y, tw, th, item, {
-    align = c.align or "center", color = color, font = f, overflow = "ellipsis", valign = "middle", wrap = "none",
-    bold = bold,
-  })
 end
 
 kinds.tabs = composite({
@@ -247,7 +235,7 @@ kinds.tabs = composite({
       if c.skin then
         local st = { focused = focused, selected = selected, enabled = c.enabled }
         local tc, tx, ty, tw, th, ring = skin_face(g, c.skin, t.x, t.y, t.w, t.h, st)
-        tab_text(g, c, t, tx, ty, tw, th, tc, bold, font)
+        cell_text(g, c, c.items[t.part], tx, ty, tw, th, { align = c.align or "center", color = tc, font = font, bold = bold })
         if ring then
           skin_ring(g, t.x, t.y, t.w, t.h)
         end
@@ -267,7 +255,9 @@ kinds.tabs = composite({
             line_width = 2, radius = type(r) == "number" and r > 0 and r + 3 or 0,
           })
         end
-        tab_text(g, c, t, t.x, t.y, t.w, t.h, fill and 0 or 15, bold, font)
+        cell_text(g, c, c.items[t.part], t.x, t.y, t.w, t.h, {
+          align = c.align or "center", color = fill and 0 or 15, font = font, bold = bold,
+        })
       end
     end
     if c.skin then
@@ -279,3 +269,182 @@ kinds.tabs = composite({
 })
 
 methods.tabs = control_method("tabs")
+
+-- What stepper and pager share: two button parts at the ends of the box and a text between them. Part 1 goes
+-- backwards (minus, previous), part 2 forwards. A part at its end of the range is unavailable: it is drawn with
+-- dots, takes no hit and is skipped by the arrows, and the box as a whole keeps its own dots when disabled.
+local function check_ends(c, o, st)
+  if not (optional(o.enabled, "boolean") and check_nav(o.nav) and optional(o.border, "boolean")
+    and optional(o.text, "string")) then
+    return false
+  end
+  if api_at_least(16) and not optional(o.tabular, "boolean") then
+    return false
+  end
+  local ok, skin = check_skin(st, o.skin)
+  if not ok then
+    return false
+  end
+  c.skin = skin
+  c.enabled = o.enabled ~= false
+  c.border = o.border ~= false
+  c.text, c.font, c.radius = o.text, o.font, o.radius
+  -- the middle text is tabular unless told otherwise; the draw call only gets the key when it is on
+  c.tabular = api_at_least(16) and o.tabular ~= false or nil
+  return true
+end
+
+local function ends_default_part(c)
+  return c.kind.part_enabled(c, 1) and 1 or c.kind.part_enabled(c, 2) and 2 or 1
+end
+
+-- the button-like record of part `t` of `c`, with `text` on it
+local function end_part(c, t, text)
+  return {
+    x = t.x, y = t.y, w = t.w, h = t.h, border = c.border, radius = c.radius, skin = c.skin, font = c.font,
+    text = text, enabled = t.enabled, selected = false, emphasis = false,
+  }
+end
+
+-- Paints the parts of `c` in order: `face(part_record, look, t)` draws one (box, focus, content), then the dots of a
+-- part that is only unavailable; then the middle text and, last, the dots of a disabled box.
+local function paint_ends(g, c, look, middle, face)
+  for _, t in ipairs(part_targets(c)) do
+    local p = end_part(c, t, t.part == 1 and "<" or ">")
+    face(p, { focused = look.focused and look.part == t.part, outline = look.outline }, t)
+    if c.enabled and not t.enabled then
+      if c.skin then
+        skin_dots(g, c.skin, { x = t.x, y = t.y, w = t.w, h = t.h, enabled = false })
+      else
+        dots(g, { x = t.x, y = t.y, w = t.w, h = t.h, enabled = false })
+      end
+    end
+  end
+  if middle.w > 0 and middle.text ~= "" then
+    cell_text(g, c, middle.text, middle.x, middle.y, middle.w, middle.h, {
+      align = "center", color = 15, font = c.font or host.fonts.medium, tabular = c.tabular,
+    })
+  end
+  if c.skin then
+    skin_dots(g, c.skin, c)
+  else
+    dots(g, c)
+  end
+end
+
+-- the plus or minus sign centred in the area `t` of a part (the part, or its skin's text area): a bar of at least 6 px, about 9/20 of the part, 3 px thick
+local function draw_sign(g, t, plus, color)
+  local len = math.max(6, math.min(t.w, t.h) * 9 // 20)
+  local cx, cy = t.x + t.w // 2, t.y + t.h // 2
+  g:rect(cx - len // 2, cy - 1, len, 3, { color = color, fill = true })
+  if plus then
+    g:rect(cx - 1, cy - len // 2, 3, len, { color = color, fill = true })
+  end
+end
+
+kinds.stepper = composite({
+  check = function(c, o, st)
+    if not check_ends(c, o, st) then
+      return false
+    end
+    local lo, hi, v = o.min, o.max, o.value
+    if not (is_integral(lo) and is_integral(hi) and lo <= hi and int_in(v, lo, hi)
+      and (o.step == nil or int_in(o.step, 1, math.maxinteger)) and c.w >= 2 * c.h) then
+      return false
+    end
+    c.min, c.max, c.value = math.tointeger(lo), math.tointeger(hi), math.tointeger(v)
+    c.step = o.step and math.tointeger(o.step) or 1
+    return true
+  end,
+  count = function()
+    return 2
+  end,
+  parts = function(c)
+    return {
+      { part = 1, x = c.x, y = c.y, w = c.h, h = c.h },
+      { part = 2, x = c.x + c.w - c.h, y = c.y, w = c.h, h = c.h },
+    }
+  end,
+  part_enabled = function(c, n)
+    if n == 1 then
+      return c.value > c.min
+    end
+    return c.value < c.max
+  end,
+  default_part = ends_default_part,
+  activate = function(c, n)
+    if n == 1 then
+      return "change", math.max(c.min, c.value - c.step)
+    end
+    return "change", math.min(c.max, c.value + c.step)
+  end,
+  paint = function(g, c, look)
+    local middle = {
+      x = c.x + c.h, y = c.y, w = c.w - 2 * c.h, h = c.h, text = c.text or tostring(c.value),
+    }
+    paint_ends(g, c, look, middle, function(p, lk, t)
+      -- the sign goes over the box and the focus frame; focus fills the box, so the sign turns to paper
+      p.text = nil
+      if c.skin then
+        local st = { focused = lk.focused, enabled = t.enabled }
+        local tc, tx, ty, tw, th, ring = skin_face(g, c.skin, t.x, t.y, t.w, t.h, st)
+        draw_sign(g, { x = tx, y = ty, w = tw, h = th }, t.part == 2, tc)
+        if ring then
+          skin_ring(g, t.x, t.y, t.w, t.h)
+        end
+      else
+        button_face(g, p, lk)
+        draw_sign(g, t, t.part == 2, lk.focused and not lk.outline and 0 or 15)
+      end
+    end)
+  end,
+})
+
+kinds.pager = composite({
+  check = function(c, o, st)
+    if not check_ends(c, o, st) then
+      return false
+    end
+    local pages, page, bw = o.pages, o.page, o.button_w
+    if not (is_integral(pages) and pages >= 1 and int_in(page, 1, pages)
+      and (bw == nil or int_in(bw, 1, c.w // 2))) then
+      return false
+    end
+    c.pages, c.page = math.tointeger(pages), math.tointeger(page)
+    -- not measured: the default button width is h, but never more than half the box
+    c.button_w = bw and math.tointeger(bw) or math.min(c.h, c.w // 2)
+    return true
+  end,
+  count = function()
+    return 2
+  end,
+  parts = function(c)
+    local bw = c.button_w
+    return {
+      { part = 1, x = c.x, y = c.y, w = bw, h = c.h },
+      { part = 2, x = c.x + c.w - bw, y = c.y, w = bw, h = c.h },
+    }
+  end,
+  part_enabled = function(c, n)
+    if n == 1 then
+      return c.page > 1
+    end
+    return c.page < c.pages
+  end,
+  default_part = ends_default_part,
+  activate = function(c, n)
+    return "change", n == 1 and c.page - 1 or c.page + 1
+  end,
+  paint = function(g, c, look)
+    local middle = {
+      x = c.x + c.button_w, y = c.y, w = c.w - 2 * c.button_w, h = c.h, text = c.text or (c.page .. "/" .. c.pages),
+    }
+    paint_ends(g, c, look, middle, function(p, lk)
+      p.tabular = nil
+      button_face(g, p, lk)
+    end)
+  end,
+})
+
+methods.stepper = control_method("stepper")
+methods.pager = control_method("pager")

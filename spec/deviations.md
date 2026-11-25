@@ -316,6 +316,24 @@ the README.
   outline or underline drawn before the focus frame, the outline taking `radius`, and `font_min` shrinking each cell
   on its own, measured with its own bold. Checks: `16/tabs`.
 - `ctx.ui` tabs, not measured: a tab text that no font of `font_min` fits stays in the smallest tried.
+- `ctx.ui` stepper and pager, as measured with the reader's UI library run as a black box (oracle `s20_stepper_pager`,
+  `s24_skins`): both are two button-like parts at the ends of the box and a text between them, hit and focused as
+  parts 1 (minus, previous) and 2 (plus, next). A stepper's parts are h by h and carry bars of
+  max(6, min(w, h) * 9 // 20) by 3 px centred in the part (in a skin's text area when it has a skin); a pager's are
+  `button_w` wide (at most w // 2) and carry `<` and `>` through the button text. The middle text is the value, or
+  `page/pages`, tabular unless `tabular = false` from 2.16 (never before), and is left out when empty or when no room
+  is left. A part at its end of the range is drawn as usual with the dots (or a skin's disabled look) right after its
+  content, takes no hit and is skipped by the default part and the arrows; a disabled box gets the dots over the
+  whole box after the text instead. A focused part fills (sign and text turn to paper) or, in the outline style, gets
+  the frame before its sign or text. A tap or `ok` returns `change` with the value clamped to min..max, or the page
+  moved by one; the middle hits nothing. A stepper needs w >= 2 * h and `step` >= 1 (larger than the range is fine).
+  Checks: `16/stepper_pager`.
+- `ctx.ui` stepper and pager, not measured:
+  - The default `button_w` is h, but never more than w // 2.
+  - The outline frame of a focused stepper part is drawn before its sign, as a button's is before its text.
+  - A skin ring and the dots of a part that is only unavailable follow the part's sign or text, in that order.
+  - The middle text is not shrunk by `font_min`, and a skin does not change its colour (15).
+  - A disabled stepper or pager with a skin that has a disabled look draws every part in it.
 - `ctx.ui` switch, as measured with the reader's UI library run as a black box: `selected` is not type-checked (any
   value but nil and false is on), a `badge` is ignored, a `radius` only shapes the focus frame (radius + 3 when
   positive), `focus_style` does not change a switch's look, and `bold = false` leaves `bold` out of the text call.
