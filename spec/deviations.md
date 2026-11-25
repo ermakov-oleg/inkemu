@@ -451,3 +451,8 @@ the README.
   - A secret text is drawn as one `*` per UTF-8 character (per byte when it is not valid UTF-8); a secret text that
     is not a string is drawn as it is.
   - A field 16 px or less wide or high still draws its text box and passes its `rect`, which the host refuses.
+  - `radius` goes to `g:rect` as declared, like a button's, so a value that is not a number (s26 declares `"x"`)
+    fails the frame in inkemu's canvas; what the reader draws for it is not recorded.
+  - A field without `text` passes no `text` to `ctx.input:edit` (the host starts from `""`).
+  - When the field's own `on_end` raises, no next field edits; when it starts an edit itself, the next field's edit
+    is refused as busy while focus still moves there.
