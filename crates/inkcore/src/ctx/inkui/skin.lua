@@ -116,8 +116,8 @@ local function spans(size, a, b)
   return a, size - a - b, b
 end
 
--- A column cut short keeps the share of its source that it shows, rounded to the nearest pixel (s24 pins only
--- cuts where rounding up gives the same).
+-- A column cut short keeps the share of its source that it shows, rounded to the nearest pixel but at least one
+-- (oracle s33).
 function nine_slice(g, lk, x, y, w, h, invert, cut)
   local e = lk.edge
   local cols = { spans(w, e[4], e[2]) }
@@ -132,7 +132,7 @@ function nine_slice(g, lk, x, y, w, h, invert, cut)
       if cut and dx - x + dw > cut then
         dw = math.max(0, cut - (dx - x))
         if dw > 0 then
-          srcw = (2 * sw[c] * dw + cols[c]) // (2 * cols[c])
+          srcw = math.max(1, (2 * sw[c] * dw + cols[c]) // (2 * cols[c]))
         end
       end
       if dw > 0 and rows[r] > 0 then

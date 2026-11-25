@@ -353,20 +353,20 @@ the README.
   rows (no page turn) are as followed here. Not measured: `selected` has no upper bound (21 of 20 rows is accepted);
   page turning needs the focused row to be enabled; the skin's text area is not passed to `draw`.
 - `ctx.ui` progress, as measured with the reader's UI library run as a black box (oracles `s22_progress`,
-  `s32_progress_stripes`, `s24_skins` step 39) and followed by inkemu: `enabled` is accepted whatever it holds and
-  changes nothing (no dots); an infinite value is clamped like any other; a box with no inner height gets only its
-  frame. With a skin there is no frame, and the leading part is the full-width selected look (or the normal look
-  inverted) cut at the leading width, not that look fitted to it. Stripes, in the filled area's own coordinates
-  (the phase follows the bar, not the canvas): band k covers a ≤ u + v ≤ a + 3 with a = 5k − 1, as long as
-  a ≤ fw + H − 2 (the band that would only touch the bottom right corner is dropped). Bands that run along the bottom
-  edge are joined there into polygons of up to 128 points, each starting at its bottom left point; a band that
-  touches neither edge (a narrow bar) is a polygon of its own, drawn as it comes; bands along the top edge start at
-  their top right point and are joined there into a polygon drawn last. Checks: `16/progress`.
-- `ctx.ui` progress, not measured: a cut column of a skin keeps its share of the source rounded to the nearest pixel
-  (s24 only has cuts where rounding up gives the same); a leading part inside the left edge or reaching into the
-  right edge, and the inverted look, follow the same cut; `style = "stripe"` with a skin draws only the skin; a top
-  polygon that reaches 128 points is drawn as soon as it is full, before the bottom ones; a box 4 px tall (inner
-  height 0) gets no fill; a `progress` child of a container is checked and drawn like a top-level one.
+  `s32_progress_stripes`, `s33_progress_looks`, `s24_skins` step 39) and followed by inkemu: `enabled` is accepted
+  whatever it holds and changes nothing (no dots); an infinite value is clamped like any other; a box with no inner
+  height (h 3 or 4) or width (w 4) gets only its frame. With a skin there is no frame and `style` changes nothing; the
+  leading part is the full-width selected look (or the normal look inverted) cut at the leading width, not that look
+  fitted to it, also inside the left edge or into the right one. A column cut short keeps its share of the source
+  rounded to the nearest pixel, but at least 1. Stripes, in the filled area's own coordinates (the phase follows the
+  bar, not the canvas): band k covers a ≤ u + v ≤ a + 3 with a = 5k − 1, as long as a ≤ fw + H − 2 (the band that
+  would only touch the bottom right corner is dropped). Bands that run along the bottom edge are joined there into
+  polygons of up to 128 points, each starting at its bottom left point; a band that touches neither edge (a narrow
+  bar) is a polygon of its own, drawn as it comes; bands along the top edge start at their top right point and are
+  joined there into polygons of up to 128 points, one drawn as soon as it is full and the last one after the bottom
+  ones. A `progress` child without `w` (or with `w = "fit"`) is `invalid_argument`: it has no content size. Checks:
+  `16/progress`.
+- `ctx.ui` progress, not measured: a `progress` child with its own `w` is checked and drawn like a top-level one.
 - `ctx.ui` switch, as measured with the reader's UI library run as a black box: `selected` is not type-checked (any
   value but nil and false is on), a `badge` is ignored, a `radius` only shapes the focus frame (radius + 3 when
   positive), `focus_style` does not change a switch's look, and `bold = false` leaves `bold` out of the text call.
