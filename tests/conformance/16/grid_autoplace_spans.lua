@@ -23,6 +23,8 @@ local REFUSED = {
   baseline_in_grid = grid({ columns = 2, align_items = "baseline" }),
   justify_items_baseline = grid({ columns = 2, justify_items = "baseline" }),
   span_past_columns = grid({ columns = 2 }, { { column_span = 3 } }),
+  -- 480 px give two { min = 200 } columns
+  span_past_min_columns = grid({ columns = { min = 200 } }, { { column_span = 3 }, {} }),
   span_0 = grid({ columns = 2 }, { { column_span = 0 } }),
   grow_in_grid = grid({ columns = 2 }, { { grow = 1 } }),
   shrink_in_grid = grid({ columns = 2 }, { { shrink = 1 } }),
@@ -57,8 +59,9 @@ function on_load(ctx)
     { column_span = 2 }, { row_span = 2 }, {}, { column_span = 3, row_span = 2 }, {} }))
   -- a spacer takes a cell like any child; its row is 0 high, as its minimum is 0
   run("spacer", grid({ columns = 2 }, { { kind = "spacer", column_span = 2 }, {} }))
-  -- hidden and false children take no cell
-  run("hidden_and_false", grid({ columns = 2, auto_rows = 30 }, { { hidden = true }, false, {}, {} }))
+  run("spacer_then_boxes", grid({ columns = 2, auto_rows = 30 }, { { kind = "spacer" }, {}, {} }))
+  -- hidden and false children take no cell; a zero-size one does
+  run("hidden_and_false", grid({ columns = 2, auto_rows = 30 }, { { hidden = true }, false, {}, { min_w = 0, max_w = 0 }, {} }))
   local wrong, count = {}, 0
   for name, spec in pairs(REFUSED) do
     count = count + 1

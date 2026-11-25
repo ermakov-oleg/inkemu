@@ -1529,7 +1529,7 @@ fn whole_floats_past_32_bits_are_invalid_arguments() {
 }
 
 #[test]
-fn grid_choices_the_oracle_does_not_pin() {
+fn grid_row_spans_a_span_past_min_columns_and_unused_rows() {
     let out = layout_run(
         "2.26",
         "local function boxes(b)\n\
@@ -1540,15 +1540,18 @@ fn grid_choices_the_oracle_does_not_pin() {
          local R = {x = 0, y = 0, w = 300, h = 'fit'}\n\
          local spans = ui:layout(R, {kind = 'grid', columns = 3, auto_rows = 10, children = {\n\
            {column_span = 2}, {row_span = 2}, {}, {column_span = 3, row_span = 2}, {}}})\n\
-         local cut = ui:layout({x = 0, y = 0, w = 480, h = 10}, {kind = 'grid', columns = {min = 200},\n\
+         local _, cut = ui:layout({x = 0, y = 0, w = 480, h = 10}, {kind = 'grid', columns = {min = 200},\n\
            children = {{column_span = 3}}})\n\
          local rows = ui:layout(R, {kind = 'grid', columns = 1, rows = {50, 50}, children = {{}}})\n\
-         return boxes(spans), boxes(cut), rows.h",
+         ui:begin_frame(g)\n\
+         local framed = table.pack(ui:grid('g', {x = 0, y = 0, w = 480, h = 10, columns = {min = 200},\n\
+           children = {{kind = 'button', id = 'b', text = 'b', column_span = 3}}}))\n\
+         return boxes(spans), cut, rows.h, framed[2]",
     );
-    // a row span keeps its rows taken for later children; a span longer than the `{ min }` columns is cut to them;
-    // explicit rows count even when no child reaches them
+    // a row span keeps its rows taken for later children; a span longer than the `{ min }` columns is refused once
+    // the width tells; explicit rows count even when no child reaches them
     assert_eq!(
         out,
-        "0,0,200,10 200,0,100,20 0,10,100,10 0,20,300,20 0,40,100,10,0,0,480,1,100"
+        "0,0,200,10 200,0,100,20 0,10,100,10 0,20,300,20 0,40,100,10,invalid_argument,100,invalid_argument"
     );
 }

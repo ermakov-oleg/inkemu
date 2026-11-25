@@ -73,6 +73,10 @@ local function want_h(c, fw)
   return bound(c, "h", v)
 end
 
+-- raised while a layout is computed when a span is longer than the `{ min }` columns its grid's width gives;
+-- lay_out turns it into invalid_argument
+SPAN_TOO_LONG = setmetatable({}, { __tostring = function() return "column_span past the columns" end })
+
 -- Places the children of grid `n` over `count` columns in declaration order, each from just after the previous
 -- one, in the first free cells that hold it; holes left behind stay empty. Returns the items
 -- `{ node, index, col, row, cspan, rspan }` and the number of rows they reach.
@@ -93,7 +97,10 @@ local function place_cells(n, count)
   end
   for i, c in ipairs(n.children) do
     if c then
-      local cs, rs = math.min(c.column_span, count), c.row_span
+      local cs, rs = c.column_span, c.row_span
+      if cs > count then
+        error(SPAN_TOO_LONG, 0)
+      end
       while true do
         if col + cs - 1 > count then
           row, col = row + 1, 1

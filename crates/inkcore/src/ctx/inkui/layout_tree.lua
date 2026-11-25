@@ -332,7 +332,7 @@ local function check_cell_child(cx, n, o, parent)
     end
   end
   n.column_span, n.row_span = int_or(o.column_span, 1), int_or(o.row_span, 1)
-  -- `{ min }` columns are counted only once the width is known; layout_grid.lua cuts a longer span then
+  -- `{ min }` columns are counted only once the width is known; layout_grid.lua refuses a longer span then
   if parent.columns and n.column_span > #parent.columns then
     return fail(cx, INVALID)
   end

@@ -168,8 +168,21 @@ local function outer_side(v)
   end
 end
 
--- `ui:row(id, o)`, `ui:column(id, o)`, `ui:grid(id, o)` and `ui:stack(id, o)` (2.15). Returns nothing, or nil and the error code. `level` is error()'s level of
--- the app's call; callers must not tail-call this.
+-- Places the tree `root` at `x, y` with the call's `w` and `h` (see root_size): true, or nil and the error code
+-- when a grid finds a span longer than its `{ min }` columns, which only the laid-out width tells.
+local function lay_out(root, x, y, w, h)
+  local ok, err = pcall(function() place(root, x, y, root_size(root, w, h)) end)
+  if ok then
+    return true
+  end
+  if err == SPAN_TOO_LONG then
+    return nil, INVALID
+  end
+  error(err, 0)
+end
+
+-- `ui:row(id, o)`, `ui:column(id, o)`, `ui:grid(id, o)` and `ui:stack(id, o)` (2.15). Returns nothing, or nil and
+-- the error code. `level` is error()'s level of the app's call; callers must not tail-call this.
 local function declare_container(st, kind, id, o, level)
   local f = st.frame
   if f == nil or type(id) ~= "string" or id == "" or f.ids[id] or type(o) ~= "table" then
@@ -184,7 +197,9 @@ local function declare_container(st, kind, id, o, level)
   if api_at_least(15) then
     root, err, unsupported = layout_tree(st, f, id, kind, o, w)
     if root then
-      place(root, x, y, root_size(root, w, h))
+      local ok
+      ok, err = lay_out(root, x, y, w, h)
+      root = ok and root
     end
   else
     root, err, unsupported = old_tree(st, f, id, kind, o, x, y, w, h)
@@ -254,7 +269,10 @@ methods.layout = function(self, rect, spec)
   if not root then
     return nil, err
   end
-  place(root, math.tointeger(rect.x), math.tointeger(rect.y), root_size(root, w, h))
+  local ok, bad = lay_out(root, math.tointeger(rect.x), math.tointeger(rect.y), w, h)
+  if not ok then
+    return nil, bad
+  end
   local ids = {}
   local out = result(root, ids)
   for id, t in pairs(ids) do
