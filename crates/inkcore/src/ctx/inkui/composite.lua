@@ -1,4 +1,5 @@
--- ctx.ui (§16, 2.14): composite controls, made of parts that are hit and focused one at a time, and `radio`.
+-- ctx.ui (§16, 2.14): composite controls, made of parts that are hit and focused one at a time, and `radio` and
+-- `tabs`.
 --
 -- A composite kind has, besides `check` and `paint`:
 --   count(c)            how many parts the control has this frame (each costs one control more)
@@ -162,3 +163,119 @@ kinds.radio = composite({
 })
 
 methods.radio = control_method("radio")
+
+local SELECTED_STYLES = { fill = true, outline = true, underline = true }
+
+-- a tabs cell's bold: from 2.16 the selected cell unless the script said otherwise
+local function tab_bold(c, selected)
+  if not api_at_least(16) then
+    return nil
+  end
+  if c.bold ~= nil then
+    return c.bold or nil
+  end
+  return selected or nil
+end
+
+-- the text of cell `t`, shrunk to its width in `tw`
+local function tab_text(g, c, t, x, y, tw, th, color, bold, font)
+  local item = c.items[t.part]
+  local f = shrink(font, c.font_min, function(f)
+    return f:measure(item, { bold = bold }) <= tw
+  end)
+  g:text_box(x, y, tw, th, item, {
+    align = c.align or "center", color = color, font = f, overflow = "ellipsis", valign = "middle", wrap = "none",
+    bold = bold,
+  })
+end
+
+kinds.tabs = composite({
+  check = function(c, o, st)
+    if not (optional(o.enabled, "boolean") and check_nav(o.nav) and check_items(o.items) and check_cell_gap(o.gap)) then
+      return false
+    end
+    local n = #o.items
+    if not ((o.value == nil or int_in(o.value, 1, n)) and (o.align == nil or ALIGN[o.align])
+      and optional(o.border, "boolean") and check_font_min(c, o) and check_bold(c, o)) then
+      return false
+    end
+    if api_at_least(16) and o.selected_style ~= nil and not SELECTED_STYLES[o.selected_style] then
+      return false
+    end
+    local ok, skin = check_skin(st, o.skin)
+    if not ok then
+      return false
+    end
+    c.skin = skin
+    c.enabled = o.enabled ~= false
+    c.items = table.move(o.items, 1, n, 1, {})
+    c.value = o.value and math.tointeger(o.value)
+    c.gap = o.gap and math.tointeger(o.gap) or 0
+    c.border = o.border ~= false
+    c.style = api_at_least(16) and o.selected_style or "fill"
+    c.align, c.font, c.radius = o.align, o.font, o.radius
+    return true
+  end,
+  count = function(c)
+    return #c.items
+  end,
+  parts = function(c)
+    local out = {}
+    for i, cell in ipairs(split_cells(c.w, #c.items, c.gap)) do
+      out[i] = { part = i, x = c.x + cell[1], y = c.y, w = cell[2], h = c.h }
+    end
+    return out
+  end,
+  default_part = function(c)
+    return c.value or 1
+  end,
+  activate = function(c, n)
+    if n == c.value then
+      return "activate", n
+    end
+    return "change", n
+  end,
+  -- per cell, in this order: the box (filled when selected in the fill style; focus never fills), the outline or
+  -- underline of the selected style, the focus frame, the text. A skin draws its look in place of the box.
+  paint = function(g, c, look)
+    local font = c.font or host.fonts.medium
+    local r = c.radius or 0
+    for _, t in ipairs(part_targets(c)) do
+      local selected = t.part == c.value
+      local focused = look.focused and look.part == t.part
+      local bold = tab_bold(c, selected)
+      if c.skin then
+        local st = { focused = focused, selected = selected, enabled = c.enabled }
+        local tc, tx, ty, tw, th, ring = skin_face(g, c.skin, t.x, t.y, t.w, t.h, st)
+        tab_text(g, c, t, tx, ty, tw, th, tc, bold, font)
+        if ring then
+          skin_ring(g, t.x, t.y, t.w, t.h)
+        end
+      else
+        local fill = selected and c.style == "fill"
+        if c.border or fill then
+          g:rect(t.x, t.y, t.w, t.h, { fill = fill, radius = r })
+        end
+        if selected and c.style == "outline" then
+          g:rect(t.x, t.y, t.w, t.h, { line_width = 3, radius = r })
+        elseif selected and c.style == "underline" then
+          local inset = math.min(8, t.w // 6)
+          g:rect(t.x + inset, t.y + t.h - 4, t.w - 2 * inset, 4, { fill = true })
+        end
+        if focused then
+          g:rect(t.x - 3, t.y - 3, t.w + 6, t.h + 6, {
+            line_width = 2, radius = type(r) == "number" and r > 0 and r + 3 or 0,
+          })
+        end
+        tab_text(g, c, t, t.x, t.y, t.w, t.h, fill and 0 or 15, bold, font)
+      end
+    end
+    if c.skin then
+      skin_dots(g, c.skin, c)
+    else
+      dots(g, c)
+    end
+  end,
+})
+
+methods.tabs = control_method("tabs")

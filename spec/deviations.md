@@ -305,6 +305,17 @@ the README.
     the ring is at least 0.
   - A `nav` entry naming a composite whose default part is unavailable falls back to the search by position.
   - With a skin that has a disabled look, a disabled radio draws each cell in it and gets no dots.
+- `ctx.ui` tabs, as measured with the reader's UI library run as a black box: the cells are one row split by the radio
+  cell formula and each is drawn like a button (box, text centred), with the value cell filled and its text colour 0;
+  focus never fills a cell, only adds the frame (radius + 3 when `radius` is positive); `border = false` leaves out the
+  box of every cell that is not filled; from 2.16 `selected_style` is `fill`, `outline` (a 3 px frame on the cell) or
+  `underline` (a 4 px bar min(8, w // 6) in from each side, fill and text colour as an unselected cell) and anything
+  else is `invalid_argument` (before 2.16 it is ignored), and `bold` unset makes only the selected cell bold, `true`
+  every cell, `false` none. A skin draws as it does on radio cells and ignores `selected_style`. A tap or `ok` acts as
+  on radio: `change` for another cell, `activate` for the value one. Checks: `16/tabs`.
+- `ctx.ui` tabs, not measured: the order of the selected outline or underline against the focus frame (outline or bar
+  first), the `radius` of the outline, a tab text that no font of `font_min` fits stays in the smallest tried, and
+  each cell is shrunk on its own, measured with its own bold.
 - `ctx.ui` switch, as measured with the reader's UI library run as a black box: `selected` is not type-checked (any
   value but nil and false is on), a `badge` is ignored, a `radius` only shapes the focus frame (radius + 3 when
   positive), `focus_style` does not change a switch's look, and `bold = false` leaves `bold` out of the text call.

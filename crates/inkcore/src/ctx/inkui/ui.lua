@@ -26,7 +26,7 @@ end
 for _, name in ipairs({
   "begin_frame", "end_frame", "handle_event", "focus", "focused", "layout", "skin", "editing", "stop_edit",
   "label", "button", "image", "field", "region",
-  "tabs", "radio", "stepper", "pager", "list", "progress",
+  "radio", "stepper", "pager", "list", "progress",
   "row", "column", "grid", "stack",
 }) do
   methods[name] = function(self)

@@ -1003,8 +1003,8 @@ fn layout_run(api: &str, code: &str) -> String {
 fn containers_raise_what_inkemu_does_not_implement_at_the_app_line() {
     let cases = [
         (
-            "ui:begin_frame(g)\nui:column('c', {x = 0, y = 0, w = 100, h = 100, children = {{kind = 'tabs', id = 's', items = {'a'}}}})",
-            "index.lua:3: ui:tabs is not implemented in inkemu yet",
+            "ui:begin_frame(g)\nui:column('c', {x = 0, y = 0, w = 100, h = 100, children = {{kind = 'stepper', id = 's', w = 10, h = 10}}})",
+            "index.lua:3: ui:stepper is not implemented in inkemu yet",
         ),
         (
             "ui:begin_frame(g)\nui:grid('c', {x = 0, y = 0, w = 100, h = 100, columns = 1})",
