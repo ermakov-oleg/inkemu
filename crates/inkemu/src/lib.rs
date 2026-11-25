@@ -2,6 +2,7 @@
 pub mod cli;
 pub mod command;
 pub mod daemon;
+pub mod mcp;
 mod net_live;
 mod paths;
 mod secrets;
