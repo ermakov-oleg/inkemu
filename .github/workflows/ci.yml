@@ -136,12 +136,13 @@ jobs:
           grep -q "Taps: 1" out.txt
           export INKEMU_STATE_ROOT="$RUNNER_TEMP/root"
           venv/bin/inkemu serve hello --port 0 --fresh &
+          SERVE=$!
           for _ in $(seq 100); do [ -f root/daemon.json ] && break; sleep 0.1; done
           venv/bin/inkemu tap-text 'Tap me'
           venv/bin/inkemu texts > texts.txt
           grep -q "Taps: 1" texts.txt
           venv/bin/inkemu stop
-          wait
+          wait "$SERVE"
           printf '%s\n' \
             '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}' \
             '{"jsonrpc":"2.0","method":"notifications/initialized"}' \

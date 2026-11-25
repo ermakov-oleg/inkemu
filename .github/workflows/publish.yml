@@ -22,6 +22,8 @@ jobs:
       - uses: astral-sh/setup-uv@v10.4.0
         with:
           python-version: "3.11"
+          # on a pull request nothing here runs uv, and the post step fails on a cache dir that was never made
+          enable-cache: false
       - name: tag matches project version
         if: github.ref_type == 'tag'
         run: |
