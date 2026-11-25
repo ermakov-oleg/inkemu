@@ -328,12 +328,16 @@ the README.
   the frame before its sign or text. A tap or `ok` returns `change` with the value clamped to min..max, or the page
   moved by one; the middle hits nothing. A stepper needs w >= 2 * h and `step` >= 1 (larger than the range is fine).
   Checks: `16/stepper_pager`.
-- `ctx.ui` stepper and pager, not measured:
-  - The default `button_w` is h, but never more than w // 2.
-  - The outline frame of a focused stepper part is drawn before its sign, as a button's is before its text.
-  - A skin ring and the dots of a part that is only unavailable follow the part's sign or text, in that order.
-  - The middle text is not shrunk by `font_min`, and a skin does not change its colour (15).
-  - A disabled stepper or pager with a skin that has a disabled look draws every part in it.
+- `ctx.ui` stepper and pager, measured later (oracle `s29_stepper_pager_looks`) and followed by inkemu:
+  - A pager whose box is narrower than 2h gets parts of w // 2 (the default `button_w` is h, at most w // 2), the
+    second one ending at the box's right edge, and a middle of the odd pixel or none.
+  - The outline frame of a focused part comes after its box and before its sign or text, on a stepper as on a pager.
+  - With a skin, the ring follows the sign or text, and the dots of an unavailable part (when the skin has no
+    disabled look; with one, the part is drawn in it) follow the ring.
+  - The middle text takes no `font_min` shrink, no `bold` and no `reserve`, and keeps colour 15 inside a skin.
+  - `bold`, `reserve` and `font_min` of any type are accepted on both and have no effect.
+  - A disabled box whose skin has a disabled look draws every part in it and gets no dots; without one, the parts
+    are drawn normally and the dots cover the whole box.
 - `ctx.ui` switch, as measured with the reader's UI library run as a black box: `selected` is not type-checked (any
   value but nil and false is on), a `badge` is ignored, a `radius` only shapes the focus frame (radius + 3 when
   positive), `focus_style` does not change a switch's look, and `bold = false` leaves `bold` out of the text call.

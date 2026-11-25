@@ -153,7 +153,9 @@ kinds.radio = composite({
         g:circle(cx, cy, (s - 10) // 2, { fill = true })
       end
       local item, tw = c.items[t.part], math.max(0, t.w - s - 8)
-      cell_text(g, c, item, t.x + s + 8, t.y, tw, t.h, { align = c.align or "left", color = 15, font = font, bold = c.bold })
+      cell_text(g, c, item, t.x + s + 8, t.y, tw, t.h, {
+        align = c.align or "left", color = 15, font = font, bold = c.bold,
+      })
       if look.focused and look.part == t.part then
         g:rect(t.x - 3, t.y - 3, t.w + 6, t.h + 6, { line_width = 2, radius = 0 })
       end
@@ -235,7 +237,9 @@ kinds.tabs = composite({
       if c.skin then
         local st = { focused = focused, selected = selected, enabled = c.enabled }
         local tc, tx, ty, tw, th, ring = skin_face(g, c.skin, t.x, t.y, t.w, t.h, st)
-        cell_text(g, c, c.items[t.part], tx, ty, tw, th, { align = c.align or "center", color = tc, font = font, bold = bold })
+        cell_text(g, c, c.items[t.part], tx, ty, tw, th, {
+          align = c.align or "center", color = tc, font = font, bold = bold,
+        })
         if ring then
           skin_ring(g, t.x, t.y, t.w, t.h)
         end
@@ -332,7 +336,8 @@ local function paint_ends(g, c, look, middle, face)
   end
 end
 
--- the plus or minus sign centred in the area `t` of a part (the part, or its skin's text area): a bar of at least 6 px, about 9/20 of the part, 3 px thick
+-- the plus or minus sign centred in the area `t` of a part (the part, or its skin's text area): a bar of at
+-- least 6 px, about 9/20 of the part, 3 px thick
 local function draw_sign(g, t, plus, color)
   local len = math.max(6, math.min(t.w, t.h) * 9 // 20)
   local cx, cy = t.x + t.w // 2, t.y + t.h // 2
