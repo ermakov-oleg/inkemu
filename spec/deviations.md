@@ -338,6 +338,19 @@ the README.
   - `bold`, `reserve` and `font_min` of any type are accepted on both and have no effect.
   - A disabled box whose skin has a disabled look draws every part in it and gets no dots; without one, the parts
     are drawn normally and the dots cover the whole box.
+- `ctx.ui` list, as measured with the reader's UI library run as a black box (oracles `s21_list`, `s30_list_order_nav`):
+  a page holds h // row_h rows (row_h 1..h), pages are max(1, ceil(count / rows)) and a page past the last is the
+  last; row parts are the data indexes, a control costs 1 + the rows of its page, and `draw(g, box, index, state)` is
+  called per row at end_frame (state: focused, selected, enabled); with no draw and no skin nothing is drawn, a
+  disabled list gets the dots over its whole box. With a skin the row's look is drawn first and no text. A tap or
+  `ok` on a row returns `activate`, a hold `long_press`, each with the index; a tap below the last row hits
+  nothing. `down` on the last row of a page that is not the last, or `up` on the first row of a page past the first,
+  returns `id, "change", page` (before position or order navigation, on every API minor) and moves focus to the
+  neighbouring row, which the script's next frame shows by turning the page. A kept row that is not on the page gives
+  way to the selected row of the page, else its first row. Checks: `16/list_paging`.
+- `ctx.ui` list, not measured: `selected` is any integer from 1 (no upper bound); the skin's focus ring is drawn after
+  the row's `draw`, and the dots of a skinned disabled list after the rows; page turning needs the focused row to be
+  enabled; the skin's text area is not passed to `draw`; `left` and `right` never turn a page.
 - `ctx.ui` switch, as measured with the reader's UI library run as a black box: `selected` is not type-checked (any
   value but nil and false is on), a `badge` is ignored, a `radius` only shapes the focus frame (radius + 3 when
   positive), `focus_style` does not change a switch's look, and `bold = false` leaves `bold` out of the text call.

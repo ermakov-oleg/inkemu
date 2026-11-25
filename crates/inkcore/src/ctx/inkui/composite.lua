@@ -453,3 +453,93 @@ kinds.pager = composite({
 
 methods.stepper = control_method("stepper")
 methods.pager = control_method("pager")
+
+-- The rows of a list: part numbers are data indexes, and only the rows of the current page are parts. A page holds
+-- h // row_h rows; a page past the last counts as the last.
+local function page_rows(c)
+  local first = (c.page - 1) * c.per + 1
+  return first, math.min(c.count, first + c.per - 1)
+end
+
+kinds.list = composite({
+  check = function(c, o, st)
+    if not (optional(o.enabled, "boolean") and check_nav(o.nav) and optional(o.draw, "function")) then
+      return false
+    end
+    local count, row_h = o.count, o.row_h
+    -- not measured: `selected` has no upper bound (a row past the count simply is never on a page)
+    if not (is_integral(count) and count >= 0 and int_in(row_h, 1, c.h)
+      and (o.page == nil or int_in(o.page, 1, math.maxinteger))
+      and (o.selected == nil or int_in(o.selected, 1, math.maxinteger))) then
+      return false
+    end
+    local ok, skin = check_skin(st, o.skin)
+    if not ok then
+      return false
+    end
+    c.skin, c.draw = skin, o.draw
+    c.enabled = o.enabled ~= false
+    c.count, c.row_h = math.tointeger(count), math.tointeger(row_h)
+    c.per = c.h // c.row_h
+    -- ceil without the sum, which could pass 32 bits
+    c.pages = math.max(1, c.count // c.per + (c.count % c.per > 0 and 1 or 0))
+    c.page = math.min(o.page and math.tointeger(o.page) or 1, c.pages)
+    c.selected = o.selected and math.tointeger(o.selected)
+    c.first, c.last = page_rows(c)
+    return true
+  end,
+  count = function(c)
+    return math.max(0, c.last - c.first + 1)
+  end,
+  parts = function(c)
+    local out = {}
+    for i = c.first, c.last do
+      out[#out + 1] = { part = i, x = c.x, y = c.y + (i - c.first) * c.row_h, w = c.w, h = c.row_h }
+    end
+    return out
+  end,
+  default_part = function(c)
+    if c.selected and c.selected >= c.first and c.selected <= c.last then
+      return c.selected
+    end
+    return c.first
+  end,
+  activate = function(_, n)
+    return "activate", n
+  end,
+  -- An arrow past the end of the page: the id, "change" and the page the script should show, with focus on the
+  -- neighbouring row (which is on the new page). Nil when the key does not turn the page.
+  turn = function(c, n, dir)
+    if dir == "down" and n == c.last and c.page < c.pages then
+      return c.page + 1, n + 1
+    elseif dir == "up" and n == c.first and c.page > 1 then
+      return c.page - 1, n - 1
+    end
+  end,
+  -- per row: the skin's look when there is a skin, then the script's `draw` (box, row, state), then the skin's focus
+  -- ring; no text
+  paint = function(g, c, look)
+    for _, t in ipairs(part_targets(c)) do
+      local focused = look.focused and look.part == t.part
+      local st = { focused = focused, selected = t.part == c.selected, enabled = c.enabled }
+      local ring
+      if c.skin then
+        local _, _, _, _, _, r = skin_face(g, c.skin, t.x, t.y, t.w, t.h, st)
+        ring = r
+      end
+      if c.draw then
+        c.draw(g, { x = t.x, y = t.y, w = t.w, h = t.h }, t.part, st)
+      end
+      if ring then
+        skin_ring(g, t.x, t.y, t.w, t.h)
+      end
+    end
+    if c.skin then
+      skin_dots(g, c.skin, c)
+    else
+      dots(g, c)
+    end
+  end,
+})
+
+methods.list = control_method("list")
