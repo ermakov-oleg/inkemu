@@ -18,7 +18,11 @@
 --   skin_ring(g, x, y, w, h)                the 2 px focus ring 3 px outside the box
 --   skin_dots(g, skin, c)                   the white dots over disabled `c`, unless the skin has a disabled look
 --   skin_pad(skin) -> t, r, b, l
---   nine_slice(g, look, x, y, w, h, invert) the look's image cut in nine and stretched over the box
+--   nine_slice(g, look, x, y, w, h, invert, cut)
+--                                           the look's image cut in nine and stretched over the box; with `cut`,
+--                                           only its first `cut` columns of pixels are drawn
+--   skin_bar(g, skin, x, y, w, h, lead)     a progress bar: the normal look, then the first `lead` px of the
+--                                           selected look (or of the normal look inverted)
 
 local VARIANTS = { "focused", "selected", "disabled", "emphasis" }
 
@@ -112,7 +116,9 @@ local function spans(size, a, b)
   return a, size - a - b, b
 end
 
-function nine_slice(g, lk, x, y, w, h, invert)
+-- A column cut short keeps the share of its source that it shows, rounded to the nearest pixel (s24 pins only
+-- cuts where rounding up gives the same).
+function nine_slice(g, lk, x, y, w, h, invert, cut)
   local e = lk.edge
   local cols = { spans(w, e[4], e[2]) }
   local rows = { spans(h, e[1], e[3]) }
@@ -122,10 +128,17 @@ function nine_slice(g, lk, x, y, w, h, invert)
   for r = 1, 3 do
     local dx = x
     for c = 1, 3 do
-      if cols[c] > 0 and rows[r] > 0 then
+      local dw, srcw = cols[c], sw[c]
+      if cut and dx - x + dw > cut then
+        dw = math.max(0, cut - (dx - x))
+        if dw > 0 then
+          srcw = (2 * sw[c] * dw + cols[c]) // (2 * cols[c])
+        end
+      end
+      if dw > 0 and rows[r] > 0 then
         -- a released image is refused by the canvas without an error, so the text still follows
         g:image(lk.image, dx, dy, {
-          w = cols[c], h = rows[r], invert = invert, src = { x = sx[c], y = sy[r], w = sw[c], h = sh[r] },
+          w = dw, h = rows[r], invert = invert, src = { x = sx[c], y = sy[r], w = srcw, h = sh[r] },
         })
       end
       dx = dx + cols[c]
@@ -163,6 +176,14 @@ function skin_face(g, skin, x, y, w, h, st)
   -- the inverted normal look inverts its text colour too
   local tc = invert and 15 - lk.text_color or lk.text_color
   return tc, x + l, y + t, math.max(1, w - l - r), math.max(1, h - t - b), ring
+end
+
+function skin_bar(g, skin, x, y, w, h, lead)
+  nine_slice(g, skin, x, y, w, h, false)
+  if lead > 0 then
+    local lk, invert = pick(skin, { selected = true })
+    nine_slice(g, lk, x, y, w, h, invert, math.min(lead, w))
+  end
 end
 
 function skin_ring(g, x, y, w, h)
