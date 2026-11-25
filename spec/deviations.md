@@ -147,8 +147,9 @@ no radio and is not the device, so panel timing and network completion were not 
   before 2.15 the children are walked one by one, so one without an integer `w` or `h` also keeps those before it.
 - Status: measured on 26112001 (the reader's UI library run as a black box) for a bad field on the first child,
   a bad field on the last child after the limit, children placed past 32767 and, before 2.15, a child without `w`
-  after valid ones (oracle s36); a bad field of its own on a child in the middle, after valid ones, was not measured
-  and is inferred from those cases.
+  after valid ones (oracle s36), and, before 2.15, a child in the middle with a bad field, no or a repeated `id`, an
+  unknown `kind` or a broken box rule (oracle s37). From 2.15, a bad field of its own on a child in the middle was
+  not measured and is inferred from those cases.
 - Checks: `16/layout_limits` (`bad_child.before`, `child_past_32767.before`), `16/row_column_before_2_15`
   (`partial`).
 
@@ -274,9 +275,8 @@ and Wi-Fi rules of the lock screen (§15). These are nil or ignored in inkemu.
     fields a content size reads), so a bad one anywhere refuses the call before anything is registered; only a
     control's other fields and its placed box are checked one by one (D14). A missing `id` or `kind` was measured only
     on the first child.
-  - Before 2.15 every refusal of a child (a bad `kind`, `id` or `gap`, too deep a nesting, as well as a missing `w`
-    or `h`, the one measured) keeps the children before it registered, including those of a container it stops in.
-  - A part inkemu does not implement yet raises only when nothing in that first pass is invalid.
+  - Before 2.15 a bad `gap` or too deep a nesting on a later child keeps the children before it registered,
+    including those of a container it stops in, as the measured refusals do (D14).
   - The 1024 children are counted in frames too.
   - A control declared at top level is held to the same 32767 limits as a child (D15).
   - A whole float that a 32-bit Lua cannot hold as an integer (such as `3e9` or `1e10`) is not an integer: in any
