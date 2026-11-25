@@ -8,9 +8,9 @@ publish.workspace = true
 [dependencies]
 clap = { version = "4", features = ["string"] }
 inkcore = { path = "../inkcore" }
-# raw_value: a big integer secret keeps its digits (only this crate; arbitrary_precision would change ctx.json)
 serde = { version = "1", features = ["derive"] }
 png = "0.18"
+# raw_value: a big integer secret keeps its digits (only this crate; arbitrary_precision would change ctx.json)
 serde_json = { version = "1", features = ["raw_value"] }
 # no gzip: urllib in 0.1 neither asked for nor decoded compressed bodies
 ureq = { version = "2.12", default-features = false, features = ["tls"] }

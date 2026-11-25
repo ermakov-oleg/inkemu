@@ -323,8 +323,8 @@ fn parse_duration(s: &str) -> PyResult<i64> {
 
 /// The `inkemu` CLI; `args` excludes the program name. Returns the exit code.
 #[pyfunction]
-fn cli_main(py: Python<'_>, args: Vec<String>) -> i32 {
-    py.detach(|| inkemu::cli::main(args.into_iter().map(OsString::from).collect()))
+fn cli_main(py: Python<'_>, args: Vec<OsString>) -> i32 {
+    py.detach(|| inkemu::cli::main(args))
 }
 
 /// The stdio MCP server; `python` is the interpreter its daemon is spawned with.

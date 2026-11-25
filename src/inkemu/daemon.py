@@ -15,7 +15,6 @@ from .paths import state_root
 DEFAULT_PORT = 7480
 HOST = "127.0.0.1"
 REPLY_TIMEOUT_S = 600
-CLIENT_TIMEOUT_S = REPLY_TIMEOUT_S + 20
 LOG_TAIL = 20
 
 
