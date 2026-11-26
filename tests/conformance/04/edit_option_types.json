@@ -1,0 +1,61 @@
+{
+  "spec": "§4",
+  "about": "ctx.input:edit raises a Lua error for an option of the wrong type (§0 rule 3), checking every type before any range, and opens no edit then",
+  "expect": {
+    "rect_raises": {
+      "value": true,
+      "spec": "§0"
+    },
+    "rect_field_raises": {
+      "value": true,
+      "spec": "§0"
+    },
+    "text_raises": {
+      "value": true,
+      "spec": "§0"
+    },
+    "placeholder_raises": {
+      "value": true,
+      "spec": "§0"
+    },
+    "max_chars_raises": {
+      "value": true,
+      "spec": "§0"
+    },
+    "kind_raises": {
+      "value": true,
+      "spec": "§0"
+    },
+    "multiline_raises": {
+      "value": true,
+      "spec": "§0"
+    },
+    "enter_raises": {
+      "value": true,
+      "spec": "§0"
+    },
+    "on_change_raises": {
+      "value": true,
+      "spec": "§0"
+    },
+    "on_end_raises": {
+      "value": true,
+      "spec": "§0"
+    },
+    "before_range_raises": {
+      "value": true,
+      "spec": "§0"
+    },
+    "still_free": {
+      "value": {
+        "ok": true,
+        "ret": [
+          true,
+          ""
+        ]
+      },
+      "spec": "§4"
+    }
+  },
+  "errors": []
+}

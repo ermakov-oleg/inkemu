@@ -29,7 +29,7 @@ function on_draw(ctx, g)
   g:clear(0)
   ui:begin_frame(g)
   ui:field("a", { x = 24, y = 40, w = 432, h = 56, text = "first", enter = "next", on_end = on_end("a") })
-  ui:button("skip", { x = 24, y = 110, w = 432, h = 56, text = "skip" })
+  ui:button("save", { x = 24, y = 110, w = 432, h = 56, text = "save" })
   ui:field("b", { x = 24, y = 180, w = 432, h = 56, text = "second", on_end = on_end("b") })
   ui:end_frame()
   if after_next then
@@ -42,12 +42,16 @@ local taps = 0
 
 function on_input(ctx, ev)
   local r = table.pack(ui:handle_event(ev))
+  if r[1] == "save" and r[2] == "activate" then
+    T.call("save", function() return ui:stop_edit() end)
+    T.value("editing_after_save", tostring(ui:editing()))
+  end
   if r[2] == "edit" then
     taps = taps + 1
     T.value("tap" .. taps, { r[1], r[2], ui:editing() })
     if taps == 1 then
       T.call("script_edit_while_field_edits", function() return ctx.input:edit({ text = "x" }) end)
-    else
+    elseif taps == 2 then
       ctx:after(500, function()
         T.call("stop_edit", function() return ui:stop_edit() end)
         T.value("editing_after_stop", tostring(ui:editing()))

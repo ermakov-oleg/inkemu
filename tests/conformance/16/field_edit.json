@@ -1,8 +1,9 @@
 {
   "spec": "§16",
-  "about": "a tapped field edits through ctx.input:edit, and while it does the script's own edit is busy; confirming a field with enter = next calls its on_end, then the next field (past a button) edits and takes focus; Back only calls on_end; a field tapped while the script's edit is open gets activate and edits nothing; stop_edit closes the edit without on_end and returns its text",
+  "about": "a tapped field edits through ctx.input:edit, and while it does the script's own edit is busy; confirming a field with enter = next calls its on_end, then the next field (past a button) edits and takes focus; Back only calls on_end; a field tapped while the script's edit is open gets activate and edits nothing; stop_edit closes the edit without on_end and returns its text; while a field edits, a real tap on another field reaches the app and switches the edit without on_end, and a real tap on a button that calls stop_edit ends it",
   "steps": ["tap 100 60", "observe s1", "answer yes", "observe s2", "answer no", "observe s3", "answer yes",
-            "observe s4", "tap 100 60", "wait 1s", "observe s5"],
+            "observe s4", "tap 100 60", "wait 1s", "observe s5", "tap 100 60", "tap 100 208", "observe s6",
+            "tap 240 138", "observe s7"],
   "expect": {
     "tap1": {"value": ["a", "edit", "a"], "spec": "§16"},
     "s1.pending.kind": {"value": "edit", "spec": "§16"},
@@ -20,7 +21,14 @@
     "tap2": {"value": ["a", "edit", "a"], "spec": "§16"},
     "stop_edit": {"value": {"ok": true, "ret": ["first"]}, "spec": "§16"},
     "editing_after_stop": {"value": "nil", "spec": "§16"},
-    "s5.pending": {"value": null, "spec": "§16"}
+    "s5.pending": {"value": null, "spec": "§16"},
+    "tap3": {"value": ["a", "edit", "a"], "spec": "§16"},
+    "tap4": {"value": ["b", "edit", "b"], "spec": "§16"},
+    "s6.pending.kind": {"value": "edit", "spec": "§4"},
+    "s6.pending.text": {"value": "second", "spec": "§16"},
+    "save": {"value": {"ok": true, "ret": ["second"]}, "spec": "§16"},
+    "editing_after_save": {"value": "nil", "spec": "§16"},
+    "s7.pending": {"value": null, "spec": "§16"}
   },
   "errors": []
 }

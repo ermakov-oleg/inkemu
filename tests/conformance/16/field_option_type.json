@@ -1,0 +1,11 @@
+{
+  "spec": "§16",
+  "about": "activating a field whose edit option has the wrong type raises a Lua error out of handle_event and edits nothing; a value of the right type out of range gives id, activate",
+  "expect": {
+    "typed_raises": {"value": true, "spec": "§16"},
+    "typed_editing": {"value": "nil", "spec": "§16"},
+    "ranged": {"value": {"ok": true, "ret": ["ranged", "activate"]}, "spec": "§16"},
+    "ranged_editing": {"value": "nil", "spec": "§16"}
+  },
+  "errors": []
+}

@@ -240,6 +240,8 @@ function inTextField(el) {
   return el instanceof Element && !!el.closest(fields);
 }
 
+const isDeviceKey = (e) => !!KEYMAP[e.key] || e.code === 'NumpadEnter';
+
 function togglePause() {
   if (status) send({ cmd: 'set_paused', paused: !status.paused });
 }
@@ -260,8 +262,9 @@ document.addEventListener('keydown', (e) => {
     // confirm dialogs: Y/N here, or tap the plate's buttons on the screen. The state may not show a dialog the
     // last tap just opened, so the worker decides.
     answerIfPending(is('y'), CONFIRM_KINDS);
-  } else if (status?.pending) return;
-  else if (KEYMAP[e.key] || e.code === 'NumpadEnter') send({ cmd: 'key', name: KEYMAP[e.key] ?? 'ok' });
+  } else if (status?.pending && !(status.pending.kind === 'edit' && isDeviceKey(e))) return;
+  // while a docked edit is open the core routes keys itself: Back and OK to the edit, arrows to the app
+  else if (isDeviceKey(e)) send({ cmd: 'key', name: KEYMAP[e.key] ?? 'ok' });
   else if (is('l')) toggleLock();
   else if (is('r')) send({ cmd: 'reload' });
   else if (plusMinute) send({ cmd: 'wait', ms: 60000 });
