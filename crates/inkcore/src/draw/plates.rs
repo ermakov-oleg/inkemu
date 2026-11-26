@@ -3,6 +3,7 @@ use super::canvas::py_round;
 use super::raster::Style;
 use super::{Canvas, Frame, TextItem};
 use crate::emu::Pending;
+use crate::input::KEYBOARD_H;
 
 pub(crate) type Rect = (i32, i32, i32, i32);
 
@@ -80,7 +81,12 @@ pub(crate) fn plates(c: &Canvas, o: &Overlays, dialog: bool) -> Vec<Plate> {
 pub(crate) fn dialog_plate(c: &Canvas, p: &Pending) -> Plate {
     let w = f64::from(c.w);
     let mut plate = Plate::default();
-    let mut y = c.h as i32 / 2 - 100;
+    // a docked edit's plate stands for the keyboard: it stays inside the bottom rows the keyboard owns (§4)
+    let mut y = if p.kind == "edit" {
+        c.h as i32 - KEYBOARD_H + 32
+    } else {
+        c.h as i32 / 2 - 100
+    };
     if !p.title.is_empty() {
         let it = item(c, &p.title, "large", w / 2.0, y);
         y += it.h + 12;
@@ -211,6 +217,15 @@ mod tests {
         assert_eq!((p.items[1].x, p.items[1].y), (50, 342));
         let empty = dialog_plate(&c, &pending("edit", "Note", ""));
         assert_eq!(words(&empty), ["Note", "OK", "Cancel"]);
+        // the docked keyboard's plate, panel included, stays in the bottom keyboard_h rows
+        let top = empty
+            .items
+            .iter()
+            .map(|i| i.y)
+            .chain(empty.boxes.iter().map(|b| b.1));
+        assert_eq!(top.min(), Some(800 - KEYBOARD_H + 32));
+        let bottom = empty.boxes.iter().map(|b| b.3).max().unwrap();
+        assert!(bottom + 16 < 800, "{bottom}");
     }
 
     #[test]

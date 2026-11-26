@@ -5,9 +5,10 @@ use std::rc::Rc;
 use mlua::{IntoLuaMulti, Lua, MultiValue, Table, Value};
 
 use super::object::{method, new_object};
-use super::{arg, check_arg, nil, opt_str, soft_fail};
+use super::{arg, check_arg, nil, opt_str, soft_fail, type_name};
 use crate::dialog::Handler;
 use crate::emu::{with, Host, Shared};
+use crate::input::KEYBOARD_H;
 
 pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
     let text = {
@@ -41,6 +42,7 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
                 type_text: Some(done.clone()),
                 submit: Some(done),
                 ok_keeps_open: false,
+                rect: None,
             };
             Host { lua, st: &st }.set_pending("text", opt_str(opts, "title")?, default, handler);
             Ok(MultiValue::new())
@@ -135,6 +137,7 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
                 type_text: Some(Rc::new(move |h, s| on_type.type_text(h, s))),
                 submit: Some(Rc::new(move |h, s| on_submit.submit(h, s))),
                 ok_keeps_open: ed.newline,
+                rect: o.rect,
             };
             let text = ed.text.borrow().clone();
             ed.id
@@ -169,6 +172,7 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
                 type_text: None,
                 submit: None,
                 ok_keeps_open: false,
+                rect: None,
             };
             let (title, text) = (opt_str(opts, "title")?, opt_str(opts, "text")?);
             h.set_pending("confirm", title, text, handler);
@@ -191,7 +195,7 @@ pub(super) fn install(lua: &Lua, ctx: &Table, st: &Shared) -> mlua::Result<()> {
         })
     };
     let input = new_object(lua, "input", &[("text", text), ("edit", edit)])?;
-    input.raw_set("keyboard_h", 436)?;
+    input.raw_set("keyboard_h", KEYBOARD_H)?;
     input.raw_set("pointer", true)?;
     ctx.raw_set("input", input)?;
     ctx.raw_set(
@@ -227,14 +231,11 @@ fn int(v: &Value) -> Option<i64> {
     }
 }
 
-/// An optional UTF-8 string option; Err for any other value.
-fn opt_utf8(v: Value) -> Result<Option<String>, ()> {
+/// A string option as UTF-8; None when it is not valid UTF-8. The type is checked by the caller.
+fn utf8(v: &Value) -> Option<Option<String>> {
     match v {
-        Value::Nil => Ok(None),
-        Value::String(s) => String::from_utf8(s.as_bytes().to_vec())
-            .map(Some)
-            .map_err(drop),
-        _ => Err(()),
+        Value::String(s) => String::from_utf8(s.as_bytes().to_vec()).ok().map(Some),
+        _ => Some(None),
     }
 }
 
@@ -242,28 +243,61 @@ fn text_ok(text: &str, max_chars: usize, multiline: bool) -> bool {
     text.chars().count() <= max_chars && (multiline || !text.contains('\n'))
 }
 
-/// The options checked against the §4 table; None when one breaks its rule.
+/// A Lua error for option `key` of `ctx.input:edit` that is not of type `expected` (nil passes when `nil_ok`).
+fn opt_type(key: &str, v: &Value, expected: &str, nil_ok: bool) -> mlua::Result<()> {
+    let got = type_name(v);
+    if got == expected || (nil_ok && v.is_nil()) {
+        return Ok(());
+    }
+    Err(mlua::Error::runtime(format!(
+        "bad option '{key}' to 'edit' ({expected} expected, got {got})"
+    )))
+}
+
+/// The options checked against the §4 table: a value of the wrong type raises (§0 rule 3), and every type is
+/// checked before any range, so the outcome does not depend on the order; Ok(None) when a value breaks its rule.
 fn edit_opts(opts: &Table, (sw, sh): (u32, u32)) -> mlua::Result<Option<EditOpts>> {
-    let max_chars = match opts.get::<Value>("max_chars")? {
+    let get = |k: &str| opts.get::<Value>(k);
+    let (max_chars, multiline) = (get("max_chars")?, get("multiline")?);
+    let (text, placeholder) = (get("text")?, get("placeholder")?);
+    let (kind, enter, rect) = (get("kind")?, get("enter")?, get("rect")?);
+    let (on_change, on_end) = (get("on_change")?, get("on_end")?);
+    opt_type("max_chars", &max_chars, "number", true)?;
+    opt_type("multiline", &multiline, "boolean", true)?;
+    for (k, v) in [
+        ("text", &text),
+        ("placeholder", &placeholder),
+        ("kind", &kind),
+        ("enter", &enter),
+    ] {
+        opt_type(k, v, "string", true)?;
+    }
+    opt_type("rect", &rect, "table", true)?;
+    let mut r = [0; 4];
+    if let Value::Table(t) = &rect {
+        for (n, k) in r.iter_mut().zip(["x", "y", "w", "h"]) {
+            let v = t.get::<Value>(k)?;
+            opt_type(&format!("rect.{k}"), &v, "number", false)?;
+            // a fraction is a number out of range
+            *n = int(&v).unwrap_or(-1);
+        }
+    }
+    opt_type("on_change", &on_change, "function", true)?;
+    opt_type("on_end", &on_end, "function", true)?;
+
+    let max_chars = match max_chars {
         Value::Nil => 128,
         v => match int(&v) {
             Some(n @ 1..=512) => n as usize,
             _ => return Ok(None),
         },
     };
-    let multiline = match opts.get::<Value>("multiline")? {
-        Value::Nil => false,
-        Value::Boolean(b) => b,
-        _ => return Ok(None),
-    };
-    let Ok(text) = opt_utf8(opts.get("text")?) else {
+    let multiline = matches!(multiline, Value::Boolean(true));
+    let (Some(text), Some(placeholder)) = (utf8(&text), utf8(&placeholder)) else {
         return Ok(None);
     };
     let text = text.unwrap_or_default();
-    let Ok(placeholder) = opt_utf8(opts.get("placeholder")?) else {
-        return Ok(None);
-    };
-    let (Ok(kind), Ok(enter)) = (opt_utf8(opts.get("kind")?), opt_utf8(opts.get("enter")?)) else {
+    let (Some(kind), Some(enter)) = (utf8(&kind), utf8(&enter)) else {
         return Ok(None);
     };
     let kind_ok = matches!(
@@ -280,16 +314,9 @@ fn edit_opts(opts: &Table, (sw, sh): (u32, u32)) -> mlua::Result<Option<EditOpts
     if !(kind_ok && enter_ok && fits && placeholder.map_or(0, |p| p.len()) <= 128) {
         return Ok(None);
     }
-    let rect = match opts.get::<Value>("rect")? {
+    let rect = match rect {
         Value::Nil => None,
-        Value::Table(t) => {
-            let mut r = [0; 4];
-            for (v, k) in r.iter_mut().zip(["x", "y", "w", "h"]) {
-                match int(&t.get::<Value>(k)?) {
-                    Some(n) => *v = n,
-                    None => return Ok(None),
-                }
-            }
+        _ => {
             let [x, y, w, h] = r;
             let on_screen = x >= 0 && y >= 0 && x + w <= i64::from(sw) && y + h <= i64::from(sh);
             if w < 1 || h < 1 || !on_screen {
@@ -297,16 +324,7 @@ fn edit_opts(opts: &Table, (sw, sh): (u32, u32)) -> mlua::Result<Option<EditOpts
             }
             Some((x, y, w, h))
         }
-        _ => return Ok(None),
     };
-    let (on_change, on_end) = (
-        opts.get::<Value>("on_change")?,
-        opts.get::<Value>("on_end")?,
-    );
-    let callback = |v: &Value| matches!(v, Value::Nil | Value::Function(_));
-    if !callback(&on_change) || !callback(&on_end) {
-        return Ok(None);
-    }
     Ok(Some(EditOpts {
         text,
         max_chars,

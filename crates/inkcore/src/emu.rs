@@ -17,6 +17,7 @@ use crate::draw::plates::{self, Overlays, Plate};
 use crate::draw::text::Fonts;
 use crate::draw::{Canvas, Depth, Frame, Target, TextItem};
 use crate::fixtures::{FixtureSet, Redactor};
+use crate::input::Side;
 use crate::lockscreen::{self, Lock};
 use crate::log::{py_repr, Log};
 use crate::lua;
@@ -118,6 +119,8 @@ pub(crate) struct State {
     pub(crate) tick: Option<TimerId>,
     /// Pointer down position and clock ms, until the matching up.
     pub(crate) down: Option<(i32, i32, i64)>,
+    /// Who that pointer belongs to, from down to up.
+    pub(crate) down_side: Side,
     pub(crate) hold_sent: bool,
     /// Text and the clock ms it stays up to.
     pub(crate) toast: Option<(String, i64)>,
@@ -710,6 +713,7 @@ impl Core {
             pending_id: 0,
             tick: None,
             down: None,
+            down_side: Side::App,
             hold_sent: false,
             toast: None,
             canvas: Canvas::new(480, 800, fonts.clone()),

@@ -117,12 +117,9 @@ fn bad_options_are_invalid_argument() {
         "rect = {x = 1e30, y = 0, w = 1e30, h = 1}",
         "rect = {x = 0, y = 1e30, w = 1, h = 1e30}",
         "rect = {x = math.maxinteger, y = 0, w = math.maxinteger, h = 1}",
-        "rect = {x = 0, y = 0, w = 10}",
-        "rect = 5",
         "text = 'a\\nb'",
         "text = 'abcd', max_chars = 3",
         "text = '\\255'",
-        "text = 5",
         "max_chars = 0",
         "max_chars = 513",
         "max_chars = 2.5",
@@ -131,9 +128,6 @@ fn bad_options_are_invalid_argument() {
         "kind = 'email'",
         "enter = 'go'",
         "enter = 'newline'",
-        "multiline = 'yes'",
-        "on_change = 5",
-        "on_end = 'x'",
     ];
     for opts in bad {
         let code = format!("local a, b = ctx.input:edit({{{opts}}}) return {{a == nil, b}}");
@@ -142,6 +136,36 @@ fn bad_options_are_invalid_argument() {
             json!([true, "invalid_argument"]),
             "{opts}"
         );
+        assert_eq!(pending_kind(&core), None, "{opts}");
+    }
+}
+
+#[test]
+fn options_of_the_wrong_type_raise() {
+    let mut core = boot("");
+    let bad = [
+        ("rect = 5", "'rect' to 'edit' (table expected, got number)"),
+        ("rect = {x = 0, y = 0, w = 10}", "'rect.h'"),
+        ("rect = {x = '0', y = 0, w = 1, h = 1}", "'rect.x'"),
+        ("text = 5", "'text'"),
+        ("placeholder = {}", "'placeholder'"),
+        ("max_chars = '5'", "'max_chars'"),
+        ("kind = 5", "'kind'"),
+        ("enter = true", "'enter'"),
+        ("multiline = 'yes'", "'multiline'"),
+        ("on_change = 5", "'on_change'"),
+        ("on_end = 'x'", "'on_end'"),
+        // every type is checked before any range
+        ("max_chars = 0, multiline = 'yes'", "'multiline'"),
+        ("kind = 'email', on_end = 1", "'on_end'"),
+    ];
+    for (opts, msg) in bad {
+        let code = format!(
+            "local ok, err = pcall(ctx.input.edit, ctx.input, {{{opts}}}) return {{ok, tostring(err)}}"
+        );
+        let got = eval(&mut core, &code);
+        assert_eq!(got[0], json!(false), "{opts}");
+        assert!(got[1].as_str().unwrap().contains(msg), "{opts}: {got}");
         assert_eq!(pending_kind(&core), None, "{opts}");
     }
 }
@@ -372,4 +396,160 @@ fn submit_answers_a_text_input() {
     core.submit_text("abc").unwrap();
     assert_eq!(eval(&mut core, "return got"), json!("abc"));
     assert!(core.submit_text("x").is_err(), "nothing is waiting");
+}
+
+/// An app that records its input and opens an edit with its text area at 32,132 416x40.
+const ROUTED: &str = "ends = {}\ngot = {}\n\
+    function on_end(c, s, how) ends[#ends + 1] = s .. ':' .. how end\n\
+    function on_input(c, e)\n\
+      got[#got + 1] = e.type == 'key' and (e.key .. ':' .. e.phase) or (e.phase .. ':' .. tostring(e.gesture))\n\
+      return true\n\
+    end\n\
+    function open() ed = ctx.input:edit({text = 'hi', on_end = on_end, rect = {x = 32, y = 132, w = 416, h = 40}}) end\n";
+
+fn got(core: &mut Core) -> serde_json::Value {
+    match eval(core, "local g = got got = {} return g") {
+        serde_json::Value::Object(o) if o.is_empty() => json!([]),
+        v => v,
+    }
+}
+
+#[test]
+fn a_pointer_outside_the_text_area_and_keyboard_reaches_the_app() {
+    let mut core = boot(ROUTED);
+    eval(&mut core, "open() return 0");
+    core.tap(240, 300).unwrap();
+    assert_eq!(got(&mut core), json!(["down:nil", "up:tap"]));
+    assert_eq!(pending_kind(&core), Some("edit"), "the keyboard stays up");
+    // just outside the text area, at its right and bottom edges
+    core.tap(448, 140).unwrap();
+    core.tap(40, 172).unwrap();
+    assert_eq!(
+        got(&mut core),
+        json!(["down:nil", "up:tap", "down:nil", "up:tap"])
+    );
+}
+
+#[test]
+fn a_pointer_in_the_text_area_or_on_the_keyboard_does_not() {
+    let mut core = boot(ROUTED);
+    eval(&mut core, "open() return 0");
+    let t0 = core.clock_ms();
+    core.tap(32, 132).unwrap();
+    core.tap(447, 171).unwrap();
+    core.tap(5, 800 - 436).unwrap();
+    core.tap(5, 799).unwrap();
+    core.hold(240, 700, 800).unwrap();
+    core.double_tap(240, 150).unwrap();
+    assert_eq!(got(&mut core), json!([]));
+    assert_eq!(pending_kind(&core), Some("edit"));
+    assert!(core.clock_ms() - t0 >= 5 * 350, "each one is an input");
+    let log = core.log().join("\n");
+    assert!(log.contains("input went to the edit's text area (the host moves the cursor), not the app: tap at 32,132"), "{log}");
+    assert!(log.contains(
+        "input went to the docked keyboard (type text or answer it), not the app: tap at 5,364"
+    ));
+}
+
+#[test]
+fn a_pointer_belongs_to_the_side_where_it_went_down() {
+    let mut core = boot(ROUTED);
+    eval(&mut core, "open() return 0");
+    // down above the keyboard, up on it: all of it is the app's, and the plate's buttons do not answer
+    core.drag(&[(240, 300), (240, 500), (160, 520)], 300)
+        .unwrap();
+    assert_eq!(
+        got(&mut core),
+        json!(["down:nil", "move:nil", "move:nil", "up:swipe_down"])
+    );
+    assert_eq!(pending_kind(&core), Some("edit"));
+    // down on the keyboard, up above it: none of it
+    core.drag(&[(240, 700), (240, 100)], 300).unwrap();
+    assert_eq!(got(&mut core), json!([]));
+    // down before the edit opens, up while it is open: the app's
+    eval(&mut core, "ed:close() return 0");
+    core.pointer("down", 240, 150).unwrap();
+    eval(&mut core, "open() return 0");
+    core.pointer("up", 240, 150).unwrap();
+    assert_eq!(got(&mut core), json!(["down:nil", "up:tap"]));
+    // down in the text area, the edit closed before up: still not the app's
+    core.pointer("down", 240, 150).unwrap();
+    eval(&mut core, "ed:close() return 0");
+    core.pointer("up", 240, 150).unwrap();
+    assert_eq!(got(&mut core), json!([]));
+}
+
+#[test]
+fn the_keyboard_plate_buttons_answer_a_tap_that_went_down_on_them() {
+    let mut core = boot(ROUTED);
+    eval(&mut core, "open() return 0");
+    core.tap_text("OK").unwrap();
+    assert_eq!(pending_kind(&core), None);
+    assert_eq!(eval(&mut core, "return ends"), json!(["hi:enter"]));
+    assert_eq!(got(&mut core), json!([]));
+}
+
+#[test]
+fn keys_other_than_back_and_ok_reach_the_app_while_editing() {
+    let mut core = boot(ROUTED);
+    eval(&mut core, "open() return 0");
+    for k in ["up", "down", "left", "right"] {
+        core.key(k).unwrap();
+    }
+    assert_eq!(
+        got(&mut core),
+        json!([
+            "up:down",
+            "up:up",
+            "down:down",
+            "down:up",
+            "left:down",
+            "left:up",
+            "right:down",
+            "right:up"
+        ])
+    );
+    assert_eq!(pending_kind(&core), Some("edit"));
+    // ok is the confirm key on a touch device
+    core.key("ok").unwrap();
+    assert_eq!(pending_kind(&core), None);
+    assert_eq!(eval(&mut core, "return ends"), json!(["hi:enter"]));
+    assert_eq!(got(&mut core), json!([]));
+}
+
+#[test]
+fn ok_inserts_a_line_break_in_a_newline_edit() {
+    let mut core = boot(&format!(
+        "{ENDS}function on_load(c) ed = c.input:edit({{text = 'a', multiline = true, enter = 'newline', on_end = on_end}}) end\n"
+    ));
+    core.key("ok").unwrap();
+    assert_eq!(pending_kind(&core), Some("edit"));
+    assert_eq!(eval(&mut core, "return ed:text()"), json!("a\n"));
+}
+
+#[test]
+fn a_key_up_follows_its_down_into_the_app() {
+    let mut core = boot(&format!(
+        "{ROUTED}function on_input(c, e)\n\
+           got[#got + 1] = e.key .. ':' .. e.phase\n\
+           if e.phase == 'down' then open() end\n\
+           return true\n\
+         end\n"
+    ));
+    core.key("ok").unwrap();
+    assert_eq!(got(&mut core), json!(["ok:down", "ok:up"]));
+    assert_eq!(pending_kind(&core), Some("edit"));
+}
+
+#[test]
+fn other_dialogs_still_take_every_input() {
+    let mut core = boot(ROUTED);
+    eval(
+        &mut core,
+        "ctx.input:text({title = 'Name'}, function() end) return 0",
+    );
+    core.tap(240, 100).unwrap();
+    core.key("up").unwrap();
+    assert_eq!(got(&mut core), json!([]));
+    assert_eq!(pending_kind(&core), Some("text"));
 }
