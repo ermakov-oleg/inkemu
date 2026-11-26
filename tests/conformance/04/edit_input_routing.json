@@ -1,0 +1,43 @@
+{
+  "spec": "§4",
+  "about": "while a docked edit is open, a pointer going down outside its text area and above the keyboard reaches the app, one going down in the text area or on the keyboard does not; up, down, left and right reach the app, Back ends the edit and ok is the confirm key, and neither reaches the app",
+  "steps": [
+    "tap 240 300",
+    "tap 100 150",
+    "tap 20 700",
+    "key up",
+    "key left",
+    "observe s1",
+    "key back",
+    "observe s2",
+    "key ok",
+    "observe s3"
+  ],
+  "expect": {
+    "got": {
+      "value": "down:nil up:tap key.up:down key.up:up key.left:down key.left:up",
+      "spec": "§4"
+    },
+    "s1.pending.kind": {
+      "value": "edit",
+      "spec": "§4"
+    },
+    "s1.pending.text": {
+      "value": "hi",
+      "spec": "§4"
+    },
+    "s2.pending.text": {
+      "value": "again",
+      "spec": "§4"
+    },
+    "ends": {
+      "value": "hi:back again:enter",
+      "spec": "§4"
+    },
+    "s3.pending": {
+      "value": null,
+      "spec": "§4"
+    }
+  },
+  "errors": []
+}

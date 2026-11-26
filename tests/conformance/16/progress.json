@@ -1,0 +1,25 @@
+{
+  "spec": "§16",
+  "about": "a progress bar draws a 2 px frame and, 2 px inside it, a fill floor((w - 4) * value + 0.5) wide with value clamped to 0..1 (none when that is 0 or the box has no inner height); `enabled` is neither checked nor drawn; stripes are filled polygons, the bands along the bottom edge joined into polygons of at most 128 points, drawn before the corner bands along the top; with a skin the whole bar is the normal look and the leading floor(w * value + 0.5) px the selected look cut from the full-width look (or the normal look inverted, without one), a cut column keeping its share of the source rounded, at least 1 px; a value that is NaN, not a number or missing, an unknown style or skin is invalid_argument; the bar is never hit, so a tap reaches the control below (looks, validation and the tap observed on the reader's UI library as a black box)",
+  "expect": {
+    "solid_0_4": {"value": true, "spec": "§16"},
+    "solid_third": {"value": true, "spec": "§16"},
+    "solid_clamped_high": {"value": true, "spec": "§16"},
+    "solid_clamped_low": {"value": true, "spec": "§16"},
+    "solid_inf": {"value": true, "spec": "§16"},
+    "solid_disabled": {"value": true, "spec": "§16"},
+    "too_flat": {"value": true, "spec": "§16"},
+    "stripe_tiny": {"value": true, "spec": "§16"},
+    "stripe_432": {"value": {"calls": 5, "within": true}, "spec": "§16"},
+    "skin": {"value": {"calls": 15, "lead_corner": true, "lead_middle": true}, "spec": "§16"},
+    "nan": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "string_value": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "no_value": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "bad_style": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "bad_skin": {"value": {"ok": true, "ret": [null, "invalid_argument"]}, "spec": "§16"},
+    "enabled_not_checked": {"value": {"ok": true, "ret": []}, "spec": "§16"},
+    "tap_through": {"value": {"ok": true, "ret": ["under", "activate"]}, "spec": "§16"}
+  },
+  "files": {"canvas_log.lua": "canvas_log.util.lua"},
+  "errors": []
+}

@@ -106,7 +106,22 @@ fn every_fresh_lua_state_gets_the_library() {
 }
 
 #[test]
-fn dot_calls_and_stubs_raise_at_the_app_line() {
+fn every_method_of_the_contract_is_a_function() {
+    let mut core = boot("");
+    let names = "begin_frame end_frame handle_event focus focused layout skin editing stop_edit label button image \
+                 field region switch tabs radio stepper pager list progress row column grid stack";
+    let code = format!(
+        "local ui, missing = ctx.ui:create(), {{}}\n\
+         for name in string.gmatch('{names}', '%S+') do\n\
+           if type(ui[name]) ~= 'function' then missing[#missing + 1] = name end\n\
+         end\n\
+         return table.concat(missing, ' ')"
+    );
+    assert_eq!(eval(&mut core, &code), json!(""));
+}
+
+#[test]
+fn dot_calls_raise_at_the_app_line() {
     let mut core = boot("");
     let err = core.lua_exec("ctx.ui.create()").unwrap_err();
     assert!(
@@ -122,13 +137,6 @@ fn dot_calls_and_stubs_raise_at_the_app_line() {
         err.starts_with(
             "lua_exec:2: bad argument #1 to 'begin_frame' (call ui:begin_frame with a colon)"
         ),
-        "{err}"
-    );
-    let err = core
-        .lua_exec("local ui = ctx.ui:create()\nui:switch('ok', {})")
-        .unwrap_err();
-    assert!(
-        err.starts_with("lua_exec:2: ui:switch is not implemented in inkemu yet"),
         "{err}"
     );
 }
@@ -174,6 +182,12 @@ fn library(api: &str, extra: &'static str) -> (Lua, Table) {
     let ctx = lua.create_table().unwrap();
     let manifest = format!(r#"{{"app_id": "testapp", "api": "{api}"}}"#);
     let host = host(&lua, &ctx, &app_files(&manifest, "")).unwrap();
+    // a table with `_img = true` stands for an image object here
+    let is_image = lua
+        .load("return function(v) return type(v) == 'table' and v._img == true end")
+        .eval::<Function>()
+        .unwrap();
+    host.set("is_image", is_image).unwrap();
     let mut files = FILES.to_vec();
     files.push(("probe.lua", extra));
     let env = load(&lua, &files, host).unwrap();
@@ -313,7 +327,7 @@ local function show(v)
 end
 return function(log)
   local g = {}
-  for _, op in ipairs({ "rect", "text_box", "pattern", "circle" }) do
+  for _, op in ipairs({ "rect", "text_box", "pattern", "circle", "image" }) do
     g[op] = function(self, ...)
       local args = table.pack(...)
       for i = 1, args.n do args[i] = show(args[i]) end
@@ -334,6 +348,12 @@ fn fixed_library(api: &str) -> Lua {
     ctx.set("input", lua.create_table().unwrap()).unwrap();
     let manifest = format!(r#"{{"app_id": "testapp", "api": "{api}"}}"#);
     let host = host(&lua, &ctx, &app_files(&manifest, "")).unwrap();
+    // a table with `_img = true` stands for an image object here
+    let is_image = lua
+        .load("return function(v) return type(v) == 'table' and v._img == true end")
+        .eval::<Function>()
+        .unwrap();
+    host.set("is_image", is_image).unwrap();
     let mut files = FILES.to_vec();
     files.push(("probe.lua", "function state(ui) return objects[ui] end"));
     let env = load(&lua, &files, host).unwrap();
@@ -539,23 +559,126 @@ fn font_min_takes_the_largest_system_font_that_fits() {
     assert_eq!(fonts, ["medium", "small", "medium", "medium", "large"]);
 }
 
+/// `bare`: a whole 20 × 20 image (no edges) with text colour 4; `dim` the same with a disabled image.
+const BARE: &str = "{skins = {bare = {image = {_img = true, name = 'bare', width = 20, height = 20}, text_color = 4},\n\
+     dim = {image = {_img = true, name = 'bare', width = 20, height = 20}, text_color = 4,\n\
+       disabled = {image = {_img = true, name = 'off', width = 20, height = 20}}}}}";
+
 #[test]
-fn button_image_and_registered_skin_raise_at_the_app_line() {
-    for (field, want) in [
-        (
-            "image = {}",
-            "index.lua:3: ui:button image is not implemented in inkemu yet",
+fn a_skinned_button_draws_its_look_then_the_text_the_ring_and_the_dots() {
+    let lua = fixed_library("2.26");
+    let look = |name: &str, invert: bool| {
+        format!("image(@{name},10,0,{{h=40,invert={invert},src={{h=20,w=20,x=0,y=0}},w=100}})")
+    };
+    let text = "text_box(10,0,100,40,A,{align=center,color=4,font=@medium,overflow=ellipsis,valign=middle,wrap=none})";
+    let ring = "rect(7,-3,106,46,{line_width=2,radius=0})";
+    let dots = "pattern(10,0,100,40,{color=0,density=50,kind=dot})";
+    let button = |more: &str| {
+        format!("ui:button('a', {{x = 10, y = 0, w = 100, h = 40, text = 'A', radius = 9{more}}})")
+    };
+    assert_eq!(
+        frame(&lua, BARE, "", &button(", skin = 'bare'")),
+        [look("bare", false), text.into()]
+    );
+    // no selected look: the normal one inverted, the text colour too
+    assert_eq!(
+        frame(&lua, BARE, "", &button(", skin = 'bare', selected = true")),
+        [look("bare", true), text.replace("color=4", "color=11")]
+    );
+    // the ring comes after the text, square whatever the radius
+    assert_eq!(
+        frame(
+            &lua,
+            BARE,
+            "st.focus = 'a' st.keys = true",
+            &button(", skin = 'bare'")
         ),
-        (
-            "skin = 'iron'",
-            "index.lua:3: ui:button skin is not implemented in inkemu yet",
+        [look("bare", false), text.into(), ring.into()]
+    );
+    assert_eq!(
+        frame(&lua, BARE, "", &button(", skin = 'bare', enabled = false")),
+        [look("bare", false), text.into(), dots.into()]
+    );
+    // a disabled look replaces the dots
+    assert_eq!(
+        frame(&lua, BARE, "", &button(", enabled = false, skin = 'dim'")),
+        [look("off", false), text.into()]
+    );
+}
+
+const PIC: &str = "local pic = {_img = true, name = 'pic', width = 48, height = 48}\n";
+
+#[test]
+fn an_image_button_draws_the_image_then_border_focus_frame_and_text() {
+    let lua = fixed_library("2.26");
+    let img = |y: i32, invert: bool| format!("image(@pic,10,{y},{{h=56,invert={invert},w=200}})");
+    let decl = |id: &str, y: i32, more: &str| {
+        format!("ui:button('{id}', {{x = 10, y = {y}, w = 200, h = 56, image = pic, {more}}})\n")
+    };
+    let body = [
+        decl("n", 0, "border = false"),
+        decl("sel", 70, "selected = true, text = 'B', border = false"),
+        decl("emp", 140, "emphasis = true, border = false"),
+        decl("r8", 210, "radius = 8"),
+    ]
+    .concat();
+    let plain_text = "text_box(10,70,200,56,B,{align=center,font=@medium,overflow=ellipsis,valign=middle,wrap=none})";
+    assert_eq!(
+        frame(&lua, "nil", PIC, &body),
+        [
+            img(0, false),
+            img(70, true),
+            plain_text.to_string(),
+            img(140, false),
+            img(210, false),
+            "rect(10,210,200,56,{radius=8})".to_string(),
+        ]
+    );
+    // focus rings the box with no fill, whatever the style; the image keeps `selected` as its only inversion
+    let log = frame(
+        &lua,
+        "nil",
+        &format!("{PIC}st.keys = true"),
+        &format!(
+            "{}ui:focus('f')",
+            decl("f", 0, "radius = 8, border = false")
         ),
-    ] {
-        let code =
-            format!("ui:begin_frame(g)\nui:button('a', {{x = 0, y = 0, w = 10, h = 10, {field}}})");
-        let err = layout_run("2.26", &code);
-        assert!(err.starts_with(want), "{err}");
-    }
+    );
+    assert_eq!(log[0], img(0, false));
+    assert_eq!(log[1], "rect(7,-3,206,62,{line_width=2,radius=11})");
+}
+
+#[test]
+fn an_image_control_draws_its_source_and_is_not_focusable() {
+    let lua = fixed_library("2.26");
+    let log = frame(
+        &lua,
+        "nil",
+        PIC,
+        "ui:image('i', {x = 10, y = 20, w = 100, h = 50, source = pic})\n\
+         ui:image('o', {x = 0, y = 0, w = 1, h = 1})\n\
+         assert(select('#', ui:image('z', {x = 0, y = 0, w = 0, h = 1, source = pic})) == 2)\n\
+         assert(ui:focused() == nil)",
+    );
+    assert_eq!(log, ["image(@pic,10,20,{h=50,w=100})"]);
+}
+
+#[test]
+fn only_an_image_object_is_an_image_for_a_button_and_a_layout_child() {
+    let out = layout_run(
+        "2.26",
+        &format!(
+            "{PIC}local function try(f) ui:begin_frame(g) local a, b = f() ui:end_frame() return tostring(a) .. ':' .. tostring(b) end\n\
+             return try(function() return ui:button('a', {{x = 0, y = 0, w = 10, h = 10, image = 5}}) end),\n\
+               try(function() return ui:button('a', {{x = 0, y = 0, w = 10, h = 10, image = {{width = 10, height = 10}}}}) end),\n\
+               try(function() return ui:button('a', {{x = 0, y = 0, w = 10, h = 10, image = pic}}) end),\n\
+               try(function() return ui:row('r', {{x = 0, y = 0, w = 10, h = 10, children = {{{{kind = 'image', source = {{}}}}}}}}) end)"
+        ),
+    );
+    assert_eq!(
+        out,
+        "nil:invalid_argument,nil:invalid_argument,nil:nil,nil:invalid_argument"
+    );
 }
 
 #[test]
@@ -862,12 +985,17 @@ fn focus_keeps_a_part_until_end_frame() {
     );
 }
 
-/// What `code` (Lua using `ui`, an object made with `skins = {iron = {}}`, and `g`, a recorder) returns as text,
-/// or its error.
+/// Skins for `make`: `iron`, a 40 × 30 image with 10 px edges, text padded 6 and 12, text colour 3 and a selected
+/// image of 40 × 32.
+const IRON: &str = "{iron = {image = {_img = true, name = 'iron', width = 40, height = 30}, edge = 10, pad = {6, 12}, \
+     text_color = 3, selected = {image = {_img = true, name = 'iron_on', width = 40, height = 32}}}}";
+
+/// What `code` (Lua using `ui`, an object made with the [`IRON`] skins, and `g`, a recorder) returns as text, or its
+/// error.
 fn layout_run(api: &str, code: &str) -> String {
     let lua = fixed_library(api);
     let code = format!(
-        "local ui = make({{skins = {{iron = {{}}}}}}) local log = {{}} local g = recorder(log)\n{code}"
+        "local ui = make({{skins = {IRON}}}) local log = {{}} local g = recorder(log)\n{code}"
     );
     match run(&lua, &code) {
         Ok(r) => r
@@ -879,36 +1007,62 @@ fn layout_run(api: &str, code: &str) -> String {
     }
 }
 
+/// Lua for [`layout_run`] that plays the docked input as the oracle's stub does: `input.edit` keeps its options in
+/// `opened` (or answers `nil, refuse` while `refuse` is set) and returns an edit whose `close` counts in `closed`;
+/// `finish(how, text)` ends the live edit as the host does, `typed(text)` changes its text; `tap(x, y)` is a tap.
+const DOCKED: &str = r#"
+local opened, closed, live, refuse = {}, 0, nil, nil
+input.edit = function(_, o)
+  if refuse then return nil, refuse end
+  local ed = { o = o, t = o.text }
+  function ed.close(self)
+    closed = closed + 1
+    if live ~= self then return nil end
+    live = nil
+    return self.t
+  end
+  live = ed
+  opened[#opened + 1] = o
+  return ed
+end
+local function finish(how, text)
+  local ed = live
+  live = nil
+  ed.t = text or ed.t
+  ed.o.on_end("ctx", ed.t, how)
+end
+local function typed(text) live.t = text live.o.on_change("ctx", text) end
+local function tap(x, y)
+  local id, action = ui:handle_event({ type = "pointer", phase = "up", gesture = "tap", x = x, y = y })
+  return tostring(id) .. "," .. tostring(action)
+end
+"#;
+
 #[test]
-fn containers_raise_what_inkemu_does_not_implement_at_the_app_line() {
-    let cases = [
-        (
-            "ui:begin_frame(g)\nui:column('c', {x = 0, y = 0, w = 100, h = 100, children = {{kind = 'switch', id = 's'}}})",
-            "index.lua:3: ui:switch is not implemented in inkemu yet",
-        ),
-        (
-            "ui:begin_frame(g)\nui:row('c', {x = 0, y = 0, w = 100, h = 100, skin = 'iron', children = {}})",
-            "index.lua:3: ui:row skin is not implemented in inkemu yet",
-        ),
-        (
-            "ui:begin_frame(g)\nui:grid('c', {x = 0, y = 0, w = 100, h = 100, columns = 1})",
-            "index.lua:3: ui:grid is not implemented in inkemu yet",
-        ),
-        (
-            "\nui:layout({x = 0, y = 0, w = 9, h = 9}, {kind = 'row', children = {{kind = 'stack'}}})",
-            "index.lua:3: ui:stack is not implemented in inkemu yet",
-        ),
-        (
-            "\nui:layout({x = 0, y = 0, w = 9, h = 9}, {kind = 'row', children = {{kind = 'button', w = 'fit', skin = 'iron'}}})",
-            "index.lua:3: ui:button skin is not implemented in inkemu yet",
-        ),
-    ];
-    for (code, want) in cases {
-        let err = layout_run("2.26", code);
-        assert!(err.starts_with(want), "{code}: {err}");
+fn a_field_child_is_drawn_and_edits_in_the_box_its_container_gives_it() {
+    for kind in ["column", "grid", "stack"] {
+        let code = format!(
+            "{DOCKED}ui:begin_frame(g)\n\
+             ui:{kind}('c', {{x = 10, y = 20, w = 200, h = 100, columns = {cols}, children = {{\n\
+               {{kind = 'field', id = 's', w = 100, h = 40, text = 'hi'}}}}}})\n\
+             ui:end_frame()\n\
+             local r = tap(15, 25) local o = opened[1].rect\n\
+             return table.concat(log, ' '), r, o.x, o.y, o.w, o.h",
+            cols = if kind == "grid" { "1" } else { "nil" }
+        );
+        assert_eq!(
+            layout_run("2.26", &code),
+            "rect(10,20,100,40,{line_width=1,radius=0}) \
+             text_box(18,28,84,24,hi,{font=@medium,overflow=ellipsis,valign=middle,wrap=none}),s,edit,18,28,84,24",
+            "{kind}"
+        );
     }
-    // an invalid field anywhere in the tree wins over a part inkemu lacks; a registered container skin is only
-    // validated by ui:layout, which draws nothing
+}
+
+#[test]
+fn an_invalid_child_field_refuses_the_container_and_ui_layout_takes_a_skin() {
+    // an invalid field anywhere in the tree wins over a part inkemu lacks; ui:layout takes a registered container
+    // skin and draws nothing
     assert_eq!(
         layout_run(
             "2.26",
@@ -1149,14 +1303,73 @@ fn radio_checks_its_fields() {
     );
     // `bold` is a 2.16 field
     assert!(layout_run("2.15", code).ends_with(&format!("{ok} {bad}")));
-    let err = layout_run(
-        "2.26",
-        "ui:begin_frame(g)\nui:radio('r', {x = 0, y = 0, w = 9, h = 9, items = {'a'}, skin = 'iron'})",
+    assert_eq!(
+        layout_run(
+            "2.26",
+            "ui:begin_frame(g)\nreturn select('#', ui:radio('r', {x = 0, y = 0, w = 9, h = 9, items = {'a'}, skin = 'iron'}))",
+        ),
+        "0"
     );
-    assert!(
-        err.starts_with("index.lua:3: ui:radio skin is not implemented in inkemu yet"),
-        "{err}"
+}
+
+/// The nine `image` calls of a skin `name` (`iw` × `ih`, the same edge `e` all round) on a box at least `2e` both ways.
+fn slices(
+    name: &str,
+    (iw, ih): (i32, i32),
+    e: i32,
+    (x, y, w, h): (i32, i32, i32, i32),
+) -> Vec<String> {
+    let cols = [
+        (x, e, 0, e),
+        (x + e, w - 2 * e, e, iw - 2 * e),
+        (x + w - e, e, iw - e, e),
+    ];
+    let rows = [
+        (y, e, 0, e),
+        (y + e, h - 2 * e, e, ih - 2 * e),
+        (y + h - e, e, ih - e, e),
+    ];
+    rows.iter()
+        .flat_map(|&(dy, dh, sy, sh)| {
+            cols.iter().map(move |&(dx, dw, sx, sw)| {
+                format!("image(@{name},{dx},{dy},{{h={dh},invert=false,src={{h={sh},w={sw},x={sx},y={sy}}},w={dw}}})")
+            })
+        })
+        .collect()
+}
+
+#[test]
+fn a_skinned_radio_and_switch_draw_the_skin_in_place_of_circles_and_capsule() {
+    let lua = fixed_library("2.26");
+    let opts = format!("{{skins = {IRON}}}");
+    // each cell gets the skin, selected for the value item, and its text in the area after the pad
+    let cell = |x: i32, text: &str| {
+        format!("text_box({},86,206,88,{text},{{align=left,color=3,font=@medium,overflow=ellipsis,valign=middle,wrap=none}})", x + 12)
+    };
+    let want = [
+        slices("iron_on", (40, 32), 10, (10, 80, 230, 100)),
+        vec![cell(10, "x")],
+        slices("iron", (40, 30), 10, (240, 80, 230, 100)),
+        vec![cell(240, "y")],
+    ]
+    .concat();
+    let decl = "ui:radio('rd', {x = 10, y = 80, w = 460, h = 100, columns = 2, items = {'x', 'y'}, value = 1, skin = 'iron'})";
+    assert_eq!(frame(&lua, &opts, "", decl), want);
+    // the skin takes the capsule's box (64 × 34, 8 px from the right, centred), the text keeps its place
+    let want = [
+        slices("iron", (40, 30), 10, (338, 711, 64, 34)),
+        vec!["text_box(18,700,308,56,Sw,{bold=true,font=@medium,overflow=ellipsis,valign=middle,wrap=none})".into()],
+    ]
+    .concat();
+    let decl = "ui:switch('sw', {x = 10, y = 700, w = 400, h = 56, text = 'Sw', skin = 'iron'})";
+    assert_eq!(frame(&lua, &opts, "", decl), want);
+    let on = frame(
+        &lua,
+        &opts,
+        "",
+        &decl.replace("skin", "selected = true, skin"),
     );
+    assert_eq!(on[..9], slices("iron_on", (40, 32), 10, (338, 711, 64, 34)));
 }
 
 #[test]
@@ -1318,6 +1531,7 @@ fn whole_floats_past_32_bits_are_invalid_arguments() {
           add('rect.' .. k, function(v) return layout(with(R, k, v), {kind = 'row', children = {{grow = 1}}}) end)\n\
           add('row.' .. k, function(v) return framed('row', 'r', with(ROW, k, v)) end)\n\
           add('button.' .. k, function(v) return framed('button', 'b', with(R, k, v)) end)\n\
+          add('field.' .. k, function(v) return framed('field', 'f', with(R, k, v)) end)\n\
           add('radio.' .. k, function(v) return framed('radio', 'r', with(with(R, 'items', {'a'}), k, v)) end)\n\
         end\n\
         for _, k in ipairs({'w', 'h', 'min_w', 'max_w', 'min_h', 'max_h', 'grow', 'shrink'}) do\n\
@@ -1336,15 +1550,18 @@ fn whole_floats_past_32_bits_are_invalid_arguments() {
             return layout(R, {kind = 'column', divider = {[k] = v}, children = {{grow = 1}, {grow = 1}}})\n\
           end)\n\
         end\n\
-        for _, k in ipairs({'width', 'height'}) do\n\
-          add('source.' .. k, function(v)\n\
-            return layout(R, {kind = 'row', children = {{kind = 'image', source = with({width = 5, height = 5}, k, v)}}})\n\
-          end)\n\
-        end\n\
         for _, k in ipairs({'gap', 'value', 'columns'}) do\n\
           add('radio.' .. k, function(v) return framed('radio', 'r', with(with(R, 'items', {'a', 'b'}), k, v)) end)\n\
         end\n\
         add('button.font_min', function(v) return framed('button', 'b', with(R, 'font_min', v)) end)\n\
+        add('grid.columns', function(v) return layout(R, {kind = 'grid', columns = v}) end)\n\
+        add('grid.min', function(v) return layout(R, {kind = 'grid', columns = {min = v}}) end)\n\
+        add('grid.track', function(v) return layout(R, {kind = 'grid', columns = {v}}) end)\n\
+        add('grid.rows', function(v) return layout(R, {kind = 'grid', columns = 1, rows = {v}}) end)\n\
+        add('grid.auto_rows', function(v) return layout(R, {kind = 'grid', columns = 1, auto_rows = v}) end)\n\
+        for _, k in ipairs({'column_span', 'row_span'}) do\n\
+          add('grid.' .. k, function(v) return layout(R, {kind = 'grid', columns = 2, children = {{[k] = v}}}) end)\n\
+        end\n\
         add('focus.part', function(v) return make():focus('a', v) end)\n\
         return check()";
     assert_eq!(layout_run("2.26", &format!("{SWEEP}{new_rules}")), "");
@@ -1359,4 +1576,103 @@ fn whole_floats_past_32_bits_are_invalid_arguments() {
         end\n\
         return check()";
     assert_eq!(layout_run("2.14", &format!("{SWEEP}{old_rules}")), "");
+}
+
+#[test]
+fn grid_row_spans_a_span_past_min_columns_and_unused_rows() {
+    let out = layout_run(
+        "2.26",
+        "local function boxes(b)\n\
+           local out = {}\n\
+           for i = 1, #b do out[i] = b[i].x .. ',' .. b[i].y .. ',' .. b[i].w .. ',' .. b[i].h end\n\
+           return table.concat(out, ' ')\n\
+         end\n\
+         local R = {x = 0, y = 0, w = 300, h = 'fit'}\n\
+         local spans = ui:layout(R, {kind = 'grid', columns = 3, auto_rows = 10, children = {\n\
+           {column_span = 2}, {row_span = 2}, {}, {column_span = 3, row_span = 2}, {}}})\n\
+         local _, cut = ui:layout({x = 0, y = 0, w = 480, h = 10}, {kind = 'grid', columns = {min = 200},\n\
+           children = {{column_span = 3}}})\n\
+         local rows = ui:layout(R, {kind = 'grid', columns = 1, rows = {50, 50}, children = {{}}})\n\
+         ui:begin_frame(g)\n\
+         local framed = table.pack(ui:grid('g', {x = 0, y = 0, w = 480, h = 10, columns = {min = 200},\n\
+           children = {{kind = 'button', id = 'b', text = 'b', column_span = 3}}}))\n\
+         return boxes(spans), cut, rows.h, framed[2]",
+    );
+    // a row span keeps its rows taken for later children; a span longer than the `{ min }` columns is refused once
+    // the width tells; explicit rows count even when no child reaches them
+    assert_eq!(
+        out,
+        "0,0,200,10 200,0,100,20 0,10,100,10 0,20,300,20 0,40,100,10,invalid_argument,100,invalid_argument"
+    );
+}
+
+#[test]
+fn the_next_field_skips_other_controls_and_disabled_fields() {
+    let out = layout_run(
+        "2.26",
+        &format!(
+            "{DOCKED}local trace = {{}}\n\
+             local function frame()\n\
+               ui:begin_frame(g)\n\
+               ui:field('a', {{x = 0, y = 0, w = 100, h = 40, enter = 'next', on_end = function(ctx, text, how)\n\
+                 trace[#trace + 1] = 'end:' .. text .. ':' .. how .. ':' .. tostring(ui:editing()) end}})\n\
+               ui:button('b', {{x = 0, y = 50, w = 100, h = 40}})\n\
+               ui:field('c', {{x = 0, y = 100, w = 100, h = 40, enabled = false}})\n\
+               ui:field('d', {{x = 0, y = 150, w = 100, h = 40, text = 'dd', enter = 'next'}})\n\
+               ui:end_frame()\n\
+             end\n\
+             frame() trace[#trace + 1] = tap(5, 5)\n\
+             finish('enter', 'x')\n\
+             trace[#trace + 1] = tostring(ui:editing()) .. ':' .. tostring(ui:focused()) .. ':' .. opened[2].text\n\
+             finish('enter')\n\
+             trace[#trace + 1] = tostring(ui:editing()) .. ':' .. #opened\n\
+             tap(5, 5) refuse = 'busy' finish('enter', 'x')\n\
+             trace[#trace + 1] = tostring(ui:editing()) .. ':' .. tostring(ui:focused())\n\
+             return table.concat(trace, ' ')"
+        ),
+    );
+    // inside its own on_end the field is no longer edited; a refused next edit still takes focus there
+    assert_eq!(
+        out,
+        "a,edit end:x:enter:nil d:d:dd nil:2 end:x:enter:nil nil:d"
+    );
+}
+
+#[test]
+fn field_callbacks_that_are_not_functions_are_left_out_and_a_secret_counts_characters() {
+    let out = layout_run(
+        "2.26",
+        &format!(
+            "{DOCKED}ui:begin_frame(g)\n\
+             ui:field('n', {{x = 0, y = 0, w = 100, h = 40, on_change = 5, on_end = 'x', enter = 'next'}})\n\
+             ui:field('s', {{x = 0, y = 50, w = 100, h = 40, kind = 'secret', text = 'äöü'}})\n\
+             ui:field('z', {{x = 0, y = 100, w = 100, h = 40, kind = 'secret', text = '\\255\\254'}})\n\
+             ui:end_frame()\n\
+             tap(5, 5) typed('t') finish('enter')\n\
+             return log[4], log[6], ui:editing()"
+        ),
+    );
+    assert_eq!(
+        out,
+        "text_box(8,58,84,24,***,{font=@medium,overflow=ellipsis,valign=middle,wrap=none}),\
+         text_box(8,108,84,24,**,{font=@medium,overflow=ellipsis,valign=middle,wrap=none}),s"
+    );
+}
+
+#[test]
+fn an_edit_ends_at_end_frame_only_when_its_id_is_no_longer_a_field() {
+    let out = layout_run(
+        "2.26",
+        &format!(
+            "{DOCKED}local out = {{}}\n\
+             local function frame(decl) ui:begin_frame(g) decl() ui:end_frame()\n\
+               out[#out + 1] = tostring(ui:editing()) .. ':' .. closed end\n\
+             frame(function() ui:field('a', {{x = 0, y = 0, w = 100, h = 40}}) end)\n\
+             tap(5, 5)\n\
+             frame(function() ui:field('a', {{x = 0, y = 50, w = 100, h = 40, enabled = false}}) end)\n\
+             frame(function() ui:button('a', {{x = 0, y = 0, w = 100, h = 40}}) end)\n\
+             return table.concat(out, ' ')"
+        ),
+    );
+    assert_eq!(out, "nil:0 a:0 nil:1");
 }

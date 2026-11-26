@@ -161,7 +161,7 @@ pub(crate) fn new_ctx(
         reader::install(lua, &ctx, st)?;
     }
     ui::install(lua, &ctx, st)?;
-    inkui::install(lua, &ctx, app)?;
+    inkui::install(lua, &ctx, st, app)?;
     image::install(lua, &ctx, st)?;
     layers::install(lua, &ctx, st)?;
     lock::install(lua, &ctx, st, lockscreen_api)?;

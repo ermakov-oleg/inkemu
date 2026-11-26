@@ -13,6 +13,10 @@ Already green and pinned: `01/globals_absent` (the globals that must not exist).
 
 All §3 checks are green and pinned: `03/color_threshold`, `03/device_profile` (the profile values, with the keyboard height as deviation D1), `03/gray_frame_refresh`, `03/gray_next_frame_full`, `03/gray_pixels` (the gray levels as described under "Gray frames" in `README.md`), `03/gray_layer_ignored`.
 
+## §4 Input
+
+All §4 checks are green and pinned (contract only): `04/edit_option_types` (an option of the wrong type raises), `04/edit_option_ranges`, `04/edit_input_routing` (while a docked edit is open, a pointer going down above the keyboard and outside `rect` and the arrow keys reach the app; `rect`, the keyboard, Back and `ok` do not). The rule that a pointer belongs to the side where it went down (drags across the keyboard edge, an edit opening or closing mid-gesture) is pinned by `crates/inkcore/tests/edit.rs`, since the runner's steps have no drag; so is inkemu's choice to check every option's type before any range. Not covered: the rest of §4 (`ctx.input:text`, event fields, gestures, key repeat, typing on a hardware keyboard, the full-screen fallback without touch), the cursor and text drawn in `rect`, composition.
+
 ## §5 Presenting a frame
 
 Already green and pinned: `05/cmd_cap_1025`, `05/cmd_cap_clear`, `05/cmd_cap_text_box_lines`, `05/cmd_cap_text_box_counter` (the rectangles that still fit after a refused `text_box`), `05/cmd_cap_underline`, `05/cmd_cap_underline_text`, `05/invalidate_args`, `05/invalidate_valid`, `05/perf_info`, `05/refresh_first_frame` (an inkemu choice: the contract does not classify the first frame), `05/refresh_plain`, `05/refresh_full_arg`, `05/refresh_full_wins`, `05/refresh_full_in_draw`, `05/refresh_auto_full`, `05/refresh_defer_blocks_auto`, `05/defer_args`.

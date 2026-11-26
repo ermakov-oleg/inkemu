@@ -29,7 +29,10 @@ function on_draw(ctx, g)
   end)
   refused("no_width", "row", { x = 0, y = 500, w = 300, h = 50, children = { { kind = "button", id = "e1", text = "one" } } })
   refused("spacer", "column", { x = 0, y = 500, w = 200, h = 300, children = {
-    { kind = "button", id = "d1", text = "one", w = 200, h = 40 }, { kind = "spacer", w = 1, h = 1 } } })
+    { kind = "spacer", w = 1, h = 1 }, { kind = "button", id = "d1", text = "one", w = 200, h = 40 } } })
+  -- the children are registered one by one: those before an invalid one stay
+  refused("partial", "column", { x = 0, y = 600, w = 200, h = 300, children = {
+    { kind = "button", id = "q1", text = "q1", w = 100, h = 40 }, { kind = "button", id = "q2", text = "q2", h = 40 } } })
   refused("fit", "column", { x = 0, y = 500, w = "fit", h = 100, children = {} })
   -- whole floats that a 32-bit Lua cannot hold as integers, and an x past 32767
   local one = { { kind = "button", id = "f1", text = "one", w = 50, h = 40 } }
@@ -47,6 +50,7 @@ function on_draw(ctx, g)
   T.value("placed", calls == table.concat({
     button(0, 0, 150, 60, "one", false), button(0, 70, 250, 60, "two", false), button(0, 300, 80, 50, "p1", false),
     L.call("text_box", 85, 300, 80, 30, "label", { font = ctx.fonts.medium, overflow = "ellipsis" }),
+    button(0, 600, 100, 40, "q1", false),
   }, " "))
   -- the second child is wider than its column and is drawn whole
   T.value("not_clipped", string.find(calls, L.call("rect", 0, 70, 250, 60, { fill = false, radius = 0 }), 1, true) ~= nil)

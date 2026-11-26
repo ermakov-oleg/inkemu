@@ -12,6 +12,8 @@ local DRAW_OPS = {
 }
 
 local G, FONT_NAMES = nil, {}
+-- image objects by the scenario's "@img:WxH" marker and back, and the stub's edit objects
+local IMAGES, IMAGE_NAMES, EDIT_NAMES = {}, {}, setmetatable({}, { __mode = "k" })
 local stream, counts, host_errors = {}, {}, {}
 
 -- JSON ---------------------------------------------------------------------------------------------------------
@@ -64,6 +66,9 @@ value = function(v)
   if t ~= "table" then return str("@" .. t) end
   if FONT_NAMES[v] then return str("@font:" .. FONT_NAMES[v]) end
   if rawequal(v, G) then return '"@g"' end
+  if IMAGE_NAMES[v] then return str(IMAGE_NAMES[v]) end
+  if rawequal(v, ctx) then return '"@ctx"' end
+  if EDIT_NAMES[v] then return '"@ed"' end
   local n, count = #v, 0
   for _ in pairs(v) do count = count + 1 end
   if n > 0 and n == count then return list(v, 1, n) end
@@ -129,22 +134,89 @@ end
 
 local MARKERS = { ["@rec"] = true, ["@rect"] = true, ["@throw"] = true }
 
+-- an image object of `w` x `h` from the PNG the test put in the package, one per size
+local function image(w, h)
+  local key = w .. "x" .. h
+  if IMAGES[key] == nil then
+    local img = assert(ctx.package:image("img_" .. key .. ".png"))
+    IMAGES[key] = img
+    IMAGE_NAMES[img] = "@img:" .. key
+  end
+  return IMAGES[key]
+end
+
+-- a host callback (a field's on_change or on_end) that only records its arguments
+local function callback(id, key)
+  return function(...)
+    record(object({ op = '"@cb"', id = value(id), key = value(key), a = list(table.pack(...), 1, select("#", ...)) }),
+      "@cb")
+  end
+end
+
 -- the scenario's value markers turned into real values
-local function conv(v, id)
+local function conv(v, id, key)
   if type(v) == "string" then
     local font = string.match(v, "^@font:(%a+)$")
     if font then return ctx.fonts[font] end
+    local w, h = string.match(v, "^@img:(%d+)x(%d+)$")
+    if w then return image(w, h) end
     if MARKERS[v] then return draw_fn(v, id) end
     if v == "@none" or v == "@nil" then return nil end
     if v == "@g" then return G end
     if v == "@fn" then return function() end end
+    if v == "@ctx" then return ctx end
+    if v == "@cb" then return callback(id, key) end
+    if v == "@nan" then return 0 / 0 end
+    if v == "@inf" then return math.huge end
     return v
   end
   if type(v) ~= "table" then return v end
   local here = type(v.id) == "string" and v.id or id
   local t = {}
-  for k, x in pairs(v) do t[k] = conv(x, here) end
+  for k, x in pairs(v) do t[k] = conv(x, here, k) end
   return t
+end
+
+-- the docked input as the oracle's stub: `ctx.input:edit` records its options and answers by INPUT_MODE; the steps
+-- `edit_type` and `edit_end` play the host's part on the live edit
+local INPUT_MODE, EDITS = "ok", {}
+
+local function stub_edit(_, o)
+  record(object({ op = '"@input_edit"', a = value(o) }), "@input_edit")
+  if INPUT_MODE ~= "ok" then return nil, INPUT_MODE end
+  local ed = { t = o.text or "", alive = true, o = o }
+  function ed.text(self) return self.alive and self.t or nil end
+  function ed.close(self)
+    record(object({ op = '"@ed_close"', alive = value(self.alive) }), "@ed_close")
+    if not self.alive then return nil end
+    self.alive = false
+    return self.t
+  end
+  EDIT_NAMES[ed] = true
+  EDITS[#EDITS + 1] = ed
+  return ed
+end
+
+local function live_edit()
+  for i = #EDITS, 1, -1 do
+    if EDITS[i].alive then return EDITS[i] end
+  end
+end
+
+-- `edit_type` / `edit_end`: the error of a callback that raised, or nil
+local function host_edit(s)
+  local ed = live_edit()
+  if ed == nil then return '"@no live edit"' end
+  local o, r = ed.o, nil
+  if s.op == "edit_type" then
+    ed.t = s.text
+    if type(o.on_change) == "function" then r = table.pack(pcall(o.on_change, ctx, s.text)) end
+  else
+    if s.text ~= nil then ed.t = s.text end
+    ed.alive = false
+    if type(o.on_end) == "function" then r = table.pack(pcall(o.on_end, ctx, ed.t, s.how)) end
+  end
+  if r and not r[1] then return str(strip(r[2])) end
 end
 
 -- layout results -----------------------------------------------------------------------------------------------
@@ -218,6 +290,10 @@ local function run(i, s)
   stream, counts, host_errors = {}, {}, {}
   local out = { i = value(i), op = str(s.op) }
   local u = objs[s.ui or "ui"]
+  if s.op == "input_mode" then
+    INPUT_MODE = s.mode
+    return object(out)
+  end
   if s.op == "create" then
     local r
     if s.raw then
@@ -262,7 +338,16 @@ local function run(i, s)
     out.calls = "[" .. table.concat(calls, ",") .. "]"
   end
   if s.op == "frame" or s.op == "end" then out["end"] = call(u.end_frame, u) end
-  if s.op == "event" then out.ret = call(u.handle_event, u, conv(s.ev)) end
+  if s.op == "event" then
+    out.ret = call(u.handle_event, u, conv(s.ev))
+    if #stream > 0 then out.side_effects = "[" .. table.concat(stream, ",") .. "]" end
+  end
+  if s.op == "edit_type" or s.op == "edit_end" then
+    out.error = host_edit(s)
+    out.stream = "[" .. table.concat(stream, ",") .. "]"
+    out.focused = call(u.focused, u)
+    out.editing = call(u.editing, u)
+  end
   if s.op == "focus" then out.ret = call(u.focus, u, table.unpack(conv(s.args or {}), 1, s.n or 0)) end
   if s.op == "focused" then out.ret = call(u.focused, u) end
   if s.op == "layout" then
@@ -289,6 +374,7 @@ function on_draw(ctx, g)
   for _, name in ipairs({ "small", "medium", "large" }) do FONT_NAMES[ctx.fonts[name]] = name end
   HOST_LAYOUT = type(ctx.fonts.medium.layout) == "function"
   patch(g)
+  ctx.input.edit = stub_edit
   if input.no_pattern then g.pattern = nil end
   if input.touch == false then ctx.input.pointer = false end
   local out = {}

@@ -1,0 +1,36 @@
+{
+ "expect_mismatches":[],
+ "file":"s34_grid_more.api26.json",
+ "scenario":"s34_grid_more",
+ "title":"grid and stack: placement and sizing follow-ups",
+ "input":{"api":"2.26","canvas":[480,800],"touch":true,"steps":[
+  {"op":"create"},
+  {"note":"auto placement with column and row spans","op":"layout","rect":{"h":800,"w":480,"x":0,"y":0},"spec":{"auto_rows":40,"children":[{"column_span":2,"id":"wide"},{"id":"tall","row_span":2},{"id":"one"},{"column_span":3,"id":"big","row_span":2},{"id":"two"}],"columns":3,"kind":"grid"}},
+  {"note":"a row span blocks cells below","op":"layout","rect":{"h":800,"w":480,"x":0,"y":0},"spec":{"auto_rows":40,"children":[{"id":"a1"},{"id":"t2","row_span":3},{"id":"a3"},{"id":"a4"},{"id":"a5"},{"column_span":2,"id":"a6"},{"id":"a7"}],"columns":3,"kind":"grid"}},
+  {"note":"span wider than columns min gives","op":"layout","rect":{"h":800,"w":480,"x":0,"y":0},"spec":{"auto_rows":40,"children":[{"column_span":3,"id":"sp"},{"id":"b"}],"columns":{"min":200},"kind":"grid"}},
+  {"note":"fit height with two rows and one child","op":"layout","rect":{"h":"fit","w":300,"x":0,"y":0},"spec":{"children":[{"id":"only"}],"columns":2,"kind":"grid","rows":[50,50]}},
+  {"note":"fit rows without children","op":"layout","rect":{"h":"fit","w":300,"x":0,"y":0},"spec":{"children":[{"id":"only2","kind":"button","text":"x"}],"columns":2,"kind":"grid","rows":["fit","fit","fit"]}},
+  {"note":"spacer then two boxes","op":"layout","rect":{"h":800,"w":480,"x":0,"y":0},"spec":{"auto_rows":30,"children":[{"kind":"spacer"},{"id":"sa"},{"id":"sb"}],"columns":2,"kind":"grid"}},
+  {"note":"two grids in a column, columns min with w fit","op":"layout","rect":{"h":800,"w":480,"x":0,"y":0},"spec":{"children":[{"auto_rows":40,"children":[{"id":"m1"},{"id":"m2"},{"id":"m3"}],"columns":2,"id":"g1","kind":"grid"},{"children":[{"id":"n1"},{"id":"n2"}],"columns":{"min":100},"id":"g2","kind":"grid","w":"fit"}],"kind":"column"}},
+  {"note":"hidden, false and a zero-width child","op":"layout","rect":{"h":800,"w":480,"x":0,"y":0},"spec":{"auto_rows":30,"children":[{"hidden":true,"id":"ha"},false,{"id":"hb"},{"id":"hz","max_w":0,"min_w":0},{"id":"hc"}],"columns":2,"kind":"grid"}},
+  {"note":"stack with a zero-height child","op":"layout","rect":{"h":100,"w":200,"x":10,"y":10},"spec":{"children":[{"id":"z1","max_h":0,"min_h":0},{"id":"z2","justify_self":"start","kind":"button","text":"b"}],"kind":"stack"}},
+  {"note":"fr rows with a known height","op":"layout","rect":{"h":800,"w":480,"x":0,"y":0},"spec":{"align_content":"space-between","children":[{"id":"q1"},{"id":"q2"},{"id":"q3"}],"columns":["1fr","1fr"],"kind":"grid","rows":["1fr",40]}},
+  {"note":"row heights from final column widths with fit and fr","op":"layout","rect":{"h":"fit","w":300,"x":0,"y":0},"spec":{"auto_rows":"fit","children":[{"column_span":1,"id":"lb","kind":"label","text":"wrapping label text in a fr column"},{"id":"bt","kind":"button","text":"fit me"},{"id":"lc","kind":"label","text":"another longer label that wraps in the 2fr column"}],"columns":[50,"fit","2fr"],"gap":5,"kind":"grid"}},
+  {"note":"stack items defaults","op":"layout","rect":{"h":200,"w":300,"x":0,"y":0},"spec":{"align_items":"end","children":[{"id":"sx","kind":"button","text":"default"},{"id":"sl","justify_self":"stretch","kind":"label","text":"lbl"}],"justify_items":"center","kind":"stack","padding":10}}
+ ]},
+ "output":[
+  {"i":1,"op":"create","ret":"ui object"},
+  {"i":2,"note":"auto placement with column and row spans","op":"layout","result":{"box":{"c":[{"h":40,"w":320,"x":0,"y":0},{"h":80,"w":160,"x":320,"y":0},{"h":40,"w":160,"x":0,"y":40},{"h":80,"w":480,"x":0,"y":80},{"h":40,"w":160,"x":0,"y":160}],"h":800,"keys":["big","one","tall","two","wide"],"w":480,"x":0,"y":0},"ids":{"big":".4","one":".3","tall":".2","two":".5","wide":".1"},"n_returns":1}},
+  {"i":3,"note":"a row span blocks cells below","op":"layout","result":{"box":{"c":[{"h":40,"w":160,"x":0,"y":0},{"h":120,"w":160,"x":160,"y":0},{"h":40,"w":160,"x":320,"y":0},{"h":40,"w":160,"x":0,"y":40},{"h":40,"w":160,"x":320,"y":40},{"h":40,"w":320,"x":0,"y":120},{"h":40,"w":160,"x":320,"y":120}],"h":800,"keys":["a1","a3","a4","a5","a6","a7","t2"],"w":480,"x":0,"y":0},"ids":{"a1":".1","a3":".3","a4":".4","a5":".5","a6":".6","a7":".7","t2":".2"},"n_returns":1}},
+  {"i":4,"note":"span wider than columns min gives","op":"layout","result":{"ret":[null,"invalid_argument"]}},
+  {"i":5,"note":"fit height with two rows and one child","op":"layout","result":{"box":{"c":[{"h":50,"w":150,"x":0,"y":0}],"h":100,"keys":["only"],"w":300,"x":0,"y":0},"ids":{"only":".1"},"n_returns":1}},
+  {"i":6,"note":"fit rows without children","op":"layout","result":{"box":{"c":[{"h":40,"w":150,"x":0,"y":0}],"h":40,"keys":["only2"],"w":300,"x":0,"y":0},"ids":{"only2":".1"},"n_returns":1}},
+  {"i":7,"note":"spacer then two boxes","op":"layout","result":{"box":{"c":[{"h":30,"w":240,"x":0,"y":0},{"h":30,"w":240,"x":240,"y":0},{"h":30,"w":240,"x":0,"y":30}],"h":800,"keys":["sa","sb"],"w":480,"x":0,"y":0},"ids":{"sa":".2","sb":".3"},"n_returns":1}},
+  {"i":8,"note":"two grids in a column, columns min with w fit","op":"layout","result":{"ret":[null,"invalid_argument"]}},
+  {"i":9,"note":"hidden, false and a zero-width child","op":"layout","result":{"box":{"c":[false,false,{"h":30,"w":240,"x":0,"y":0},{"h":30,"w":0,"x":240,"y":0},{"h":30,"w":240,"x":0,"y":30}],"h":800,"keys":["hb","hc","hz"],"w":480,"x":0,"y":0},"ids":{"hb":".3","hc":".5","hz":".4"},"n_returns":1}},
+  {"i":10,"note":"stack with a zero-height child","op":"layout","result":{"box":{"c":[{"h":0,"w":200,"x":10,"y":10},{"h":100,"w":36,"x":10,"y":10}],"h":100,"keys":["z1","z2"],"w":200,"x":10,"y":10},"ids":{"z1":".1","z2":".2"},"n_returns":1}},
+  {"i":11,"note":"fr rows with a known height","op":"layout","result":{"box":{"c":[{"h":760,"w":240,"x":0,"y":0},{"h":760,"w":240,"x":240,"y":0},{"h":40,"w":240,"x":0,"y":760}],"h":800,"keys":["q1","q2","q3"],"w":480,"x":0,"y":0},"ids":{"q1":".1","q2":".2","q3":".3"},"n_returns":1}},
+  {"i":12,"note":"row heights from final column widths with fit and fr","op":"layout","result":{"box":{"c":[{"h":216,"w":50,"x":0,"y":0},{"h":216,"w":96,"x":55,"y":0},{"h":216,"w":144,"x":156,"y":0}],"h":216,"keys":["bt","lb","lc"],"w":300,"x":0,"y":0},"ids":{"bt":".2","lb":".1","lc":".3"},"n_returns":1}},
+  {"i":13,"note":"stack items defaults","op":"layout","result":{"box":{"c":[{"h":40,"w":108,"x":96,"y":150},{"h":24,"w":280,"x":10,"y":166}],"h":200,"keys":["sl","sx"],"w":300,"x":0,"y":0},"ids":{"sl":".2","sx":".1"},"n_returns":1}}
+ ]
+}

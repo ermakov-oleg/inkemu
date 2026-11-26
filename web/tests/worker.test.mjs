@@ -240,3 +240,25 @@ test('the text field replaces an edit\'s prefilled text instead of appending to 
   assert.equal(h.lastState().status.pending, null);
   assert.ok(texts(h.lastState()).includes('hi!:enter'));
 });
+
+test('while an edit is docked, a tap above the keyboard and an arrow key reach the app; the keyboard does not', async () => {
+  const h = harness();
+  const app = files({
+    'manifest.json': '{"app_id": "ed", "entry": "index.lua"}',
+    'index.lua':
+      "got = ''\n" +
+      "function on_load(c) c.input:edit({text = 'hi', rect = {x = 32, y = 132, w = 416, h = 40}}) end\n" +
+      "function on_input(c, e) got = got .. ' ' .. (e.key or e.gesture or e.phase); c:invalidate() return true end\n" +
+      "function on_draw(c, g) g:clear(0); g:text(0, 0, 'got' .. got) end\n",
+  });
+  await h.s.handle({ type: 'open', files: app, fixtures: new Map(), fonts: null, config: config() });
+  await h.s.handle({ type: 'cmd', cmd: { cmd: 'tap', x: 240, y: 300 } });
+  await h.s.handle({ type: 'cmd', cmd: { cmd: 'tap', x: 100, y: 150 } });
+  await h.s.handle({ type: 'cmd', cmd: { cmd: 'tap', x: 20, y: 700 } });
+  await h.s.handle({ type: 'cmd', cmd: { cmd: 'key', name: 'up' } });
+  assert.equal(h.errors().length, 0);
+  assert.equal(h.lastState().status.pending.kind, 'edit');
+  assert.ok(texts(h.lastState()).includes('got down tap up up'), texts(h.lastState()).join('|'));
+  await h.s.handle({ type: 'cmd', cmd: { cmd: 'key', name: 'ok' } });
+  assert.equal(h.lastState().status.pending, null);
+});

@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+### Breaking changes
+
+- `ctx.ui:create` checks `skins` as the contract says (an image object, `edge`/`pad` of 1 to 4 integers 0..255 in CSS
+  order that fit the image, `text_color` 0..15, state variants checked against their own image) and returns
+  `nil, "invalid_argument"` for a malformed one. 0.2 kept any table.
+- An `image` child of a `ui:layout` spec or a container takes only an image object as `source`; a plain table with
+  `width` and `height` is `invalid_argument`.
+- In a package for API 2.14 or earlier, a `row` or `column` that refuses a child keeps the children before it
+  registered (drawn, hit and focusable) and its own `id` taken, as the reader does; 0.2 registered nothing of it.
+- `ctx.input:edit` raises a Lua error for an option of the wrong type (`multiline = "yes"`, `kind = 5`, a `rect`
+  without `h`, an `on_end` that is not a function), as §0 says; a value of the right type out of range is still
+  `nil, "invalid_argument"`. 0.2 returned `invalid_argument` for both. So `ui:handle_event` on such a field raises.
+- While a docked edit is open, a pointer that goes down outside its `rect` and above the keyboard, and the `up`,
+  `down`, `left` and `right` keys, reach the app; `ok` is the confirm key. 0.2 sent all input to the edit. The edit's
+  plate (`emu.shot()`, OK and Cancel) moved into the bottom `keyboard_h` rows.
+
+### Added
+
+- `ctx.ui` covers all of §16. New since 0.2: `switch`, `image`, image buttons, `field` with `ui:editing` and
+  `ui:stop_edit`, `tabs` (with `selected_style`), `stepper`, `pager`, `list` with page turning by the arrow keys,
+  `progress` (solid and stripes), skins with `ui:skin`, and the `grid` and `stack` layouts. As in 0.2, the library
+  follows firmware 26112001 measured as a black box where it differs from the contract; `spec/deviations.md` lists
+  those cases and what was not measured.
+
 ## 0.2.0
 
 inkemu now follows the official InkApp API contract 2.33.1, with firmware 26112001 measured on a reader where the two

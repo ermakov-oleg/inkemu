@@ -11,6 +11,8 @@ use crate::log::py_repr_str;
 /// Every input advances virtual time by this much.
 pub const INPUT_MS: i64 = 350;
 pub const HOLD_MS: i64 = 600;
+/// The bottom rows the docked keyboard of `ctx.input:edit` covers (§3, §4; deviation D1).
+pub const KEYBOARD_H: i32 = 436;
 const KEYS: [&str; 6] = ["up", "down", "left", "right", "ok", "back"];
 const PHASES: [&str; 4] = ["down", "move", "hold", "up"];
 const SWIPES: [(&str, (i64, i64)); 4] = [
@@ -86,6 +88,14 @@ impl Event {
     }
 }
 
+/// Who a pointer belongs to while a docked edit is open, decided where it goes down (§4 "Input while editing").
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Side {
+    App,
+    Keyboard,
+    TextArea,
+}
+
 enum Gate {
     Go,
     Dialog(&'static str),
@@ -102,7 +112,7 @@ impl Host<'_> {
         let gate = with(self.st, |s| {
             if s.locked {
                 Gate::Ignored("the screen is locked")
-            } else if let Some(p) = &s.pending {
+            } else if let Some(p) = s.pending.as_ref().filter(|p| p.kind != "edit") {
                 Gate::Dialog(p.kind)
             } else if !s.running {
                 Gate::Ignored("the app is not running")
@@ -115,16 +125,9 @@ impl Host<'_> {
                 let msg = format!("input ignored, {why}: {} {}", ev.kind, ev.phase);
                 return with(self.st, |s| s.log_line(&msg));
             }
-            Gate::Dialog("edit") if ev.key == Some("back") => {
-                if ev.phase == "up" {
-                    with(self.st, |s| s.log_line("back ended the edit"));
-                    let _ = self.answer_now(false);
-                }
-                return;
-            }
             Gate::Dialog(kind) => {
                 if ev.phase == "up" {
-                    let how = if matches!(kind, "text" | "edit") {
+                    let how = if kind == "text" {
                         "type text or answer it"
                     } else {
                         "answer it"
@@ -170,6 +173,7 @@ impl Host<'_> {
                 type_text: None,
                 submit: None,
                 ok_keeps_open: false,
+                rect: None,
             };
             self.set_pending("leave", "Leave app?".into(), String::new(), leave);
             with(self.st, |s| {
@@ -184,6 +188,57 @@ impl Host<'_> {
         self.wait(INPUT_MS)
     }
 
+    /// Where a pointer going down at x, y belongs: the docked keyboard, the edit's text area, or the app.
+    fn side_at(&self, x: i32, y: i32) -> Side {
+        with(self.st, |s| {
+            let editing = s.pending.as_ref().is_some_and(|p| p.kind == "edit");
+            if s.locked || !editing {
+                return Side::App;
+            }
+            if y >= s.canvas.h as i32 - KEYBOARD_H {
+                return Side::Keyboard;
+            }
+            let (x, y) = (i64::from(x), i64::from(y));
+            let rect = s.pending_h.as_ref().and_then(|h| h.rect);
+            match rect {
+                Some((rx, ry, rw, rh))
+                    if (rx..rx + rw).contains(&x) && (ry..ry + rh).contains(&y) =>
+                {
+                    Side::TextArea
+                }
+                _ => Side::App,
+            }
+        })
+    }
+
+    /// The up of a pointer that went down on the docked keyboard or in the edit's text area; the app gets none
+    /// of it. A tap on the keyboard plate's buttons answers the edit.
+    fn edit_pointer_up(
+        &self,
+        side: Side,
+        gesture: Option<&str>,
+        x: i32,
+        y: i32,
+    ) -> Result<(), String> {
+        let editing = self.pending_kind() == Some("edit");
+        if side == Side::Keyboard && editing && gesture == Some("tap") {
+            if let Some((label, ok)) = self.dialog_hit(x, y) {
+                with(self.st, |s| {
+                    s.log_line(&format!("edit dialog: {label} tapped"))
+                });
+                return Host::with_current(self.st, |h| h.answer(ok));
+            }
+        }
+        let place = match side {
+            Side::Keyboard => "docked keyboard (type text or answer it)",
+            _ => "edit's text area (the host moves the cursor)",
+        };
+        let what = gesture.unwrap_or("pointer");
+        let msg = format!("input went to the {place}, not the app: {what} at {x},{y}");
+        with(self.st, |s| s.log_line(&msg));
+        self.wait(INPUT_MS)
+    }
+
     pub fn pointer(&self, phase: &str, x: i32, y: i32) -> Result<(), String> {
         let Some(&phase) = PHASES.iter().find(|p| **p == phase) else {
             return Err(format!(
@@ -193,9 +248,11 @@ impl Host<'_> {
             ));
         };
         let now = self.now_ms();
+        let side_down = (phase == "down").then(|| self.side_at(x, y));
         let down = with(self.st, |s| {
-            if phase == "down" {
+            if let Some(side) = side_down {
                 s.down = Some((x, y, now));
+                s.down_side = side;
                 s.hold_sent = false;
             } else if s.down.is_none() {
                 s.log_line(&format!("pointer {phase} without down ignored"));
@@ -206,9 +263,9 @@ impl Host<'_> {
             if phase == "up" {
                 s.down = None;
             }
-            Some((d, s.hold_sent))
+            Some((d, s.hold_sent, s.down_side))
         });
-        let Some(((dx, dy, t0), hold_sent)) = down else {
+        let Some(((dx, dy, t0), hold_sent, side)) = down else {
             return Ok(());
         };
         let mut ev = Event {
@@ -220,13 +277,19 @@ impl Host<'_> {
             time_ms: now,
         };
         if phase != "up" {
-            self.send(&ev);
+            if side == Side::App {
+                self.send(&ev);
+            }
             return Ok(());
         }
         // a frozen window clock must not turn a delivered hold into a tap
         let held = (now - t0).max(if hold_sent { HOLD_MS } else { 0 });
         ev.gesture = classify(x.saturating_sub(dx), y.saturating_sub(dy), held);
-        if ev.gesture == Some("tap") {
+        if side != Side::App {
+            return self.edit_pointer_up(side, ev.gesture, x, y);
+        }
+        // the app's pointer stays the app's even where it ends on the docked keyboard
+        if ev.gesture == Some("tap") && self.pending_kind() != Some("edit") {
             if let Some((label, ok)) = self.dialog_hit(x, y) {
                 with(self.st, |s| {
                     let kind = s.pending.as_ref().map_or("", |p| p.kind);
@@ -249,7 +312,13 @@ impl Host<'_> {
         self.tap(x, y)?;
         self.wait(100)?;
         self.pointer("down", x, y)?;
-        with(self.st, |s| s.down = None);
+        let side = with(self.st, |s| {
+            s.down = None;
+            s.down_side
+        });
+        if side != Side::App {
+            return self.edit_pointer_up(side, Some("double_tap"), x, y);
+        }
         let ev = Event {
             kind: "pointer",
             phase: "up",
@@ -337,6 +406,20 @@ impl Host<'_> {
                 KEYS.join(", ")
             ));
         };
+        // on a touch device Back ends a docked edit and `ok` is its confirm key; other keys reach the app (§4)
+        let editing = with(self.st, |s| {
+            !s.locked && s.pending.as_ref().is_some_and(|p| p.kind == "edit")
+        });
+        if editing && matches!(name, "back" | "ok") {
+            let msg = if name == "back" {
+                "back ended the edit"
+            } else {
+                "ok pressed the edit's confirm key"
+            };
+            with(self.st, |s| s.log_line(msg));
+            let _ = self.answer_now(name == "ok");
+            return self.wait(INPUT_MS);
+        }
         self.send(&Event::key(name, "down", self.now_ms()));
         self.dispatch(&Event::key(name, "up", self.now_ms()))
     }

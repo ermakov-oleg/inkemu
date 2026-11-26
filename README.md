@@ -445,7 +445,7 @@ Grey, as measured on 26112001: the canvas of a normal frame is 1-bit, and grey i
   (`locale`), `perf` (`info` = `{tick_us, draw_us, cmd_count, image_count, asset_hit, asset_miss, draw_frame}`:
   `cmd_count` and `image_count` are the commands and `g:image` calls accepted in the last frame, `draw_frame` the
   frames of this session), `gc`, `budget`, `reader` (answers from `<fixtures dir>/reader.json`), `lockscreen`, `lock`.
-- `ui` (§16), in part: see [`ctx.ui`](#ctxui) below.
+- `ui` (§16): see [`ctx.ui`](#ctxui) below.
 
 `clock:now()` has `year month day hour minute second weekday hour12 date_order date_sep epoch_sec local_sec
 offset_minutes revision valid`.
@@ -457,20 +457,18 @@ measurements of firmware 26112001. It runs in the app's Lua state in an environm
 instructions count against the app's budget. `ctx.capabilities.ui` is true without `"requires": ["ui"]`, and the
 package manifest's `api` decides which rules apply.
 
-- Works: `create`, `begin_frame`/`end_frame`, `label`, `button` (text, `selected`, `emphasis`, `badge`, `border`,
-  both focus styles), `region` with its `draw`, `radio` (items are parts with their own hits and focus,
-  `change`/`activate` with the item number), `handle_event`, `focus`/`focused` with parts, the arrow keys (by
-  position from API 2.13, in declaration order before it), `row`/`column` (the 2.15 flex layout with `wrap`,
-  `baseline`, `aspect_ratio`, percentages, background, border, radius and dividers; the earlier rules for packages
-  before 2.15) and `ui:layout`.
-- Raises "not implemented in inkemu yet": the methods `switch`, `tabs`, `image`, `field`, `stepper`, `pager`,
-  `list`, `progress`, `grid`, `stack` (before 2.15 these two give `invalid_argument`), `skin`, `editing` and
-  `stop_edit`; the same kinds as children in a frame (`ui:layout` places children of every control kind);
-  `grid` and `stack` children; a button `image`; a registered skin on a button, a radio, a `switch` or `tabs`
-  child, and a container in a frame. An unregistered skin is `invalid_argument`. `create` takes `skins` without checking
-  their entries, which the contract refuses when malformed.
+- Every method and control kind of §16 works: `create` (with `skins` and `focus_style`), `begin_frame`/`end_frame`,
+  `label`, `button` (text, image buttons, `selected`, `emphasis`, `badge`, `border`, `align`, skins, both focus
+  styles), `switch`, `image`, `region` with its `draw`, `field` with editing through `ctx.input:edit`
+  (`enter = "next"`, `ui:editing`, `ui:stop_edit`), the composite controls `tabs` (with `selected_style`), `radio`,
+  `stepper`, `pager`, `list` (with page turning by the arrow keys) and `progress` (solid and stripes), `ui:skin`
+  (nine-slice and the derived looks), `handle_event`, `focus`/`focused` with parts, the arrow keys (by position from
+  API 2.13, in declaration order before it), `row`/`column` (the 2.15 flex layout; the earlier rules for packages
+  before 2.15), `grid`, `stack` and `ui:layout`.
+- A `field` edits with inkemu's docked input, which is a dialog plate (see
+  [Differences from the device](#differences-from-the-device)).
 - Where the reader measurably differs from the contract, inkemu follows the reader; `spec/deviations.md` lists
-  each case (D3–D15).
+  each case.
 - The recorded firmware outputs are replayed in `tests/test_inkui_oracle.py`. A "Today" app built on `ctx.ui`
   draws its main, clock-face and setup screens in inkemu pixel for pixel as in x4pro-emu, except where the app
   draws its own shapes; its `ui:layout` boxes, focus and event results matched exactly. That comparison was a local
@@ -511,16 +509,18 @@ the start with an error. From each file inkemu takes:
 - Not emulated, so nil: `ctx.crypto`, `ctx.nn`, `ctx.widget`, `dialog:choose`, `i18n:t`,
   `input.keys`, `input.listen`, `input.gamepad`, `device.display`, `device.keep_awake`, `device.radios`,
   `screen.occlusion`. No BLE, no WebSocket.
-- `ctx.ui` is only part of §16: `switch`, `tabs`, `image`, `field`, `stepper`, `pager`, `list`, `progress`, `grid`,
-  `stack`, skins and editing raise "not implemented in inkemu yet" (see [`ctx.ui`](#ctxui)).
 - `ctx.capabilities` reports what inkemu emulates, except that `image_transform` is true as on the device: `dialog frontlight image_decode image_transform pattern reader ui`
   are true, `ble identity nn ttf` false. The device reports `ble dialog frontlight identity image_decode
   image_transform nn pattern reader ui` as true and `ttf` as false.
-- Docked input (`ctx.input:edit`) is the dialog plate: the app gets no input while it is open (on the device,
-  pointers outside `rect` and the keys other than Back still reach it), the host draws no text in `rect` (it is
-  checked and logged), `kind` and `placeholder` are only checked, and there is no composition and no full-screen
-  fallback. `type` types the text and presses the confirm key; a newline in it is the confirm key too. With
-  `enter = "newline"`, `type` and `answer yes` insert a line break and the field stays open.
+- Docked input (`ctx.input:edit`) is a dialog plate in the bottom `keyboard_h` rows, where the keyboard is. Input
+  is routed as §4 says: a pointer belongs to the side where it went down, so one going down above the keyboard and
+  outside `rect` reaches the app (`ctx.ui` fields switch and buttons work during an edit), one in `rect` or
+  anywhere in the bottom `keyboard_h` rows does not, even where the app's picture shows below the plate (a tap on
+  OK or Cancel answers the edit); Back ends the edit, `ok` is the confirm key, and the other keys reach the app.
+  The host draws no text in `rect` (it is checked and logged), `kind` and `placeholder` are only checked, and there
+  is no cursor, composition or full-screen fallback. The desktop window still edits in a modal text box and sends
+  no input to the app meanwhile. `type` types the text and presses the confirm key; a newline in it is the confirm
+  key too. With `enter = "newline"`, `type` and `answer yes` insert a line break and the field stays open.
 - `ctx.system:act(s)` needs a string ("string expected" otherwise), as on the device; an unknown name returns
   `nil, "invalid_argument"`. `"refresh"` makes the next frame full, like `ctx:invalidate("full")`. `"sleep"` and
   `"power_off"` work only in an `on_input` delivering a key or pointer `up`, elsewhere (and in a lock screen

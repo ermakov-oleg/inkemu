@@ -20,6 +20,8 @@ pub(crate) struct Handler {
     pub submit: Option<TypeFn>,
     /// Answering OK leaves the dialog open (an `enter = "newline"` edit inserts a line break).
     pub ok_keeps_open: bool,
+    /// A docked edit's text area, `x, y, w, h`: a pointer going down in it belongs to the host (§4).
+    pub rect: Option<(i64, i64, i64, i64)>,
 }
 
 /// Python `repr` of the 0.1 `pending` dict.

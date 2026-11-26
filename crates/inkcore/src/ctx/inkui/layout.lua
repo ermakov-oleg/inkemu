@@ -1,6 +1,7 @@
--- ctx.ui (§16): `row` and `column` in a frame, `ui:layout`, `grid`/`stack` before 2.15, and how a container is
--- drawn. A package for API 2.15 or later gets the flex layout (layout_tree.lua, layout_flex.lua); an older one the
--- earlier rules, where every child is sized and they follow each other.
+-- ctx.ui (§16): `row`, `column`, `grid` and `stack` in a frame, `ui:layout`, and how a container is drawn. A
+-- package for API 2.15 or later gets the 2.15 layout (layout_tree.lua, layout_flex.lua, layout_grid.lua); an older
+-- one the earlier rules for a row or column, where every child is sized and they follow each other, and no grid or
+-- stack.
 
 -- An integer from the corner of a fill row `dy` of a rounded box of radius `r`: round(sqrt(r² − (r − dy − 0.5)²)),
 -- computed on integers as the k with (2k − 1)² <= 4r² − (2r − 2dy − 1)² < (2k + 1)².
@@ -41,14 +42,19 @@ local function band(g, x, y, w, h, color, radius)
   end
 end
 
--- the background, the border and the dividers of container node `n`, under its children
+-- the background and the border (or the skin's normal look instead), then the dividers of container node `n`,
+-- under its children
 local function paint_container(g, c)
   local n = c.node
-  if n.background then
-    band(g, n.x, n.y, n.w, n.h, n.background, n.radius)
-  end
-  if n.border then
-    g:rect(n.x, n.y, n.w, n.h, { color = n.border_color, line_width = n.line_width, radius = n.radius })
+  if n.skin then
+    skin_face(g, n.skin, n.x, n.y, n.w, n.h, {})
+  else
+    if n.background then
+      band(g, n.x, n.y, n.w, n.h, n.background, n.radius)
+    end
+    if n.border then
+      g:rect(n.x, n.y, n.w, n.h, { color = n.border_color, line_width = n.line_width, radius = n.radius })
+    end
   end
   local d = n.divider
   if d == nil then
@@ -74,42 +80,37 @@ end
 -- what end_frame keeps for a container: it takes no focus and paints only its own look
 local CONTAINER_KIND = { paint = paint_container }
 
--- The control record of node `n`, checked by its kind's own rules: the record, or nil and the error code, or nil,
--- nil and the message of a part inkemu does not implement.
+-- The control record of node `n`, checked by its kind's field rules: the record, or nil and the error code.
 local function control_of(st, n)
   local c = { kind = kinds[n.kind], id = n.id }
-  local ok, unsupported = c.kind.check(c, n.o, st)
-  if unsupported then
-    return nil, nil, unsupported
-  end
-  if not ok then
+  if not c.kind.check(c, n.o, st) then
     return nil, INVALID
   end
   return c
 end
 
--- Checks the controls under `n` without registering them (a hidden or zero-size subtree); returns as `register`.
+-- Checks the fields of the controls under `n` without registering them (a hidden or zero-size subtree), but not
+-- their boxes; returns as `register`.
 local function check_only(st, n)
   if CONTAINERS[n.kind] then
     for _, child in ipairs(n.nodes or n.children) do
       if child then
-        local _, err, unsupported = check_only(st, child)
-        if err or unsupported then
-          return nil, err, unsupported
+        local _, err = check_only(st, child)
+        if err then
+          return nil, err
         end
       end
     end
   elseif CONTROLS[n.kind] then
-    local _, err, unsupported = control_of(st, n)
-    return nil, err, unsupported
+    local _, err = control_of(st, n)
+    return nil, err
   end
 end
 
 -- Registers the placed tree `n` in frame `f` in declaration order, containers before their children, checking each
 -- control's own fields and box as it comes, as the reader does. A hidden node, or one with no width or no height, is
 -- left out with everything in it, but its controls are still checked. Stops at the first refusal, keeping what was
--- registered before. Returns nothing, or nil and the error code, or nil, nil and the message of a part inkemu does
--- not implement.
+-- registered before. Returns nothing, or nil and the error code.
 local function register(st, f, n)
   if n.hidden or n.w <= 0 or n.h <= 0 then
     return check_only(st, n)
@@ -124,9 +125,9 @@ local function register(st, f, n)
     f.list[#f.list + 1] = { kind = CONTAINER_KIND, id = n.id, node = n }
     for _, child in ipairs(n.nodes or n.children) do
       if child then
-        local _, err, unsupported = register(st, f, child)
-        if err or unsupported then
-          return nil, err, unsupported
+        local _, err = register(st, f, child)
+        if err then
+          return nil, err
         end
       end
     end
@@ -135,13 +136,13 @@ local function register(st, f, n)
   if not CONTROLS[n.kind] then
     return
   end
-  local c, err, unsupported = control_of(st, n)
+  local c, err = control_of(st, n)
   if c == nil then
-    return nil, err, unsupported
+    return nil, err
   end
   -- placed first: what a control costs may depend on its box
   c.x, c.y, c.w, c.h = n.x, n.y, n.w, n.h
-  if not in_range(c) then
+  if not box_ok(c) then
     return nil, INVALID
   end
   if not reserve(f, cost_of(c)) then
@@ -162,9 +163,22 @@ local function outer_side(v)
   end
 end
 
--- `ui:row(id, o)` and `ui:column(id, o)`. Returns nothing, or nil and the error code. `level` is error()'s level of
--- the app's call; callers must not tail-call this.
-local function declare_container(st, kind, id, o, level)
+-- Places the tree `root` at `x, y` with the call's `w` and `h` (see root_size): true, or nil and the error code
+-- when a grid finds a span longer than its `{ min }` columns, which only the laid-out width tells.
+local function lay_out(root, x, y, w, h)
+  local ok, err = pcall(function() place(root, x, y, root_size(root, w, h)) end)
+  if ok then
+    return true
+  end
+  if err == SPAN_TOO_LONG then
+    return nil, INVALID
+  end
+  error(err, 0)
+end
+
+-- `ui:row(id, o)`, `ui:column(id, o)`, `ui:grid(id, o)` and `ui:stack(id, o)` (2.15). Returns nothing, or nil and
+-- the error code.
+local function declare_container(st, kind, id, o)
   local f = st.frame
   if f == nil or type(id) ~= "string" or id == "" or f.ids[id] or type(o) ~= "table" then
     return nil, INVALID
@@ -174,21 +188,21 @@ local function declare_container(st, kind, id, o, level)
     return nil, INVALID
   end
   local x, y = math.tointeger(o.x), math.tointeger(o.y)
-  local root, err, unsupported
+  local root, err
   if api_at_least(15) then
-    root, err, unsupported = layout_tree(st, f, id, kind, o)
+    root, err = layout_tree(st, f, id, kind, o, w)
     if root then
-      place(root, x, y, root_size(root, w, h))
+      local ok
+      ok, err = lay_out(root, x, y, w, h)
+      root = ok and root
     end
   else
-    root, err, unsupported = old_tree(st, f, id, kind, o, x, y, w, h)
+    -- a tree cut at its first invalid child: what comes before it is registered first
+    root, err = old_tree(st, f, id, kind, o, x, y, w, h)
   end
-  if not unsupported and root then
-    local _
-    _, err, unsupported = register(st, f, root)
-  end
-  if unsupported then
-    error(unsupported, level)
+  if root then
+    local _, refused = register(st, f, root)
+    err = refused or err
   end
   if err then
     return nil, err
@@ -197,7 +211,7 @@ end
 
 for _, name in ipairs({ "row", "column" }) do
   methods[name] = function(self, id, o)
-    local _, err = declare_container(state_of(self, name), name, id, o, 3)
+    local _, err = declare_container(state_of(self, name), name, id, o)
     if err then
       return nil, err
     end
@@ -205,12 +219,15 @@ for _, name in ipairs({ "row", "column" }) do
 end
 
 for _, name in ipairs({ "grid", "stack" }) do
-  methods[name] = function(self)
-    state_of(self, name)
+  methods[name] = function(self, id, o)
+    local st = state_of(self, name)
     if not api_at_least(15) then
       return nil, INVALID
     end
-    error("ui:" .. name .. " is not implemented in inkemu yet", 2)
+    local _, err = declare_container(st, name, id, o)
+    if err then
+      return nil, err
+    end
   end
 end
 
@@ -238,14 +255,14 @@ methods.layout = function(self, rect, spec)
   if not (is_coord(rect.x) and is_coord(rect.y) and w and h) then
     return nil, INVALID
   end
-  local root, err, unsupported = layout_tree(st, nil, nil, spec.kind, spec)
-  if unsupported then
-    error(unsupported, 2)
-  end
+  local root, err = layout_tree(st, nil, nil, spec.kind, spec, w)
   if not root then
     return nil, err
   end
-  place(root, math.tointeger(rect.x), math.tointeger(rect.y), root_size(root, w, h))
+  local ok, bad = lay_out(root, math.tointeger(rect.x), math.tointeger(rect.y), w, h)
+  if not ok then
+    return nil, bad
+  end
   local ids = {}
   local out = result(root, ids)
   for id, t in pairs(ids) do

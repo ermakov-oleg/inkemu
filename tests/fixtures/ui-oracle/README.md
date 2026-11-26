@@ -13,3 +13,16 @@ Reference results for `tests/test_inkui_oracle.py`.
 
 The data cannot be regenerated from this repository: the recording host and the library run outside it. New
 scenarios come from the same private harness and are copied here as they are.
+
+Markers in `input.steps`, turned into values by the recorder and by `runner.lua` alike:
+
+- `"@font:<size>"` a system font, `"@g"` the frame's canvas, `"@ctx"` the app's ctx, `"@nil"` an absent value,
+  `"@nan"` and `"@inf"` those numbers.
+- `"@img:<W>x<H>"` an image object of that size (the test writes a PNG of that size into the package); in results
+  it reads back as the same marker.
+- `"@rec"`, `"@rect"`, `"@throw"` region and list `draw` callbacks that record `@draw` (and draw a rect, or raise);
+  `"@cb"` a callback that records `@cb` with its key (`on_change`, `on_end`) and arguments.
+
+The docked input is a stub on both sides: `ctx.input:edit` records `@input_edit` with its options and returns an edit
+object (or `nil, <mode>` after an `input_mode` step), whose `close` records `@ed_close`. The steps `edit_type` and
+`edit_end` play the host: they call the live edit's `on_change(ctx, text)` or end it and call `on_end(ctx, text, how)`.

@@ -27,11 +27,14 @@ local function hit(list, px, py)
   end
 end
 
--- what activating target `t` returns: a composite's part names its own action and value
-local function activated(t)
+-- what activating target `t` returns: a composite's part names its own action and value, a field starts editing
+local function activated(st, t)
   local c = t.owner
   if c then
     return t.id, c.kind.activate(c, t.part)
+  end
+  if t.kind == kinds.field then
+    return activate_field(st, t)
   end
   return t.id, "activate"
 end
@@ -55,7 +58,7 @@ local function key(st, ev)
     end
     if pressed then
       if t then
-        return activated(t)
+        return activated(st, t)
       end
       return event_result(st.focus, "activate", st.part)
     end
@@ -81,7 +84,7 @@ local function pointer(st, ev)
     return event_result(t.id, "long_press", t.part)
   end
   set_focus(st, t.id, t.part)
-  return activated(t)
+  return activated(st, t)
 end
 
 methods.handle_event = function(self, ev)

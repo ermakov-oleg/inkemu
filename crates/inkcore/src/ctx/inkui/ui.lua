@@ -22,19 +22,6 @@ function state_of(self, name)
   return s
 end
 
--- every method of §16 exists from the start; the files that implement one replace its stub
-for _, name in ipairs({
-  "begin_frame", "end_frame", "handle_event", "focus", "focused", "layout", "skin", "editing", "stop_edit",
-  "label", "button", "switch", "image", "field", "region",
-  "tabs", "radio", "stepper", "pager", "list", "progress",
-  "row", "column", "grid", "stack",
-}) do
-  methods[name] = function(self)
-    state_of(self, name)
-    error("ui:" .. name .. " is not implemented in inkemu yet", 2)
-  end
-end
-
 local FOCUS_STYLES = { fill = true, outline = true }
 
 -- whether the device has a touchscreen, as `ctx.input.pointer` says when the object is created
@@ -61,7 +48,8 @@ function create(opts)
   elseif not FOCUS_STYLES[focus_style] then
     return nil, "invalid_argument"
   end
-  if opts.skins ~= nil and type(opts.skins) ~= "table" then
+  local skins = check_skins(opts.skins == nil and {} or opts.skins)
+  if skins == nil then
     return nil, "invalid_argument"
   end
   local obj = setmetatable({}, object_meta)
@@ -78,8 +66,10 @@ function create(opts)
     frame = nil,
     targets = {},
     owners = {},
-    -- the skins of `create`, by name
-    skins = opts.skins or {},
+    -- the skins of `create` by name, checked (skin.lua)
+    skins = skins,
+    -- the field being edited (field.lua)
+    edit = nil,
   }
   return obj
 end
