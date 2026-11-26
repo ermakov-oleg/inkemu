@@ -11,6 +11,12 @@
   `width` and `height` is `invalid_argument`.
 - In a package for API 2.14 or earlier, a `row` or `column` that refuses a child keeps the children before it
   registered (drawn, hit and focusable) and its own `id` taken, as the reader does; 0.2 registered nothing of it.
+- `ctx.input:edit` raises a Lua error for an option of the wrong type (`multiline = "yes"`, `kind = 5`, a `rect`
+  without `h`, an `on_end` that is not a function), as §0 says; a value of the right type out of range is still
+  `nil, "invalid_argument"`. 0.2 returned `invalid_argument` for both. So `ui:handle_event` on such a field raises.
+- While a docked edit is open, a pointer that goes down outside its `rect` and above the keyboard, and the `up`,
+  `down`, `left` and `right` keys, reach the app; `ok` is the confirm key. 0.2 sent all input to the edit. The edit's
+  plate (`emu.shot()`, OK and Cancel) moved into the bottom `keyboard_h` rows.
 
 ### Added
 

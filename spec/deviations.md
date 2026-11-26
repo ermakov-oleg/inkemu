@@ -478,9 +478,12 @@ and Wi-Fi rules of the lock screen (§15). These are nil or ignored in inkemu.
   - A field without `text` passes no `text` to `ctx.input:edit` (the host starts from `""`).
   - When the field's own `on_end` raises, no next field edits; when it starts an edit itself, the next field's edit
     is refused as busy while focus still moves there.
-- `ctx.ui` text fields on inkemu's own docked input, where inkemu differs from the contract (host follow-ups):
-  - A field edit option of the wrong type (`multiline = "yes"`, `kind = 5`) makes inkemu's `ctx.input:edit` return
-    `nil, "invalid_argument"`, so `handle_event` gives `id, "activate"`; §16 says `handle_event` raises a Lua error.
-  - While any edit is pending, inkemu sends every pointer and key event to it and none to the app; §4 lets a pointer
-    that goes down outside both the text area and the keyboard, and keys other than Back, reach the app. So re-tapping the
-    edited field or tapping another field during an edit only happens through `handle_event` called by the script.
+- `ctx.ui` text fields on inkemu's own docked input follow the contract (§4, not measured on the reader):
+  - A field edit option of the wrong type (`multiline = "yes"`, `kind = 5`) makes `ctx.input:edit` raise, so
+    `handle_event` raises (§0 rule 3, §16); a value of the right type out of range still gives `id, "activate"`. When
+    the next field of `enter = "next"` has such an option, the raise happens in the host's `on_end` and fails the app.
+    Checks: `04/edit_option_types`, `04/edit_option_ranges`, `16/field_option_type`.
+  - While an edit is pending, a pointer that goes down outside `rect` and above the keyboard reaches the app, so
+    tapping another field switches the edit and a button can call `ui:stop_edit`; a tap inside `rect` (the edited
+    field's text area) does not reach `handle_event`. Back ends the edit, `ok` is the confirm key, and the other keys
+    reach the app. Checks: `04/edit_input_routing`, `16/field_edit`.
