@@ -553,3 +553,27 @@ fn other_dialogs_still_take_every_input() {
     assert_eq!(got(&mut core), json!([]));
     assert_eq!(pending_kind(&core), Some("text"));
 }
+
+#[test]
+fn a_wrong_type_on_the_next_field_fails_the_app_from_on_end() {
+    let mut core = boot(
+        "function on_load(c) ui = c.ui:create() end\n\
+         function on_draw(c, g)\n\
+           g:clear(0)\n\
+           ui:begin_frame(g)\n\
+           ui:field('a', {x = 24, y = 40, w = 432, h = 56, enter = 'next'})\n\
+           ui:field('b', {x = 24, y = 110, w = 432, h = 56, multiline = 'yes'})\n\
+           ui:end_frame()\n\
+         end\n\
+         function on_input(c, e) return ui:handle_event(e) ~= nil end\n",
+    );
+    core.tap(100, 60).unwrap();
+    assert_eq!(pending_kind(&core), Some("edit"));
+    core.key("ok").unwrap();
+    let errors = core.errors().to_vec();
+    assert!(
+        errors.iter().any(|e| e.contains("'multiline'")),
+        "{errors:?}"
+    );
+    assert!(!core.status().running);
+}

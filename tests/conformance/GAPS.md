@@ -15,7 +15,7 @@ All §3 checks are green and pinned: `03/color_threshold`, `03/device_profile` (
 
 ## §4 Input
 
-All §4 checks are green and pinned (contract only): `04/edit_option_types` (an option of the wrong type raises, every type is checked before any range), `04/edit_option_ranges`, `04/edit_input_routing` (while a docked edit is open, a pointer going down above the keyboard and outside `rect` and the arrow keys reach the app; `rect`, the keyboard, Back and `ok` do not). The rule that a pointer belongs to the side where it went down (drags across the keyboard edge, an edit opening or closing mid-gesture) is pinned by `crates/inkcore/tests/edit.rs`, since the runner's steps have no drag. Not covered: the rest of §4 (`ctx.input:text`, event fields, gestures, key repeat, typing on a hardware keyboard, the full-screen fallback without touch), the cursor and text drawn in `rect`, composition.
+All §4 checks are green and pinned (contract only): `04/edit_option_types` (an option of the wrong type raises), `04/edit_option_ranges`, `04/edit_input_routing` (while a docked edit is open, a pointer going down above the keyboard and outside `rect` and the arrow keys reach the app; `rect`, the keyboard, Back and `ok` do not). The rule that a pointer belongs to the side where it went down (drags across the keyboard edge, an edit opening or closing mid-gesture) is pinned by `crates/inkcore/tests/edit.rs`, since the runner's steps have no drag; so is inkemu's choice to check every option's type before any range. Not covered: the rest of §4 (`ctx.input:text`, event fields, gestures, key repeat, typing on a hardware keyboard, the full-screen fallback without touch), the cursor and text drawn in `rect`, composition.
 
 ## §5 Presenting a frame
 

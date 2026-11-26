@@ -480,8 +480,9 @@ and Wi-Fi rules of the lock screen (§15). These are nil or ignored in inkemu.
     is refused as busy while focus still moves there.
 - `ctx.ui` text fields on inkemu's own docked input follow the contract (§4, not measured on the reader):
   - A field edit option of the wrong type (`multiline = "yes"`, `kind = 5`) makes `ctx.input:edit` raise, so
-    `handle_event` raises (§0 rule 3, §16); a value of the right type out of range still gives `id, "activate"`. When
-    the next field of `enter = "next"` has such an option, the raise happens in the host's `on_end` and fails the app.
+    `handle_event` raises (§0 rule 3, §16); a value of the right type out of range still gives `id, "activate"`.
+    inkemu checks every option's type before any range (the contract gives no order). When the next field of
+    `enter = "next"` has such an option, the raise happens in the host's `on_end` and fails the app.
     Checks: `04/edit_option_types`, `04/edit_option_ranges`, `16/field_option_type`.
   - While an edit is pending, a pointer that goes down outside `rect` and above the keyboard reaches the app, so
     tapping another field switches the edit and a button can call `ui:stop_edit`; a tap inside `rect` (the edited

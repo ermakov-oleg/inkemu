@@ -512,14 +512,15 @@ the start with an error. From each file inkemu takes:
 - `ctx.capabilities` reports what inkemu emulates, except that `image_transform` is true as on the device: `dialog frontlight image_decode image_transform pattern reader ui`
   are true, `ble identity nn ttf` false. The device reports `ble dialog frontlight identity image_decode
   image_transform nn pattern reader ui` as true and `ttf` as false.
-- Docked input (`ctx.input:edit`) is a dialog plate in the bottom `keyboard_h` rows, where the keyboard is. Input is
-  routed as §4 says: a pointer belongs to the side where it went down, so one going down above the keyboard and
-  outside `rect` reaches the app (`ctx.ui` fields switch and buttons work during an edit), one in `rect` or on the
-  plate does not (a tap on OK or Cancel answers the edit); Back ends the edit, `ok` is the confirm key, and the
-  other keys reach the app. The host draws no text in `rect` (it is checked and logged), `kind` and `placeholder` are
-  only checked, and there is no cursor, composition or full-screen fallback. The desktop window still edits in a
-  modal text box and sends no input to the app meanwhile. `type` types the text and presses the confirm key; a newline in it is the confirm key too. With
-  `enter = "newline"`, `type` and `answer yes` insert a line break and the field stays open.
+- Docked input (`ctx.input:edit`) is a dialog plate in the bottom `keyboard_h` rows, where the keyboard is. Input
+  is routed as §4 says: a pointer belongs to the side where it went down, so one going down above the keyboard and
+  outside `rect` reaches the app (`ctx.ui` fields switch and buttons work during an edit), one in `rect` or
+  anywhere in the bottom `keyboard_h` rows does not, even where the app's picture shows below the plate (a tap on
+  OK or Cancel answers the edit); Back ends the edit, `ok` is the confirm key, and the other keys reach the app.
+  The host draws no text in `rect` (it is checked and logged), `kind` and `placeholder` are only checked, and there
+  is no cursor, composition or full-screen fallback. The desktop window still edits in a modal text box and sends
+  no input to the app meanwhile. `type` types the text and presses the confirm key; a newline in it is the confirm
+  key too. With `enter = "newline"`, `type` and `answer yes` insert a line break and the field stays open.
 - `ctx.system:act(s)` needs a string ("string expected" otherwise), as on the device; an unknown name returns
   `nil, "invalid_argument"`. `"refresh"` makes the next frame full, like `ctx:invalidate("full")`. `"sleep"` and
   `"power_off"` work only in an `on_input` delivering a key or pointer `up`, elsewhere (and in a lock screen

@@ -12,8 +12,6 @@ local cases = {
   enter = { enter = true },
   on_change = { on_change = 5 },
   on_end = { on_end = "x" },
-  -- a type error wins over a value out of range in another option
-  before_range = { max_chars = 0, multiline = "yes" },
 }
 
 function on_load(ctx)

@@ -1,6 +1,6 @@
 {
   "spec": "§4",
-  "about": "ctx.input:edit raises a Lua error for an option of the wrong type (§0 rule 3), checking every type before any range, and opens no edit then",
+  "about": "ctx.input:edit raises a Lua error for an option of the wrong type (§0 rule 3) and opens no edit then",
   "expect": {
     "rect_raises": {
       "value": true,
@@ -39,10 +39,6 @@
       "spec": "§0"
     },
     "on_end_raises": {
-      "value": true,
-      "spec": "§0"
-    },
-    "before_range_raises": {
       "value": true,
       "spec": "§0"
     },
